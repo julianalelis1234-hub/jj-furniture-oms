@@ -177,7 +177,8 @@ export async function flushQueue(db: DriverDb, send: SendFn): Promise<FlushSumma
     } else {
       summary.rejected++;
       blockedOrders.add(item.action.order_id);
-      await db.put("sync_queue", { ...item, state: "rejected", message: result.message, attempts: item.attempts + 1 });
+      const rejected = result as Extract<DriverActionResult, { status: "rejected" }>;
+      await db.put("sync_queue", { ...item, state: "rejected", message: rejected.message, attempts: item.attempts + 1 });
     }
   }
 
