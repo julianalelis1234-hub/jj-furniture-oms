@@ -39,3 +39,10 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# local env (never commit secrets)
+.env*.local
+.env
+!.env.example
+test-results/
+playwright-report/
