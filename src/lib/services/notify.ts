@@ -10,7 +10,7 @@ export interface SmsProvider {
 }
 
 /** Demo-only simulation: numbers that are not valid PH mobiles, or known-unreachable, fail. */
-export const DEMO_UNREACHABLE = new Set(["09990000000"]);
+export const DEMO_UNREACHABLE = new Set(["09000000999"]);
 export const simulatedSms: SmsProvider = {
   name: "simulated (demo)",
   async send(phone) {
@@ -43,6 +43,13 @@ export const manualQueue: SmsProvider = {
     return { status: "Pending", detail: "No SMS gateway configured — send manually" };
   },
 };
+
+/** How customer SMS is delivered right now — shown in the UI so a demo never implies real texts were sent. */
+export function smsMode(): "gateway" | "simulated" | "manual" {
+  if (process.env.SEMAPHORE_API_KEY) return "gateway";
+  return isDemoMode() ? "simulated" : "manual";
+}
+export const SMS_SIMULATED_NOTE = "(simulated — no SMS gateway connected)";
 
 export function defaultProvider(): SmsProvider {
   const key = process.env.SEMAPHORE_API_KEY;

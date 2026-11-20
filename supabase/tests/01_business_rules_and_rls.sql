@@ -47,10 +47,10 @@ insert into public.orders (id, order_code, paper_slip_number, customer_name, cus
   municipality, pin_code_hash, item_name, quantity, dimensions, wood_type, color_finish, furniture_price,
   delivery_fee, estimated_completion_date)
 values
-  ('10000000-0000-0000-0000-000000000001', 'JJ-2026-0145', 'SLIP-1001', 'Maria Santos', '09171234567',
+  ('10000000-0000-0000-0000-000000000001', 'JJ-2026-0145', 'SLIP-1001', 'Maria Santos', '09000000101',
    'Purok 3, Poblacion', 'Valencia City', extensions.crypt('4821', extensions.gen_salt('bf')),
    'Dining Table', 1, '210cm x 90cm x 4.5cm', 'Mahogany', 'Dark Walnut Gloss', 28500, 500, current_date + 10),
-  ('10000000-0000-0000-0000-000000000002', 'JJ-2026-0136', 'SLIP-1002', 'Pedro Bautista', '09181112222',
+  ('10000000-0000-0000-0000-000000000002', 'JJ-2026-0136', 'SLIP-1002', 'Pedro Bautista', '09000000103',
    'Sitio Kibalabag', 'Lantapan', extensions.crypt('1111', extensions.gen_salt('bf')),
    'Sala Set', 1, '3-seater 200cm', 'Gmelina', 'Natural Matte', 45000, 1200, current_date + 5);
 

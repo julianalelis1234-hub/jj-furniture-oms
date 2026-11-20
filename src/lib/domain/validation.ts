@@ -29,7 +29,7 @@ export const newOrderSchema = z
       .string()
       .trim()
       .transform((s) => s.replace(/[\s-]/g, ""))
-      .pipe(z.string().regex(PH_PHONE, { error: "Use a PH mobile number, e.g. 09171234567." })),
+      .pipe(z.string().regex(PH_PHONE, { error: "Use a PH mobile number, e.g. 09XX XXX XXXX." })),
     delivery_address: required("Delivery address").max(300),
     municipality: z.enum(MUNICIPALITIES, { error: "Choose a municipality." }),
     item_name: required("Item").max(120),

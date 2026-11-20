@@ -171,7 +171,7 @@ export function DriverApp({ driverId, initialManifest, serverTime }: { driverId:
     await enqueueAction(db, action); // always saved locally first
     await reload();
     if (onlineRef.current) await sync(true);
-    else toast.info("Saved Locally — Will Sync When Online");
+    else toast.info("Saved Locally — Pending Sync");
   }
 
   const pending = queue.filter((q) => q.state === "pending");
@@ -224,7 +224,7 @@ export function DriverApp({ driverId, initialManifest, serverTime }: { driverId:
               <div key={q.client_transaction_id} className={cn("rounded-xl border p-3 text-sm", q.state === "pending" ? "border-warning bg-warning-soft" : "border-destructive bg-danger-soft")}>
                 <p className="font-semibold">
                   {e?.order.order_code ?? "Order"} · {labelOf(q.action)}
-                  {q.state === "pending" && <span className="ml-2 font-bold text-warning">Saved Locally — Will Sync When Online</span>}
+                  {q.state === "pending" && <span className="ml-2 font-bold text-warning">Saved Locally — Pending Sync</span>}
                   {q.state === "conflict" && <span className="ml-2 font-bold text-destructive">Sync Conflict</span>}
                   {q.state === "rejected" && <span className="ml-2 font-bold text-destructive">Not accepted by server</span>}
                 </p>

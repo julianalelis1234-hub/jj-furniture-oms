@@ -21,7 +21,7 @@ export function validOrderInput(overrides: Record<string, unknown> = {}) {
     paper_slip_number: `T-${Math.random().toString(36).slice(2, 8)}`,
     encoded_by_id: STAFF.gilbert,
     customer_name: "Juan Dela Cruz",
-    customer_phone: "0917 123 4567",
+    customer_phone: "0900 000 0201",
     delivery_address: "Purok 3, Brgy. Poblacion, near the church",
     municipality: "Valencia City",
     item_name: "Center Table",

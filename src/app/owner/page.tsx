@@ -32,6 +32,7 @@ import { getStore, requireActor } from "@/lib/server/context";
 import { loadOfficeData, nameOf } from "@/lib/server/office-data";
 import { ownerKpis, riskOf } from "@/lib/services/insights";
 import { productionQueue } from "@/lib/services/orders";
+import { SMS_SIMULATED_NOTE, smsMode } from "@/lib/services/notify";
 import { cn } from "@/lib/utils";
 
 export const metadata = { title: "Owner Dashboard" };
@@ -104,7 +105,7 @@ export default async function OwnerPage() {
               })}
               {failedSms.map((n) => {
                 const o = byId.get(n.order_id); if (!o) return null;
-                return <TaskCard key={n.id} order={o} tone="danger" meta={<><b className="text-foreground">SMS failed: Number not reachable</b> ({n.recipient_phone})</>} actions={<RetrySmsDialog n={n} />} />;
+                return <TaskCard key={n.id} order={o} tone="danger" meta={<><b className="text-foreground">SMS failed: Number not reachable</b>{smsMode() === "simulated" ? ` ${SMS_SIMULATED_NOTE}` : ""} ({n.recipient_phone})</>} actions={<RetrySmsDialog n={n} />} />;
               })}
               {unranked.map((o) => (
                 <TaskCard key={o.id} order={byId.get(o.id)!} meta={<><b className="text-foreground">Set production priority</b> · confirmed, not yet ranked · due {formatDate(o.estimated_completion_date)}</>}
@@ -114,7 +115,7 @@ export default async function OwnerPage() {
           )}
         </Section>
 
-        <Section title="Production priority queue" count={queue.length}>
+        <Section title="Planning Board · production priority" count={queue.length}>
           <DesignNote className="mb-2">The order set here is exactly the order craftsmen see on their phones, replacing verbal “unahon ni” (do this first) instructions.</DesignNote>
           {queue.length === 0 ? <EmptyState title="No jobs in the workshop" /> : (
             <ol className="grid gap-2">

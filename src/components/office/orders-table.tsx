@@ -27,8 +27,8 @@ export function OrdersTable({ orders }: { orders: ClientOrder[] }) {
   }, [orders, q, status, place]);
 
   return (
-    <div className="grid gap-3">
-      <div className="grid gap-2 sm:grid-cols-[1fr_220px_180px]">
+    <div className="grid min-w-0 gap-3">
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_220px_180px] [&>*]:min-w-0">
         <label className="relative">
           <span className="sr-only">Search orders</span>
           <Search className="absolute top-3 left-3 size-5 text-muted-foreground" aria-hidden />
@@ -43,7 +43,7 @@ export function OrdersTable({ orders }: { orders: ClientOrder[] }) {
       {rows.length === 0 ? (
         <EmptyState title="No orders match">Try a different search or clear the filters.</EmptyState>
       ) : (
-        <ul className="grid gap-2 md:grid-cols-2">
+        <ul className="grid grid-cols-1 gap-2 md:grid-cols-2 [&>li]:min-w-0">
           {rows.map((o) => (
             <li key={o.id}>
               <Link href={`/staff/orders/${o.id}`} className="block rounded-xl border bg-card p-3 hover:border-primary focus-visible:ring-3 focus-visible:ring-ring/40 focus-visible:outline-none">

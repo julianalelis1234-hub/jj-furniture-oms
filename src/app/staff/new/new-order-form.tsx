@@ -58,7 +58,7 @@ export function NewOrderForm({ staff, currentUserId }: { staff: { id: string; fu
               <TextInput id="customer_name" name="customer_name" autoComplete="off" invalid={!!err("customer_name")} />
             </Field>
             <Field label="Mobile number" htmlFor="customer_phone" required error={err("customer_phone")} hint="09XX XXX XXXX">
-              <TextInput id="customer_phone" name="customer_phone" inputMode="tel" placeholder="0917 123 4567" invalid={!!err("customer_phone")} />
+              <TextInput id="customer_phone" name="customer_phone" inputMode="tel" placeholder="09XX XXX XXXX" invalid={!!err("customer_phone")} />
             </Field>
             <Field label="Municipality" htmlFor="municipality" required error={err("municipality")}>
               <NativeSelect id="municipality" name="municipality" value={municipality}

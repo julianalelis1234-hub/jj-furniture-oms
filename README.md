@@ -10,6 +10,13 @@ Mobile-first order monitoring for **JJ Furniture Shop and Enterprises** (Poblaci
 | Delivery Driver `D-01` | `/driver` | Jesse Decena, Rey | Assigned trips only, COLLECT ON DELIVERY, works offline (IndexedDB queue + sync) |
 | Customer `CU-01` | `/track` | public | Order ID → stage and dates only. Order ID + 4-digit PIN → specs, payments, Confirm Specifications, Request Touch-Up |
 
+## Video demonstration
+
+* **[docs/DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md)**: the click-by-click presentation script (≈ 7:45) with narration cues, sample data and troubleshooting.
+* `/about`: the introduction page used for the opening segment.
+* `tests/e2e/demo-walkthrough.mjs`: performs the whole script in a real browser at 1280×720 or 390×844, fails on any broken step, and records a rehearsal video.
+* All sample people are fictional; phone numbers use the `0900-000-xxxx` pattern. In demo mode SMS is **simulated** and labelled as such.
+
 ## Quick start (demo mode, no accounts needed)
 
 ```bash
@@ -47,7 +54,7 @@ With no Supabase credentials, demo mode runs on an **in-memory database** seeded
 `src/lib/offline/driver-db.ts` keeps `manifest`, `sync_queue` and `meta` stores in IndexedDB, one database per driver.
 
 1. Assignments are cached automatically on every page load. **Pre-Load Assignments for Offline Travel** refreshes them on demand. A service worker (`public/sw.js`) lets `/driver` reopen with no signal.
-2. Actions are always written to the local queue first, each with a `client_transaction_id` and the order `version` it was based on. Queued actions are labelled **"Saved Locally — Will Sync When Online"**.
+2. Actions are always written to the local queue first, each with a `client_transaction_id` and the order `version` it was based on. Queued actions are labelled **"Saved Locally — Pending Sync"**.
 3. The badge reads `Online • Synced`, `Offline • Saved Locally (N pending)`, `Syncing...` or `Sync Conflict`, with the last successful sync time. **Simulate Offline / Weak Signal** blocks all network calls, so the queue can be tested honestly.
 4. The queue flushes on the `online` event or **Sync Now**, sequentially, through `/api/driver/sync`. The server is idempotent on `client_transaction_id` (unique in `payments` and `order_status_history`). A version mismatch returns a conflict for the driver to **Re-apply** or **Discard**; nothing is silently overwritten. The driver's own consecutive actions are rebased automatically.
 

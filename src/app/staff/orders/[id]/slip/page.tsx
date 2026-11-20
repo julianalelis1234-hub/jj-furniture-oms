@@ -1,7 +1,9 @@
 import { ArrowLeft, CheckCircle2 } from "lucide-react";
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
+import { DemoBar } from "@/components/demo-bar";
 import { LinkButton } from "@/components/link-button";
+import { isDemoMode } from "@/lib/config";
 import { formatDate } from "@/lib/domain/dates";
 import { formatPeso } from "@/lib/domain/finance";
 import { getStore, requireActor } from "@/lib/server/context";
@@ -24,7 +26,9 @@ export default async function SlipPage({ params, searchParams }: PageProps<"/sta
   const down = o.standard_down_payment_due;
 
   return (
-    <div className="min-h-dvh bg-background p-4">
+    <div className="min-h-dvh bg-background">
+      {isDemoMode() && <DemoBar current="staff" />}
+      <div className="p-4">
       <div className="no-print mx-auto mb-4 flex max-w-xl flex-wrap gap-2">
         <LinkButton href={`/staff/orders/${o.id}`} variant="ghost"><ArrowLeft aria-hidden /> Back to order</LinkButton>
         <PrintButton />
@@ -90,6 +94,7 @@ export default async function SlipPage({ params, searchParams }: PageProps<"/sta
           </div>
         </section>
       </article>
+      </div>
     </div>
   );
 }

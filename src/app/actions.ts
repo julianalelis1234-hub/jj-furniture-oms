@@ -20,7 +20,7 @@ import { CUSTOMER_COOKIE, getVerifiedCustomerOrderId } from "@/lib/server/custom
 import { customerConfirmSpecs, customerRequestRepair, trackOrder } from "@/lib/services/customer";
 import { scheduleDelivery } from "@/lib/services/deliveries";
 import { decideException, requestException } from "@/lib/services/exceptions";
-import { retryNotification } from "@/lib/services/notify";
+import { retryNotification, SMS_SIMULATED_NOTE, smsMode } from "@/lib/services/notify";
 import {
   createOrder,
   editOrderDetails,
@@ -167,7 +167,9 @@ export async function verifyHandoverAction(paymentId: string) {
 
 // ------------------------------------------------------------ deliveries --
 export async function scheduleDeliveryAction(_: unknown, fd: FormData) {
-  return run(["owner", "staff"], async (a) => { await scheduleDelivery(await getStore(), a, Object.fromEntries(fd)); }, "Delivery scheduled and customer notified.");
+  return run(["owner", "staff"], async (a) => { await scheduleDelivery(await getStore(), a, Object.fromEntries(fd)); }, smsMode() === "gateway" ? "Delivery scheduled and customer notified by SMS."
+    : smsMode() === "simulated" ? `Delivery scheduled. Customer SMS logged ${SMS_SIMULATED_NOTE}.`
+    : "Delivery scheduled. Customer SMS is queued for staff to send manually.");
 }
 
 // ------------------------------------------------------------ exceptions --
@@ -184,7 +186,7 @@ export async function retrySmsAction(id: string, phone?: string) {
     const n = await retryNotification(await getStore(), id, phone);
     if (n.delivery_status === "Failed") throw new DomainError("BACKEND", "SMS failed again: number not reachable. Try another number or Messenger.");
     return n.delivery_status;
-  }, "SMS re-sent.");
+  }, smsMode() === "simulated" ? `SMS re-sent ${SMS_SIMULATED_NOTE}.` : "SMS re-sent.");
 }
 
 // -------------------------------------------------------------- customer --

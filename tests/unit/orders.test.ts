@@ -50,7 +50,7 @@ describe("1. form & input validation", () => {
     expect(r.error!.issues[0].path).toEqual(["delivery_fee"]);
   });
   it("normalises PH mobile numbers and rejects bad ones", () => {
-    expect(newOrderSchema.parse(validOrderInput()).customer_phone).toBe("09171234567");
+    expect(newOrderSchema.parse(validOrderInput()).customer_phone).toBe("09000000201");
     expect(newOrderSchema.safeParse(validOrderInput({ customer_phone: "12345" })).success).toBe(false);
   });
   it("rejects duplicate paper slip numbers on create", async () => {

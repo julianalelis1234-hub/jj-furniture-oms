@@ -16,15 +16,19 @@ export const STAFF = {
   rey: "11111111-1111-4111-8111-000000000008",
 } as const;
 
+/**
+ * PRIVACY: every name, address and phone number below is fictional. Phone
+ * numbers use the 0900-000-xxxx pattern so they cannot reach a real person.
+ */
 export const SEED_PROFILES: Omit<Profile, "created_at">[] = [
-  { id: STAFF.owner, full_name: "Mr. Vincris Lelis", role: "owner", phone: "09171230001", is_active: true },
-  { id: STAFF.gilbert, full_name: "Gilbert Decena", role: "staff", phone: "09171230002", is_active: true },
-  { id: STAFF.liza, full_name: "Liza", role: "staff", phone: "09171230003", is_active: true },
-  { id: STAFF.nolito, full_name: "Nolito Remulta", role: "craftsman", phone: "09171230004", is_active: true },
-  { id: STAFF.carlo, full_name: "Carlo", role: "craftsman", phone: "09171230005", is_active: true },
-  { id: STAFF.dodong, full_name: "Dodong", role: "craftsman", phone: "09171230006", is_active: true },
-  { id: STAFF.jesse, full_name: "Jesse Decena", role: "driver", phone: "09171230007", is_active: true },
-  { id: STAFF.rey, full_name: "Rey", role: "driver", phone: "09171230008", is_active: true },
+  { id: STAFF.owner, full_name: "Mr. Vincris Lelis", role: "owner", phone: "09000000001", is_active: true },
+  { id: STAFF.gilbert, full_name: "Gilbert Decena", role: "staff", phone: "09000000002", is_active: true },
+  { id: STAFF.liza, full_name: "Liza", role: "staff", phone: "09000000003", is_active: true },
+  { id: STAFF.nolito, full_name: "Nolito Remulta", role: "craftsman", phone: "09000000004", is_active: true },
+  { id: STAFF.carlo, full_name: "Carlo", role: "craftsman", phone: "09000000005", is_active: true },
+  { id: STAFF.dodong, full_name: "Dodong", role: "craftsman", phone: "09000000006", is_active: true },
+  { id: STAFF.jesse, full_name: "Jesse Decena", role: "driver", phone: "09000000007", is_active: true },
+  { id: STAFF.rey, full_name: "Rey", role: "driver", phone: "09000000008", is_active: true },
 ];
 
 /** Default demo actor per role (the persona shown in the wireframes). */
@@ -76,7 +80,7 @@ interface SeedOrder {
 
 const ORDERS: SeedOrder[] = [
   {
-    code: "JJ-2026-0145", slip: "0145", pin: "4821", customer: "Maria Santos", phone: "09171234567",
+    code: "JJ-2026-0145", slip: "0145", pin: "4821", customer: "Maria Santos", phone: "09000000101",
     address: "Purok 5, Zone 2, Poblacion", municipality: "Valencia City", item: "6-Seater Dining Table",
     qty: 1, dims: "210cm x 90cm x 4.5cm top", wood: "Mahogany", finish: "Dark Walnut Gloss",
     notes: "Rounded corners. Customer will pick up chairs separately.", price: 28500, fee: 0,
@@ -85,13 +89,13 @@ const ORDERS: SeedOrder[] = [
     payments: [{ type: "Down Payment (30%)", amount: 8550, method: "GCash / Bank Transfer", daysAgo: 11 }],
   },
   {
-    code: "DR-0148", slip: "0148", pin: "7314", customer: "Ramon dela Cruz", phone: "09281112233",
+    code: "DR-0148", slip: "0148", pin: "7314", customer: "Ramon dela Cruz", phone: "09000000102",
     address: "Brgy. Kaatuan, near chapel", municipality: "Lantapan", item: "Queen Bed Frame with Headboard",
     qty: 1, dims: "160cm x 200cm, headboard 110cm", wood: "Gmelina", finish: "Natural Matte",
     price: 18000, fee: 800, status: "Waiting for Confirmation", estDays: 14, createdDaysAgo: 1, encodedBy: STAFF.liza,
   },
   {
-    code: "JJ-2026-0136", slip: "0136", pin: "2468", customer: "Pedro & Ana Bautista", phone: "09181112222",
+    code: "JJ-2026-0136", slip: "0136", pin: "2468", customer: "Pedro & Ana Bautista", phone: "09000000103",
     address: "Purok 2, Brgy. Poblacion", municipality: "Cabanglasan", item: "Sala Set (3-2-1 seater)",
     qty: 1, dims: "3-seater 200cm, 2-seater 140cm, single 80cm", wood: "Mahogany", finish: "Honey Oak Satin",
     price: 45000, fee: 1500, status: "Out for Delivery", rank: 4, craftsman: STAFF.carlo, estDays: -2, deliveryDays: 0,
@@ -99,7 +103,7 @@ const ORDERS: SeedOrder[] = [
     payments: [{ type: "Down Payment (30%)", amount: 13500, daysAgo: 24 }],
   },
   {
-    code: "JJ-2026-0133", slip: "0133", pin: "1357", customer: "Lourdes Ybañez", phone: "09351239876",
+    code: "JJ-2026-0133", slip: "0133", pin: "1357", customer: "Lourdes Ybañez", phone: "09000000104",
     address: "Sitio Lumbayao, Brgy. Lumbo", municipality: "Valencia City", item: "2-Door Wardrobe",
     qty: 1, dims: "180cm x 120cm x 60cm", wood: "Gmelina", finish: "White Paint",
     price: 16500, fee: 0, status: "Delivered", craftsman: STAFF.dodong, terms: "Credit / Pay Later", termsApproved: true,
@@ -107,7 +111,7 @@ const ORDERS: SeedOrder[] = [
     payments: [{ type: "Down Payment (30%)", amount: 4950, daysAgo: 29 }],
   },
   {
-    code: "JJ-2026-0139", slip: "0139", pin: "5050", customer: "Jun Pacaña", phone: "09174445566",
+    code: "JJ-2026-0139", slip: "0139", pin: "5050", customer: "Jun Pacaña", phone: "09000000105",
     address: "Hagkol, near the public market", municipality: "Valencia City", item: "Office Desk with 3 Drawers",
     qty: 1, dims: "150cm x 75cm x 76cm", wood: "Mahogany", finish: "Clear Varnish",
     price: 12000, fee: 0, status: "Completed / For Inspection", rank: 3, label: "High", craftsman: STAFF.carlo,
@@ -115,13 +119,13 @@ const ORDERS: SeedOrder[] = [
     payments: [{ type: "Down Payment (30%)", amount: 3600, daysAgo: 14 }],
   },
   {
-    code: "JJ-2026-0141", slip: "0141", pin: "8080", customer: "Grace Lumayag", phone: "09990000000",
+    code: "JJ-2026-0141", slip: "0141", pin: "8080", customer: "Grace Lumayag", phone: "09000000999",
     address: "Brgy. Poblacion, beside Rural Health Unit", municipality: "Pangantucan", item: "Kitchen Cabinet Set (upper + lower)",
     qty: 1, dims: "Upper 240cm x 60cm x 35cm; Lower 240cm x 85cm x 55cm", wood: "Gmelina", finish: "Light Oak Satin",
     price: 32000, fee: 2000, status: "Confirmed", estDays: 18, createdDaysAgo: 5, encodedBy: STAFF.gilbert,
   },
   {
-    code: "JJ-2026-0142", slip: "0142", pin: "3141", customer: "Rodel Aguilar", phone: "09175556677",
+    code: "JJ-2026-0142", slip: "0142", pin: "3141", customer: "Rodel Aguilar", phone: "09000000107",
     address: "Purok 9, Brgy. Bagontaas", municipality: "Valencia City", item: "Rocking Chair",
     qty: 2, dims: "65cm x 95cm x 105cm", wood: "Mahogany", finish: "Dark Mahogany Stain",
     notes: "Owner inspection: armrest joint loose on chair #2 — re-glue and clamp.", price: 9000, fee: 0,
@@ -130,7 +134,7 @@ const ORDERS: SeedOrder[] = [
     payments: [{ type: "Down Payment (30%)", amount: 2700, daysAgo: 17 }],
   },
   {
-    code: "JJ-2026-0137", slip: "0137", pin: "2718", customer: "Teresita Cabahug", phone: "09192223344",
+    code: "JJ-2026-0137", slip: "0137", pin: "2718", customer: "Teresita Cabahug", phone: "09000000108",
     address: "Brgy. Halapitan, purok 1", municipality: "San Fernando", item: "Altar Table",
     qty: 1, dims: "120cm x 45cm x 90cm", wood: "Mahogany", finish: "Antique Brown",
     price: 14500, fee: 2500, status: "Ready for Delivery", craftsman: STAFF.nolito, estDays: -1, deliveryDays: 1,
@@ -138,7 +142,7 @@ const ORDERS: SeedOrder[] = [
     payments: [{ type: "Down Payment (30%)", amount: 4350, daysAgo: 19 }],
   },
   {
-    code: "JJ-2026-0140", slip: "0140", pin: "6060", customer: "Benjie Saldivar", phone: "09276667788",
+    code: "JJ-2026-0140", slip: "0140", pin: "6060", customer: "Benjie Saldivar", phone: "09000000109",
     address: "Purok 4, Brgy. Batangan", municipality: "Valencia City", item: "Bunk Bed with Ladder",
     qty: 1, dims: "90cm x 190cm, 160cm high", wood: "Gmelina", finish: "Navy Blue Paint",
     price: 21000, fee: 0, status: "Ready for Delivery", craftsman: STAFF.carlo, terms: "Installment",
@@ -146,7 +150,7 @@ const ORDERS: SeedOrder[] = [
     payments: [{ type: "Installment / Partial", amount: 3000, daysAgo: 21 }],
   },
   {
-    code: "JJ-2026-0130", slip: "0130", pin: "9090", customer: "Analyn Moreno", phone: "09173334455",
+    code: "JJ-2026-0130", slip: "0130", pin: "9090", customer: "Analyn Moreno", phone: "09000000110",
     address: "Brgy. Lumbo, near barangay hall", municipality: "Valencia City", item: "Coffee Table",
     qty: 1, dims: "100cm x 60cm x 45cm", wood: "Mahogany", finish: "Clear Gloss",
     price: 7500, fee: 0, status: "Delivered", craftsman: STAFF.nolito, estDays: -4, deliveryDays: -1,
@@ -157,7 +161,7 @@ const ORDERS: SeedOrder[] = [
     ],
   },
   {
-    code: "JJ-2026-0143", slip: "0143", pin: "4242", customer: "Edgar Villanueva", phone: "09185551234",
+    code: "JJ-2026-0143", slip: "0143", pin: "4242", customer: "Edgar Villanueva", phone: "09000000111",
     address: "Brgy. Songco", municipality: "Lantapan", item: "Dining Chairs",
     qty: 6, dims: "45cm x 50cm x 95cm each", wood: "Mahogany", finish: "Dark Walnut Gloss",
     notes: "Match the JJ-2026-0145 table finish.", price: 19800, fee: 800,
@@ -165,13 +169,13 @@ const ORDERS: SeedOrder[] = [
     payments: [{ type: "Down Payment (30%)", amount: 5940, method: "GCash / Bank Transfer", daysAgo: 5 }],
   },
   {
-    code: "JJ-2026-0144", slip: "0144", pin: "1212", customer: "Jocelyn Tan", phone: "09178889900",
+    code: "JJ-2026-0144", slip: "0144", pin: "1212", customer: "Jocelyn Tan", phone: "09000000112",
     address: "Purok 1", municipality: "Valencia City", item: "TV Rack with Glass Doors",
     qty: 1, dims: "180cm x 40cm x 50cm", wood: "Gmelina", finish: "Walnut Stain",
     price: 11000, fee: 0, status: "Waiting for Confirmation", estDays: 12, createdDaysAgo: 2, encodedBy: STAFF.gilbert,
   },
   {
-    code: "JJ-2026-0134", slip: "0134", pin: "5678", customer: "Nestor Galarrita", phone: "09194443322",
+    code: "JJ-2026-0134", slip: "0134", pin: "5678", customer: "Nestor Galarrita", phone: "09000000113",
     address: "Brgy. Mendis, past the river crossing", municipality: "Pangantucan", item: "Display Cabinet",
     qty: 1, dims: "100cm x 40cm x 180cm", wood: "Mahogany", finish: "Cherry Stain",
     price: 17500, fee: 2000, status: "Ready for Delivery", craftsman: STAFF.dodong, estDays: -4, createdDaysAgo: 26,
@@ -179,7 +183,7 @@ const ORDERS: SeedOrder[] = [
     payments: [{ type: "Down Payment (30%)", amount: 5250, daysAgo: 25 }],
   },
   {
-    code: "JJ-2026-0138", slip: "0138", pin: "1122", customer: "Mila Reyes", phone: "09173216540",
+    code: "JJ-2026-0138", slip: "0138", pin: "1122", customer: "Mila Reyes", phone: "09000000114",
     address: "Purok 7, Brgy. Poblacion", municipality: "Valencia City", item: "Study Table with Hutch",
     qty: 1, dims: "120cm x 60cm x 150cm", wood: "Gmelina", finish: "Light Walnut",
     price: 8000, fee: 0, status: "Ready for Delivery", craftsman: STAFF.carlo, estDays: -2, deliveryDays: 0,

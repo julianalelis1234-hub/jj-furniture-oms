@@ -24,6 +24,7 @@ import { formatDate, formatDateTime } from "@/lib/domain/dates";
 import { feePaidFrom, formatPeso, furniturePaidFrom } from "@/lib/domain/finance";
 import { getStore, requireActor } from "@/lib/server/context";
 import { nameOf } from "@/lib/server/office-data";
+import { SMS_SIMULATED_NOTE, smsMode } from "@/lib/services/notify";
 
 export default async function OrderDetailPage({ params }: PageProps<"/staff/orders/[id]">) {
   const actor = await requireActor(["staff", "owner"]);
@@ -39,6 +40,7 @@ export default async function OrderDetailPage({ params }: PageProps<"/staff/orde
   const drivers = profiles.filter((p) => p.role === "driver" && p.is_active);
   const liveDelivery = deliveries.find((d) => d.dispatch_status !== "Failed / Reschedule");
   const isOwner = actor.role === "owner";
+  const simulated = smsMode() === "simulated";
 
   return (
     <AppShell portal={isOwner ? "owner" : "staff"} actor={actor}>
@@ -207,6 +209,7 @@ export default async function OrderDetailPage({ params }: PageProps<"/staff/orde
                   <li key={n.id} className="rounded-lg border p-2">
                     <p className="flex flex-wrap gap-2">
                       <b className={n.delivery_status === "Failed" ? "text-destructive" : n.delivery_status === "Sent" ? "text-success" : "text-warning"}>{n.channel} · {n.delivery_status}</b>
+                      {simulated && n.channel === "SMS" && <span className="text-xs font-semibold text-muted-foreground">{SMS_SIMULATED_NOTE}</span>}
                       <span className="text-xs text-muted-foreground">{formatDateTime(n.created_at)} · {n.recipient_phone}</span>
                     </p>
                     <p>{n.message_body}</p>

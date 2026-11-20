@@ -21,6 +21,7 @@ import { formatPeso } from "@/lib/domain/finance";
 import { getStore, requireActor } from "@/lib/server/context";
 import { loadOfficeData, nameOf } from "@/lib/server/office-data";
 import { staffTasks } from "@/lib/services/insights";
+import { SMS_SIMULATED_NOTE, smsMode } from "@/lib/services/notify";
 
 export const metadata = { title: "Store Assistant" };
 
@@ -157,7 +158,7 @@ export default async function StaffPage() {
                     const o = byId.get(n.order_id);
                     if (!o) return null;
                     return (
-                      <TaskCard key={n.id} order={o} tone="danger" meta={<>SMS failed: Number not reachable ({n.recipient_phone}) · {formatDateTime(n.created_at)}</>}
+                      <TaskCard key={n.id} order={o} tone="danger" meta={<>SMS failed: Number not reachable ({n.recipient_phone}){smsMode() === "simulated" ? ` ${SMS_SIMULATED_NOTE}` : ""} · {formatDateTime(n.created_at)}</>}
                         actions={<RetrySmsDialog n={n} />} />
                     );
                   })}

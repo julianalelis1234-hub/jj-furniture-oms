@@ -37,6 +37,8 @@ export default async function Home() {
           Paper slips at the counter, one shared live record for the owner, store, workshop, drivers and customers. Works in any phone browser. Nothing to install.
         </p>
 
+        <LinkButton href="/about" className="mt-4">About this project</LinkButton>
+
         {actor && (
           <div className="mt-6 flex flex-wrap items-center gap-3 rounded-xl border bg-card p-4">
             <p>Signed in as <b>{actor.full_name}</b> ({actor.role}).</p>

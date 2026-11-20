@@ -21,7 +21,7 @@ describe("3. customer authentication & privacy", () => {
     expect(Object.keys(t).sort()).toEqual(
       ["estimated_completion_date", "item_name", "order_code", "scheduled_delivery_date", "status", "updated_at"].sort(),
     );
-    expect(JSON.stringify(t)).not.toMatch(/0918|Purok|45000|31500|33000/);
+    expect(JSON.stringify(t)).not.toMatch(/0900|Purok|45000|31500|33000/);
   });
   it("rejects invalid PINs and locks after 5 failures", async () => {
     const store = await seededStore();

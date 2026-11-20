@@ -133,7 +133,7 @@ export function ScheduleDeliveryDialog({ order, drivers }: { order: ClientOrder;
       icon={<CalendarClock aria-hidden />}
       title={`Schedule ${order.order_code}`}
       description={`${order.delivery_address}, ${order.municipality} · Collect on delivery: ${formatPeso(order.collectible_on_delivery)}`}
-      submitLabel="Schedule & notify customer"
+      submitLabel="Schedule delivery"
       action={(fd) => {
         fd.set("order_id", order.id);
         return scheduleDeliveryAction(null, fd);

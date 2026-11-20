@@ -61,7 +61,7 @@ await step("staff: new order form validates then saves a DR draft with PIN slip"
   await page.getByText("Paper Slip # is required.").waitFor();
   await page.fill("#paper_slip_number", "0145"); // duplicate of a seeded slip
   await page.fill("#customer_name", "Rosalie Ompad");
-  await page.fill("#customer_phone", "0917 555 0199");
+  await page.fill("#customer_phone", "0900 000 0202");
   await page.selectOption("#municipality", "Lantapan");
   await page.fill("#delivery_fee", "800");
   await page.fill("#delivery_address", "Purok 2, Brgy. Alanib, near the school");
@@ -111,7 +111,7 @@ await step("owner: KPIs, approve installment, pass inspection, reprioritise", as
   await insp.getByRole("button", { name: "Pass" }).click();
   await page.getByRole("button", { name: "Passed — ready for delivery" }).click();
   await page.getByText("Inspection passed").waitFor();
-  const queueItems = page.locator("section", { hasText: "Production priority queue" }).locator("ol > li");
+  const queueItems = page.locator("section", { hasText: "Planning Board · production priority" }).locator("ol > li");
   const second = (await queueItems.nth(1).locator("a").first().innerText()).trim();
   await queueItems.nth(1).getByRole("button", { name: "Move up" }).click();
   await page.waitForTimeout(800);
@@ -149,7 +149,7 @@ await step("driver: offline action is queued locally, then syncs when online", a
   const card = page.locator("li", { hasText: "JJ-2026-0138" });
   await card.getByRole("button", { name: "Start Trip" }).click();
   await page.getByText("Offline • Saved Locally (1 pending)").waitFor();
-  expect(await page.getByText("Saved Locally — Will Sync When Online").first().isVisible(), "honest local label");
+  expect(await page.getByText("Saved Locally — Pending Sync").first().isVisible(), "honest local label");
   await noHorizontalScroll(page, "driver-offline-mobile");
   await page.screenshot({ path: `${SHOTS}/driver-offline-mobile.png`, fullPage: true });
   // still works after a reload while "offline" (IndexedDB)
@@ -183,7 +183,7 @@ await step("customer: Order ID only hides money; PIN unlocks full view and confi
   await page.getByRole("button", { name: "Check status only" }).click();
   await page.getByText("Estimated completion").first().waitFor();
   const card = await page.getByTestId("track-result").innerText();
-  expect(!card.includes("₱") && !card.includes("0917"), "Order-ID-only view must not show money or phone");
+  expect(!card.includes("₱") && !card.includes("0900"), "Order-ID-only view must not show money or phone");
   await noHorizontalScroll(page, "customer-track-mobile");
   await page.screenshot({ path: `${SHOTS}/customer-track-mobile.png`, fullPage: true });
   await page.fill("#pin", "0000");
