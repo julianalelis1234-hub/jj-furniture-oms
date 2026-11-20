@@ -9,6 +9,7 @@ import { DomainError } from "@/lib/domain/errors";
 import type { Actor, Role } from "@/lib/domain/types";
 import { getMemoryStore } from "./memory";
 import { createAdminClient, createUserClient } from "./supabase";
+import { isHttpsRequest } from "./request";
 import { signToken, verifyToken } from "./token";
 
 export const DEMO_COOKIE = "jj_demo_session";
@@ -98,7 +99,7 @@ export async function setDemoSession(profileId: string) {
   (await cookies()).set(DEMO_COOKIE, signToken({ uid: profileId }, 60 * 60 * 24 * 30), {
     httpOnly: true,
     sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
+    secure: await isHttpsRequest(),
     path: "/",
     maxAge: 60 * 60 * 24 * 30,
   });

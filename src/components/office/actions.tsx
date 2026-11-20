@@ -51,6 +51,7 @@ import {
   type Profile,
 } from "@/lib/domain/types";
 import { cn } from "@/lib/utils";
+import { newUuid } from "@/lib/uuid";
 
 const s = (fd: FormData, k: string) => String(fd.get(k) ?? "");
 
@@ -99,7 +100,7 @@ export function LogPaymentDialog({ order, defaultType = "Down Payment (30%)", de
       submitLabel="Save payment"
       action={(fd) => {
         fd.set("order_id", order.id);
-        fd.set("client_transaction_id", crypto.randomUUID()); // one key per submit: double taps can't double-log
+        fd.set("client_transaction_id", newUuid()); // one key per submit: double taps can't double-log
         return logPaymentAction(null, fd);
       }}
     >

@@ -15,6 +15,7 @@ import { authorize, DEMO_COOKIE, getPublicStore, getStore, PORTAL_FOR, setDemoSe
 import { resetMemoryStore } from "@/lib/server/memory";
 import { createUserClient } from "@/lib/server/supabase";
 import { signToken } from "@/lib/server/token";
+import { isHttpsRequest } from "@/lib/server/request";
 import { CUSTOMER_COOKIE, getVerifiedCustomerOrderId } from "@/lib/server/customer-session";
 import { customerConfirmSpecs, customerRequestRepair, trackOrder } from "@/lib/services/customer";
 import { scheduleDelivery } from "@/lib/services/deliveries";
@@ -209,7 +210,7 @@ export async function customerLookupAction(_: unknown, fd: FormData) {
     if (!r.ok || !r.order_id)
       return { ok: false as const, message: `Order ID and PIN do not match. ${r.remaining_attempts ?? 0} tries left.` };
     (await cookies()).set(CUSTOMER_COOKIE, signToken({ oid: r.order_id }, 60 * 60), {
-      httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", path: "/track", maxAge: 60 * 60,
+      httpOnly: true, sameSite: "lax", secure: await isHttpsRequest(), path: "/track", maxAge: 60 * 60,
     });
     redirect("/track/order");
   } catch (e) {

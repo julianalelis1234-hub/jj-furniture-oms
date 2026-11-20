@@ -41,6 +41,7 @@ import {
 import type { DriverAction, DriverActionResult, ManifestEntry } from "@/lib/services/deliveries";
 import { useBrowserOnline } from "@/lib/use-browser";
 import { cn } from "@/lib/utils";
+import { newUuid } from "@/lib/uuid";
 
 type Tab = "today" | "upcoming" | "done";
 type SyncState = "synced" | "offline" | "syncing" | "conflict";
@@ -159,7 +160,7 @@ export function DriverApp({ driverId, initialManifest, serverTime }: { driverId:
     const db = dbRef.current;
     if (!db) return;
     const action: DriverAction = {
-      client_transaction_id: crypto.randomUUID(),
+      client_transaction_id: newUuid(),
       type,
       delivery_id: entry.delivery.id,
       order_id: entry.order.id,
