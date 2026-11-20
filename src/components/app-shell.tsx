@@ -81,7 +81,8 @@ export function AppShell({
 export function PageTitle({ title, description, actions }: { title: string; description?: ReactNode; actions?: ReactNode }) {
   return (
     <div className="mb-4 flex flex-wrap items-end gap-3">
-      <div className="min-w-0 flex-1">
+      {/* basis keeps the title on its own line on phones; actions wrap below */}
+      <div className="min-w-0 flex-1 basis-72">
         <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{title}</h1>
         {description && <p className="mt-1 text-muted-foreground">{description}</p>}
       </div>

@@ -83,6 +83,8 @@ BASE_URL=http://localhost:3100 npm run test:e2e   # Playwright: all 5 portals en
 
 * All colors are semantic CSS variables in `src/app/globals.css`: `--background`, `--foreground`, `--card`, `--primary`, `--border`, `--success`, `--warning`, `--info`, and others. They come in two modes. **Normal (light)** is the high-contrast mode for workshop and sunlight; **Dark** uses the `#0B0B0C` / `#141416` prototype surfaces.
 * `npm run tokens` exports them to `design/tokens.json` (Tokens Studio / Figma Variables format, both modes). Import that file into Figma so the design and the code use the same token names.
+* **Figma file:** [JJ Furniture OMS — Design System & Portals](https://www.figma.com/design/9vS0YZSE2kE4a34plawO3P). It contains the variable collections `JJ OMS / Color · Normal (Light)`, `JJ OMS / Color · Dark` (44 tokens each, with `var(--…)` code syntax) and `JJ OMS / Shape`. Light and Dark are separate collections because the Figma Starter plan allows only one mode per collection; on a paid plan they can be merged into one two-mode collection. The *Portals (mobile 390)* page holds 8 screens captured from the running app.
+* To re-sync screens after UI changes: start the app on port 3100, run `node scripts/figma/capture-portals.mjs && node scripts/figma/mobilize.cjs`, then import `design/portals.html` with Figma's HTML import (`.screen-wrap` selector).
 * UI is built from `shadcn/ui` (Base UI) and `lucide-react`. Touch targets are ≥ 44 px, and primary actions are 56 px.
 
 ## Scope boundaries (by design)
