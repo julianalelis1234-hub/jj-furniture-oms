@@ -8,7 +8,18 @@ const COMPUTED = ["standard_down_payment_due", "remaining_furniture_balance", "c
 buildSeedTables().then((t) => {
   const orders = t.orders.map((o) => Object.fromEntries(Object.entries(o).filter(([k]) => !COMPUTED.includes(k))));
   const out = [
-    `insert into auth.users (id) select (x->>'id')::uuid from jsonb_array_elements(${q(t.profiles)}) x;`,
+    process.argv.includes("--supabase")
+      ? // Real Supabase auth.users rows. Password is random and unknown: nobody can sign in
+        // until the owner sets a real password (dashboard) or runs npm run db:seed.
+        `insert into auth.users (instance_id, id, aud, role, email, encrypted_password, email_confirmed_at,
+           raw_app_meta_data, raw_user_meta_data, created_at, updated_at,
+           confirmation_token, recovery_token, email_change_token_new, email_change)
+         select '00000000-0000-0000-0000-000000000000', (x->>'id')::uuid, 'authenticated', 'authenticated',
+           x->>'email', extensions.crypt(gen_random_uuid()::text, extensions.gen_salt('bf')), now(),
+           '{"provider":"email","providers":["email"]}'::jsonb, jsonb_build_object('full_name', x->>'full_name'), now(), now(), '', '', '', ''
+         from jsonb_array_elements(${q(t.profiles.map((p) => ({ id: p.id, full_name: p.full_name, email: `${p.full_name.toLowerCase().replace(/^mr\.\s*/, "").replace(/[^a-z]+/g, ".").replace(/^\.|\.$/g, "")}@jjfurniture.test` })))}) x
+         on conflict (id) do nothing;`
+      : `insert into auth.users (id) select (x->>'id')::uuid from jsonb_array_elements(${q(t.profiles)}) x;`,
     `insert into public.profiles (id, full_name, role, phone, is_active) select id, full_name, role, phone, is_active from jsonb_populate_recordset(null::public.profiles, ${q(t.profiles)});`,
     `insert into public.orders (${Object.keys(orders[0]).join(",")}) select ${Object.keys(orders[0]).join(",")} from jsonb_populate_recordset(null::public.orders, ${q(orders)});`,
     `delete from public.order_exceptions_and_repairs where requested_by = 'System (payment terms)';`,

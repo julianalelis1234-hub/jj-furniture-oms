@@ -1,6 +1,7 @@
 // Remove min-width breakpoint rules so the snapshot renders the phone layout at any canvas width.
-const postcss = require("postcss");
-const fs = require("fs");
+import postcss from "postcss";
+import fs from "node:fs";
+
 const f = "design/portals.html";
 let html = fs.readFileSync(f, "utf8");
 const start = html.indexOf("<style>") + 7, end = html.indexOf("</style>");

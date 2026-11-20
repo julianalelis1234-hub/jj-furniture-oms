@@ -85,7 +85,12 @@ export async function signIn(_: unknown, fd: FormData): Promise<ActionResult> {
   if (isDemoMode()) return { ok: false, message: "Demo mode uses the role switcher." };
   const supabase = await createUserClient();
   const { error } = await supabase.auth.signInWithPassword({ email: str(fd, "email").trim(), password: str(fd, "password") });
-  if (error) return { ok: false, message: "Wrong email or password." };
+  if (error) {
+    // Only real credential errors say "wrong password"; outages must not look like a typo.
+    if (error.status === 400 || /invalid login credentials/i.test(error.message)) return { ok: false, message: "Wrong email or password." };
+    console.error("[signIn]", error.status, error.message);
+    return { ok: false, message: "Cannot reach the sign-in service right now. Check the connection and try again." };
+  }
   const { data } = await supabase.auth.getUser();
   const { data: profile } = await supabase.from("profiles").select("role, is_active").eq("id", data.user!.id).maybeSingle();
   if (!profile?.is_active) {

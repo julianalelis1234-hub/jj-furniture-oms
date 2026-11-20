@@ -8,7 +8,7 @@ import { SupabaseStore } from "@/lib/data/supabase-store";
 import { DomainError } from "@/lib/domain/errors";
 import type { Actor, Role } from "@/lib/domain/types";
 import { getMemoryStore } from "./memory";
-import { createAdminClient, createAnonClient, createUserClient } from "./supabase";
+import { createAdminClient, createUserClient } from "./supabase";
 import { signToken, verifyToken } from "./token";
 
 export const DEMO_COOKIE = "jj_demo_session";
@@ -39,9 +39,18 @@ export const getStore = cache(async (): Promise<DataStore> => {
   return getMemoryStore();
 });
 
-/** Store for the public customer portal (anon RPCs; elevated() only after PIN verification). */
+/**
+ * Store for the public customer portal. The customer RPCs are callable only by
+ * the server (service role, migration 002), so a browser can never call the PIN
+ * check directly and dodge the rate limit. Full order data is read only after
+ * the PIN has been verified (see customer-session.ts).
+ */
 export const getPublicStore = cache(async (): Promise<DataStore> => {
-  if (hasSupabase()) return new SupabaseStore(createAnonClient(), createAdminClient());
+  if (hasSupabase()) {
+    const admin = createAdminClient();
+    if (!admin) throw new DomainError("BACKEND", "Customer portal requires SUPABASE_SERVICE_ROLE_KEY on the server.");
+    return new SupabaseStore(admin, admin);
+  }
   if (!isDemoMode()) throw new DomainError("BACKEND", "Production mode requires Supabase environment variables.");
   return getMemoryStore();
 });

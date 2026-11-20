@@ -138,9 +138,15 @@ insert into public.delivery_assignments (order_id, driver_id, vehicle_type, sche
 values ('10000000-0000-0000-0000-000000000002', '00000000-0000-0000-0000-000000000004', 'Elf Truck', current_date, '9:00 AM - 11:00 AM', 1200, 32700);
 
 -- ------------------------------------------------------------------ RLS ----
--- anon: no table access, only RPCs
+-- anon: no table access and no direct RPC access (server-only since 002)
 set role anon;
 select pg_temp.expect_error($q$select * from public.orders$q$, 'permission denied', 'anon cannot read orders table');
+select pg_temp.expect_error($q$select public.customer_track('JJ-2026-0136')$q$, 'permission denied', 'anon cannot call customer_track directly');
+select pg_temp.expect_error($q$select public.customer_verify_pin('JJ-2026-0136', '1111', 'x')$q$, 'permission denied', 'anon cannot call customer_verify_pin directly (no rate-limit bypass)');
+select pg_temp.expect_error($q$select * from public.workshop_orders()$q$, 'permission denied', 'anon cannot list workshop jobs');
+reset role;
+
+-- server (service role) customer flows
 select pg_temp.check(
   (public.customer_track('jj-2026-0136') ?& array['status','estimated_completion_date','scheduled_delivery_date'])
   and not (public.customer_track('JJ-2026-0136') ?| array['customer_phone','delivery_address','furniture_price','collectible_on_delivery','customer_name']),
@@ -150,18 +156,18 @@ select pg_temp.check((public.customer_verify_pin('JJ-2026-0136', '1111', 'ip-1')
 select public.customer_verify_pin('JJ-2026-0136', '9999', 'ip-2') from generate_series(1, 5);
 select pg_temp.check((public.customer_verify_pin('JJ-2026-0136', '1111', 'ip-2') ->> 'locked')::boolean,
   'PIN lockout after 5 failures blocks even the right PIN (rate limit)');
-reset role;
+select public.customer_verify_pin('JJ-2026-0136', '9999', 'rotating-' || g) from generate_series(1, 20) g;
+select pg_temp.check((public.customer_verify_pin('JJ-2026-0136', '1111', 'brand-new-client') ->> 'locked')::boolean,
+  'rotating client keys cannot bypass the per-order lockout (20 failures / 15 min)');
+delete from public.customer_pin_attempts;
 
 -- craftsman: no direct orders access, workshop view has no money columns
 select pg_temp.act_as('00000000-0000-0000-0000-000000000003');
 select pg_temp.check(count(*) = 0, 'craftsman cannot read orders table rows') from public.orders;
 select pg_temp.check(count(*) = 0, 'craftsman cannot read payments') from public.payments;
-select pg_temp.check(not exists (
-    select 1 from information_schema.columns
-    where table_name = 'workshop_orders' and (column_name like '%price%' or column_name like '%balance%'
-      or column_name like '%fee%' or column_name like '%collectible%' or column_name like '%payment%'
-      or column_name in ('customer_phone','delivery_address','pin_code_hash','pin_code_display'))),
-  'workshop_orders view exposes no financial or customer-contact columns');
+select pg_temp.check(pg_get_function_result('public.workshop_orders()'::regprocedure) !~ '(price|balance|fee|collectible|payment|phone|address|pin_code)',
+  'workshop_orders() returns no financial or customer-contact columns');
+select pg_temp.check(count(*) >= 0, 'craftsman can call workshop_orders()') from public.workshop_orders();
 reset role;
 
 -- driver: only assigned orders
@@ -178,6 +184,7 @@ reset role;
 
 select pg_temp.act_as('00000000-0000-0000-0000-000000000005');
 select pg_temp.check(count(*) = 0, 'unassigned driver sees no orders') from public.orders;
+select pg_temp.expect_error($q$select * from public.workshop_orders()$q$, 'FORBIDDEN', 'drivers cannot list workshop jobs (prices hidden anyway)');
 reset role;
 
 -- staff: cannot approve owner-only things

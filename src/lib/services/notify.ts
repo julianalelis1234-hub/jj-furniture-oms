@@ -1,4 +1,5 @@
 import { isDemoMode } from "@/lib/config";
+import { DomainError } from "@/lib/domain/errors";
 import { PH_PHONE } from "@/lib/domain/validation";
 import type { DataStore } from "@/lib/data/store";
 import type { NotificationLog, NotificationStatus, Order } from "@/lib/domain/types";
@@ -49,22 +50,38 @@ export function defaultProvider(): SmsProvider {
   return isDemoMode() ? simulatedSms : manualQueue;
 }
 
+/**
+ * Sends and logs a customer update. Best-effort by design: the order action
+ * that triggered it has already been saved, so a gateway or logging failure
+ * must never turn it into an error. Office roles may write notifications under
+ * RLS; field roles (driver/craftsman) fall back to the elevated store.
+ */
 export async function notifyCustomer(
   store: DataStore,
   order: Pick<Order, "id" | "customer_phone">,
   body: string,
   provider: SmsProvider = defaultProvider(),
-): Promise<NotificationLog> {
-  const result = await provider.send(order.customer_phone, body);
-  // notifications are office-only under RLS; field roles log through the elevated store
-  return store.elevated().insertNotification({
-    order_id: order.id,
-    recipient_phone: order.customer_phone,
-    channel: "SMS",
-    message_body: body,
-    delivery_status: result.status,
-    created_at: new Date().toISOString(),
-  });
+): Promise<NotificationLog | null> {
+  try {
+    const result = await provider.send(order.customer_phone, body);
+    const row = {
+      order_id: order.id,
+      recipient_phone: order.customer_phone,
+      channel: "SMS" as const,
+      message_body: body,
+      delivery_status: result.status,
+      created_at: new Date().toISOString(),
+    };
+    try {
+      return await store.insertNotification(row);
+    } catch (e) {
+      if (e instanceof DomainError && e.code === "FORBIDDEN") return await store.elevated().insertNotification(row);
+      throw e;
+    }
+  } catch (e) {
+    console.error("[notify] customer update not logged:", e instanceof Error ? e.message : e);
+    return null;
+  }
 }
 
 export async function retryNotification(

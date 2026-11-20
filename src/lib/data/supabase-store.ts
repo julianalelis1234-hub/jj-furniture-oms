@@ -97,7 +97,7 @@ export class SupabaseStore implements DataStore {
     throw new DomainError("FORBIDDEN", "You do not have permission to update this order.");
   }
   async listWorkshopOrders() {
-    const { data, error } = await this.db.from("workshop_orders").select("*");
+    const { data, error } = await this.db.rpc("workshop_orders");
     if (error) fail(error);
     return data as WorkshopOrder[];
   }

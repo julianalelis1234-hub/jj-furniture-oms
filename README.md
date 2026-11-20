@@ -51,6 +51,15 @@ With no Supabase credentials, demo mode runs on an **in-memory database** seeded
 3. The badge reads `Online • Synced`, `Offline • Saved Locally (N pending)`, `Syncing...` or `Sync Conflict`, with the last successful sync time. **Simulate Offline / Weak Signal** blocks all network calls, so the queue can be tested honestly.
 4. The queue flushes on the `online` event or **Sync Now**, sequentially, through `/api/driver/sync`. The server is idempotent on `client_transaction_id` (unique in `payments` and `order_status_history`). A version mismatch returns a conflict for the driver to **Re-apply** or **Discard**; nothing is silently overwritten. The driver's own consecutive actions are rebased automatically.
 
+## Live Supabase project
+
+* Project **`jj-furniture-oms`** (ref `ctjdasbwgchlfjzqeqel`, region Singapore `ap-southeast-1`, org *JJs Furniture Org*, Free plan): `https://ctjdasbwgchlfjzqeqel.supabase.co`
+* Migrations applied: `001_init`, `002_security_hardening`. Demo data is loaded: 8 staff, 14 orders, payments, history, deliveries, approvals and notifications. Balances computed by the database match the app engine for all 14 orders.
+* Verified on the live database: every role sees only its rows; the public cannot call the customer functions or read tables; PIN hashes made by the app verify in Supabase; staff sign-in and a real staff write work end to end through RLS.
+* Demo staff Auth users (`vincris.lelis@jjfurniture.test`, `gilbert.decena@…`, `liza@…`, `nolito.remulta@…`, `carlo@…`, `dodong@…`, `jesse.decena@…`, `rey@…`) have **random, unknown passwords**. Set one in Supabase → Authentication → Users before signing in, or run `npm run db:seed` with the service role key.
+* Still needed from the dashboard (Settings → API): **`SUPABASE_SERVICE_ROLE_KEY`**. Without it, the customer portal, craftsman status changes, and demo mode on Supabase cannot run.
+* Behind an outbound proxy, start Node with `NODE_USE_ENV_PROXY=1` so server-side calls to Supabase use the proxy.
+
 ## Supabase setup
 
 1. Create a project. In **SQL Editor**, run `supabase/migrations/001_init.sql`, or use `supabase db push` with the Supabase CLI.
@@ -72,7 +81,7 @@ With no Supabase credentials, demo mode runs on an **in-memory database** seeded
 
 ```bash
 npm test           # Vitest: 34 unit tests (validation, 7-stage machine, 30/70 finance, privacy, IndexedDB offline sync, idempotency, conflicts)
-npm run test:db    # Postgres: 30 assertions on the real migration (triggers, constraints, RLS per role, PIN rate limit) + seed cross-check
+npm run test:db    # Postgres: 37 assertions on the real migration (triggers, constraints, RLS per role, PIN rate limit) + seed cross-check
 npm run build && PORT=3100 npm start &
 BASE_URL=http://localhost:3100 npm run test:e2e   # Playwright: all 5 portals end-to-end, mobile no-horizontal-scroll, dark mode
 ```
@@ -84,7 +93,7 @@ BASE_URL=http://localhost:3100 npm run test:e2e   # Playwright: all 5 portals en
 * All colors are semantic CSS variables in `src/app/globals.css`: `--background`, `--foreground`, `--card`, `--primary`, `--border`, `--success`, `--warning`, `--info`, and others. They come in two modes. **Normal (light)** is the high-contrast mode for workshop and sunlight; **Dark** uses the `#0B0B0C` / `#141416` prototype surfaces.
 * `npm run tokens` exports them to `design/tokens.json` (Tokens Studio / Figma Variables format, both modes). Import that file into Figma so the design and the code use the same token names.
 * **Figma file:** [JJ Furniture OMS — Design System & Portals](https://www.figma.com/design/9vS0YZSE2kE4a34plawO3P). It contains the variable collections `JJ OMS / Color · Normal (Light)`, `JJ OMS / Color · Dark` (44 tokens each, with `var(--…)` code syntax) and `JJ OMS / Shape`. Light and Dark are separate collections because the Figma Starter plan allows only one mode per collection; on a paid plan they can be merged into one two-mode collection. The *Portals (mobile 390)* page holds 8 screens captured from the running app.
-* To re-sync screens after UI changes: start the app on port 3100, run `node scripts/figma/capture-portals.mjs && node scripts/figma/mobilize.cjs`, then import `design/portals.html` with Figma's HTML import (`.screen-wrap` selector).
+* To re-sync screens after UI changes: start the app on port 3100, run `node scripts/figma/capture-portals.mjs && node scripts/figma/mobilize.mjs`, then import `design/portals.html` with Figma's HTML import (`.screen-wrap` selector).
 * UI is built from `shadcn/ui` (Base UI) and `lucide-react`. Touch targets are ≥ 44 px, and primary actions are 56 px.
 
 ## Scope boundaries (by design)
