@@ -14,6 +14,8 @@ import {
   RetrySmsDialog,
   ReviseSpecsDialog,
   ScheduleDeliveryDialog,
+  ResendReviewLinkButton,
+  RetryProvisioningButton,
   StartProductionDialog,
   VerifyHandoverButton,
 } from "@/components/office/actions";
@@ -30,7 +32,7 @@ import { PreviewPanel } from "@/components/orders/preview-panel";
 import { describeDiff, formatDims, type FurnitureSpec, type SpecDiff } from "@/lib/domain/furniture";
 import { isCustomerProposal } from "@/lib/services/exceptions";
 import { blockingItems, isQuoteExpired, quoteValidityDays } from "@/lib/domain/gate";
-import type { SpecRevision } from "@/lib/domain/types";
+import type { Order, SpecRevision } from "@/lib/domain/types";
 
 const REVISION_LABEL: Record<SpecRevision["revision_type"], string> = {
   staff_draft: "Shop quotation",
@@ -38,6 +40,15 @@ const REVISION_LABEL: Record<SpecRevision["revision_type"], string> = {
   customer_proposal: "Customer proposal",
   revised_quote: "Revised quote",
   final_approved: "Final approved",
+};
+const PROVISIONING_LABEL: Record<Order["provisioning_status"], string> = {
+  not_applicable: "Not applicable",
+  pending: "Waiting for the customer to open the review link and accept",
+  account_created: "Account created",
+  setup_email_pending: "Password set-up email not sent yet (no email provider) — retry",
+  setup_email_sent: "Password set-up email sent",
+  linked: "Linked to the customer's account",
+  failed: "Account set-up failed — retry",
 };
 const specOf = (r: Pick<SpecRevision, "furniture_category" | "design_variant" | "width_cm" | "height_cm" | "depth_cm" | "wood_type" | "custom_wood_note" | "color_finish" | "quantity">): FurnitureSpec => ({
   furniture_category: r.furniture_category, design_variant: r.design_variant, width_cm: r.width_cm, height_cm: r.height_cm,
@@ -188,8 +199,21 @@ export default async function OrderDetailPage({ params }: PageProps<"/staff/orde
               <dt className="text-muted-foreground">Name</dt><dd className="font-semibold">{o.customer_name}</dd>
               <dt className="text-muted-foreground">Mobile</dt><dd><a className="text-primary underline" href={`tel:${o.customer_phone}`}>{o.customer_phone}</a></dd>
               <dt className="text-muted-foreground">Address</dt><dd>{o.delivery_address}, {o.municipality}</dd>
-              <dt className="text-muted-foreground">Customer PIN</dt><dd className="font-mono font-bold tracking-widest">{o.pin_code_display ?? "—"}</dd>
+              <dt className="text-muted-foreground">Email</dt>
+              <dd data-testid="customer-email-status">
+                {o.has_no_email ? "Walk-in · paper slip only (no portal, no email)"
+                  : o.customer_email ? <>{o.customer_email} · {o.email_verified_at ? <span className="font-semibold text-success">verified {formatDateTime(o.email_verified_at)}</span> : <span className="text-warning">unverified</span>}</>
+                  : "— (recorded before emails were collected)"}
+              </dd>
+              {o.customer_email && <><dt className="text-muted-foreground">Account</dt><dd>{PROVISIONING_LABEL[o.provisioning_status]}</dd></>}
+              {o.pin_code_display && <><dt className="text-muted-foreground">Legacy PIN</dt><dd className="font-mono font-bold tracking-widest">{o.pin_code_display}</dd></>}
             </dl>
+            {o.customer_email && (
+              <div className="flex flex-wrap gap-2">
+                {o.status === "Waiting for Confirmation" && <ResendReviewLinkButton orderId={o.id} />}
+                {o.status !== "Waiting for Confirmation" && o.status !== "Quote Requested" && ["pending", "failed", "setup_email_pending", "account_created"].includes(o.provisioning_status) && o.email_verified_at && <RetryProvisioningButton orderId={o.id} />}
+              </div>
+            )}
             {deliveries.length > 0 && (
               <ul className="grid gap-1.5 text-sm">
                 {deliveries.map((d) => (

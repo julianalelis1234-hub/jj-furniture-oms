@@ -49,6 +49,12 @@ export function refineSpec(v: { furniture_category: string; design_variant: stri
 export const furnitureSpecSchema = z.object(furnitureSpecShape).superRefine(refineSpec);
 export type FurnitureSpecInput = z.infer<typeof furnitureSpecSchema>;
 
+/** Normalized email (trim + lower case); the stored form is always normalized. */
+export const emailField = (label = "Email") =>
+  z.string().trim().toLowerCase().max(254).pipe(z.email({ error: `${label}: enter a valid email address, e.g. name@example.com.` }));
+/** Checkbox / boolean from a form ("on", "true") */
+const checkbox = z.union([z.boolean(), z.string()]).optional().transform((v) => v === true || v === "on" || v === "true");
+
 /** Philippine mobile number: 09XXXXXXXXX or +639XXXXXXXXX */
 export const PH_PHONE = /^(09\d{9}|\+639\d{9})$/;
 
@@ -64,6 +70,9 @@ export const newOrderSchema = z
       .pipe(z.string().regex(PH_PHONE, { error: "Use a PH mobile number, e.g. 09XX XXX XXXX." })),
     delivery_address: required("Delivery address").max(300),
     municipality: z.enum(MUNICIPALITIES, { error: "Choose a municipality." }),
+    /** Option 1: customer email, or the explicit Walk-In / No Email (paper slip only) toggle */
+    customer_email: z.string().trim().toLowerCase().max(254).optional().default(""),
+    has_no_email: checkbox,
     item_name: z.string().trim().max(120).optional().default(""),
     ...furnitureSpecShape,
     special_instructions: z.string().trim().max(1000).optional().default(""),
@@ -83,6 +92,7 @@ export const newOrderSchema = z
   })
   .superRefine((v, ctx) => {
     refineSpec(v, ctx);
+    refineEmailOrWalkIn(v, ctx);
     if (v.municipality !== "Valencia City" && v.delivery_fee <= 0) {
       ctx.addIssue({
         code: "custom",
@@ -100,8 +110,24 @@ export const newOrderSchema = z
   });
 export type NewOrderInput = z.infer<typeof newOrderSchema>;
 
+/** Either a valid customer email or the walk-in toggle — never both, never neither. */
+export function refineEmailOrWalkIn(v: { customer_email: string; has_no_email: boolean }, ctx: z.RefinementCtx) {
+  if (v.has_no_email) {
+    if (v.customer_email) ctx.addIssue({ code: "custom", path: ["customer_email"], message: "Clear the email for a Walk-In / No Email order." });
+    return;
+  }
+  if (!v.customer_email) {
+    ctx.addIssue({ code: "custom", path: ["customer_email"], message: "Enter the customer's email, or tick Walk-In / No Email (paper slip only)." });
+    return;
+  }
+  if (!emailField().safeParse(v.customer_email).success)
+    ctx.addIssue({ code: "custom", path: ["customer_email"], message: "Enter a valid email address, e.g. name@example.com." });
+}
+
 export const editOrderSchema = z.object({
-  customer_phone: newOrderSchema.shape.customer_phone,
+  customer_email: z.string().trim().toLowerCase().max(254).optional().default(""),
+  has_no_email: checkbox,
+  customer_phone: z.string().trim().transform((s) => s.replace(/[\s-]/g, "")).pipe(z.string().regex(PH_PHONE, { error: "Use a PH mobile number, e.g. 09XX XXX XXXX." })),
   delivery_address: required("Delivery address").max(300),
   municipality: z.enum(MUNICIPALITIES),
   delivery_fee: pesos("Delivery fee"),
@@ -109,6 +135,11 @@ export const editOrderSchema = z.object({
   reference_photo_url: z.union([z.literal(""), z.url()]).optional().default(""),
   estimated_completion_date: isoDate("Estimated completion date"),
   scheduled_delivery_date: z.union([z.literal(""), isoDate("Scheduled delivery date")]).optional().default(""),
+}).superRefine((v, ctx) => {
+  // edits: never both; "neither" is checked in the service (allowed only for legacy rows recorded before emails)
+  if (v.has_no_email && v.customer_email) ctx.addIssue({ code: "custom", path: ["customer_email"], message: "Clear the email for a Walk-In / No Email order." });
+  else if (v.customer_email && !emailField().safeParse(v.customer_email).success)
+    ctx.addIssue({ code: "custom", path: ["customer_email"], message: "Enter a valid email address, e.g. name@example.com." });
 });
 
 /**
@@ -136,6 +167,8 @@ export const customerRequestSchema = z
       .transform((s) => s.replace(/[\s-]/g, ""))
       .pipe(z.string().regex(PH_PHONE, { error: "Use a PH mobile number, e.g. 09XX XXX XXXX." })),
     delivery_address: required("Delivery address").min(12, { error: "Add the purok / barangay and a landmark so the driver can find you." }).max(300),
+    /** Option 2: required — the quotation review link is sent here */
+    customer_email: emailField("Email"),
     municipality: z.enum(MUNICIPALITIES, { error: "Choose a municipality." }),
     ...furnitureSpecShape,
     special_instructions: z.string().trim().max(1000).optional().default(""),
@@ -200,3 +233,8 @@ export function firstErrors(error: z.ZodError): Record<string, string> {
   }
   return out;
 }
+
+export const customerLoginSchema = z.object({
+  email: emailField(),
+  password: z.string().min(1, { error: "Enter your password." }).max(128),
+});

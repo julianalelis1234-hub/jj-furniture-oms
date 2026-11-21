@@ -35,6 +35,12 @@ export const ORDER_STATUSES = [PRE_PRODUCTION_STATUS, ...WORKSHOP_STAGES] as con
 export type OrderStatus = (typeof ORDER_STATUSES)[number];
 
 export const ORDER_ORIGINS = ["staff_intake", "customer_self_service"] as const;
+
+/** Post-acceptance customer-account provisioning (migration 005). */
+export const PROVISIONING_STATUSES = [
+  "not_applicable", "pending", "account_created", "setup_email_pending", "setup_email_sent", "linked", "failed",
+] as const;
+export type ProvisioningStatus = (typeof PROVISIONING_STATUSES)[number];
 export type OrderOrigin = (typeof ORDER_ORIGINS)[number];
 
 export const PRIORITY_LABELS = ["Urgent", "High", "Normal"] as const;
@@ -75,7 +81,7 @@ export type ExceptionCategory = (typeof EXCEPTION_CATEGORIES)[number];
 export const EXCEPTION_STATUSES = ["Pending", "Approved", "Rejected", "Resolved"] as const;
 export type ExceptionStatus = (typeof EXCEPTION_STATUSES)[number];
 
-export const NOTIFICATION_CHANNELS = ["SMS", "Messenger", "In-App"] as const;
+export const NOTIFICATION_CHANNELS = ["SMS", "Messenger", "In-App", "Email"] as const;
 export type NotificationChannel = (typeof NOTIFICATION_CHANNELS)[number];
 export type NotificationStatus = "Sent" | "Failed" | "Pending";
 
@@ -120,7 +126,8 @@ export interface Order extends StructuredSpecColumns {
   customer_phone: string;
   delivery_address: string;
   municipality: Municipality;
-  pin_code_hash: string;
+  /** legacy paper-slip PIN (older orders only); new orders use email authentication */
+  pin_code_hash: string | null;
   pin_code_display: string | null;
   item_name: string;
   quantity: number;
@@ -151,6 +158,16 @@ export interface Order extends StructuredSpecColumns {
   spec_preview_config: Record<string, unknown>;
   is_legacy_incomplete: boolean;
   order_origin: OrderOrigin;
+  /** normalized (trim + lower case); UNVERIFIED until a review link is opened */
+  customer_email: string | null;
+  /** set only after inbox ownership was verified for this order */
+  customer_user_id: string | null;
+  email_verified_at: string | null;
+  /** walk-in, paper slip only: no portal, no email notifications */
+  has_no_email: boolean;
+  provisioning_status: ProvisioningStatus;
+  /** historical row created before emails were collected (set once by migration 005) */
+  legacy_contact_unknown: boolean;
   /** idempotency key of a customer self-service submission */
   client_request_key: string | null;
   created_at: string;
@@ -294,6 +311,7 @@ export interface NotificationLog {
   id: string;
   order_id: string;
   recipient_phone: string | null;
+  recipient_email?: string | null;
   channel: NotificationChannel;
   message_body: string;
   delivery_status: NotificationStatus;
@@ -324,3 +342,29 @@ export interface Actor {
   /** "demo" = role-switcher session, "auth" = Supabase-authenticated staff */
   source: "demo" | "auth";
 }
+
+/** A customer login (Supabase Auth user + profiles row with role 'customer'). */
+export interface CustomerAccount {
+  id: string;
+  email: string;
+  full_name: string;
+  is_active: boolean;
+  created_at: string;
+}
+
+/** Row of quote_review_tokens — only the SHA-256 hash of the link token is stored. */
+export interface QuoteReviewToken {
+  token_id: string;
+  order_id: string;
+  revision_id: string;
+  token_hash: string;
+  sent_to_email: string;
+  expires_at: string;
+  consumed_at: string | null;
+  invalidated_at: string | null;
+  created_at: string;
+}
+
+export type ConsumeReviewResult =
+  | { ok: true; order_id: string; revision_id: string; revision_number: number; email: string }
+  | { ok: false; reason: "invalid" | "used" | "replaced" | "expired" | "email_changed" };

@@ -1,9 +1,9 @@
+import { ZodError } from "zod";
 import type { DataStore, OrderPatch, SpecInput } from "@/lib/data/store";
 import { formatDate } from "@/lib/domain/dates";
 import { DomainError } from "@/lib/domain/errors";
 import { formatPeso, money } from "@/lib/domain/finance";
 import { quoteValidityDays } from "@/lib/domain/gate";
-import { generatePin, hashPin } from "@/lib/domain/pin";
 import { assertTransition, isValidTransition, rolesAllowedFor } from "@/lib/domain/status";
 import type {
   Actor,
@@ -16,6 +16,7 @@ import type {
 import { editOrderSchema, newOrderSchema, specRevisionSchema, type NewOrderInput } from "@/lib/domain/validation";
 import { describeDiff, dimensionsText, itemNameFor, normalizeSpec, type Dims, type SpecDiff } from "@/lib/domain/furniture";
 import { nextDraftCode, nextOrderCode } from "./codes";
+import { afterQuoteIssued } from "./customer-portal";
 import { ensureRole } from "./guard";
 import { notifyCustomer } from "./notify";
 
@@ -49,7 +50,7 @@ export async function createOrder(store: DataStore, actor: Actor, raw: unknown) 
     color_finish: input.color_finish,
     quantity: input.quantity,
   });
-  const pin = generatePin();
+  // Email authentication replaces the 4-digit PIN for new orders (migration 005).
   const order = await store.insertOrder({
     order_code: nextDraftCode(existing),
     paper_slip_number: input.paper_slip_number,
@@ -58,8 +59,10 @@ export async function createOrder(store: DataStore, actor: Actor, raw: unknown) 
     customer_phone: input.customer_phone,
     delivery_address: input.delivery_address,
     municipality: input.municipality,
-    pin_code_hash: hashPin(pin),
-    pin_code_display: pin,
+    pin_code_hash: null,
+    pin_code_display: null,
+    customer_email: input.has_no_email ? null : input.customer_email,
+    has_no_email: input.has_no_email,
     item_name: input.item_name || itemNameFor(spec),
     quantity: spec.quantity,
     dimensions: dimensionsText(spec as Dims),
@@ -105,7 +108,9 @@ export async function createOrder(store: DataStore, actor: Actor, raw: unknown) 
     client_transaction_id: null,
     changed_at: new Date().toISOString(),
   });
-  return { order: await mustGetOrder(store, order.id), pin };
+  // emailed single-use review link for the staff draft quotation (unverified email; never blocks the save)
+  const reviewLink = await afterQuoteIssued(store, order.id);
+  return { order: await mustGetOrder(store, order.id), reviewLink };
 }
 
 // --------------------------------------------------------- acceptance ------
@@ -174,7 +179,7 @@ export async function recordConfirmation(store: DataStore, actor: Actor | null, 
     confirmed,
     `JJ Furniture: ${confirmed.order_code} (${confirmed.item_name}) is confirmed. Production starts after your 30% down payment of ${formatPeso(
       confirmed.standard_down_payment_due,
-    )} is verified. Track at ${trackUrl()} using your PIN.`,
+    )} is verified. ${confirmed.customer_email ? "Follow it in your JJ Furniture account." : `Check the status at ${trackUrl()} with your Order ID.`}`,
   );
   return confirmed;
 }
@@ -217,13 +222,14 @@ export async function reviseSpecs(store: DataStore, actor: Actor, orderId: strin
     changed_at: new Date().toISOString(),
   });
   const updated = await mustGetOrder(store, orderId);
+  await afterQuoteIssued(store, orderId); // single-use review link to the customer's email (walk-ins: none)
   if (firstQuote)
     await notifyCustomer(
       store,
       updated,
       `JJ Furniture: Your quotation for ${updated.order_code} is ready: ${formatPeso(updated.furniture_price)} + delivery ${formatPeso(
         updated.delivery_fee,
-      )}. Valid until ${formatDate(res.expires_at?.slice(0, 10) ?? null)}. Review and accept at ${trackUrl()} with your PIN.`,
+      )}. Valid until ${formatDate(res.expires_at?.slice(0, 10) ?? null)}. ${updated.customer_email ? "We emailed you a link to review and accept it." : "Please visit the shop to accept it."}`,
     );
   return updated;
 }
@@ -240,9 +246,15 @@ export async function editOrderDetails(store: DataStore, actor: Actor, orderId: 
   const feeChanged = newFee !== order.delivery_fee;
   if (feeChanged && order.status !== "Waiting for Confirmation" && order.status !== "Quote Requested")
     throw new DomainError("SPEC_LOCKED", "The delivery fee is part of the confirmed quote. Use a change request to adjust it.");
+  const email = v.has_no_email ? null : v.customer_email || null;
+  if (!email && !v.has_no_email && !order.legacy_contact_unknown)
+    throw new DomainError("VALIDATION", "Enter the customer's email, or tick Walk-In / No Email (paper slip only).",
+      new ZodError([{ code: "custom", path: ["customer_email"], message: "Enter the customer's email, or tick Walk-In / No Email (paper slip only).", input: "" }]));
+  const emailChanged = email !== order.customer_email || v.has_no_email !== order.has_no_email;
   const res = await store.updateOrder(
     orderId,
     {
+      ...(emailChanged ? { customer_email: email, has_no_email: v.has_no_email } : {}),
       customer_phone: v.customer_phone,
       delivery_address: v.delivery_address,
       municipality: v.municipality,
@@ -271,8 +283,11 @@ export async function editOrderDetails(store: DataStore, actor: Actor, orderId: 
       created_by_id: actor.id,
       quote_validity_days: quoteValidityDays(),
     });
+    await afterQuoteIssued(store, o.id);
     return mustGetOrder(store, o.id);
   }
+  // a newly added / changed email starts unverified; send it the current quotation's review link
+  if (emailChanged && email && res.order.status === "Waiting for Confirmation") await afterQuoteIssued(store, orderId);
   return res.order;
 }
 

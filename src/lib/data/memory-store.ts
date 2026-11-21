@@ -8,6 +8,9 @@ import { assertTransition } from "@/lib/domain/status";
 import { money } from "@/lib/domain/finance";
 import { QUOTE_REVISION_TYPES } from "@/lib/domain/types";
 import type {
+  ConsumeReviewResult,
+  CustomerAccount,
+  QuoteReviewToken,
   CustomerTrack,
   DeliveryAssignment,
   NotificationLog,
@@ -44,6 +47,13 @@ export interface MemoryTables {
   notifications: NotificationLog[];
   order_specification_revisions: SpecRevision[];
   pin_attempts: { order_code: string; client_key: string; succeeded: boolean; at: number }[];
+  quote_review_tokens: QuoteReviewToken[];
+  /** demo stand-in for Supabase Auth users + customer profiles */
+  customer_accounts: (CustomerAccount & { password_hash: string | null })[];
+  /** demo password set-up / reset tokens (hash only) */
+  password_tokens: { token_hash: string; user_id: string; purpose: "setup" | "reset"; expires_at: string; used_at: string | null }[];
+  /** demo-only simulated inbox: the full email (with links) so testers can click them; never exists in production */
+  demo_mailbox: { id: string; to: string; subject: string; text: string; order_id: string | null; created_at: string }[];
 }
 
 export function emptyTables(): MemoryTables {
@@ -58,6 +68,10 @@ export function emptyTables(): MemoryTables {
     notifications: [],
     order_specification_revisions: [],
     pin_attempts: [],
+    quote_review_tokens: [],
+    customer_accounts: [],
+    password_tokens: [],
+    demo_mailbox: [],
   };
 }
 
@@ -65,6 +79,7 @@ const clone = <T>(v: T): T => structuredClone(v);
 const now = () => new Date().toISOString();
 const WORKSHOP_STATUSES = new Set(["Confirmed", "In Production", "Completed / For Inspection", "Ready for Delivery"]);
 const PIN_MAX_FAILURES = 5;
+const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 const PIN_WINDOW_MS = 15 * 60 * 1000;
 
 /**
@@ -149,6 +164,12 @@ export class MemoryStore implements DataStore {
     if (!["Quote Requested", "Waiting for Confirmation"].includes(row.status) && !row.specs_confirmed)
       throw new DomainError("SPECS_NOT_CONFIRMED", "Customer must confirm specifications first.");
     const origin = row.order_origin ?? "staff_intake";
+    const email = row.customer_email ?? null;
+    const walkIn = row.has_no_email ?? false;
+    if (email !== null && (email !== email.trim().toLowerCase() || !EMAIL_RE.test(email)))
+      throw new DomainError("VALIDATION", "Enter a valid email address.");
+    if (walkIn && email) throw new DomainError("VALIDATION", "A walk-in (paper slip only) order has no email.");
+    if (!walkIn && !email) throw new DomainError("VALIDATION", "Enter the customer's email, or mark the order as Walk-In / No Email.");
     if (row.status === "Quote Requested" && (origin !== "customer_self_service" || row.specs_confirmed))
       throw new DomainError("VALIDATION", "Quote Requested is only for customer self-service requests.");
     if (row.status !== "Quote Requested" && (row.furniture_price == null || !row.paper_slip_number || !row.estimated_completion_date))
@@ -165,6 +186,12 @@ export class MemoryStore implements DataStore {
     const ts = now();
     const order: Order = {
       ...row,
+      customer_email: email,
+      has_no_email: walkIn,
+      customer_user_id: null,
+      email_verified_at: null,
+      provisioning_status: walkIn ? "not_applicable" : "pending",
+      legacy_contact_unknown: false,
       order_origin: origin,
       client_request_key: row.client_request_key ?? null,
       current_revision: 1,
@@ -195,7 +222,24 @@ export class MemoryStore implements DataStore {
     if (patch.order_code && this.t.orders.some((o) => o.id !== id && o.order_code === patch.order_code))
       throw new DomainError("VALIDATION", `Order code ${patch.order_code} already exists.`);
 
+    if ("customer_user_id" in patch || "email_verified_at" in patch || "legacy_contact_unknown" in patch)
+      throw new DomainError("FORBIDDEN", "Account links and email verification are set only by the review-link and linking functions.");
     const next: Order = { ...current, ...patch };
+    // mirrors private.orders_email_guard(): a new email must be verified again
+    if (patch.customer_email !== undefined && patch.customer_email !== current.customer_email) {
+      const e = patch.customer_email;
+      if (e !== null && (e !== e.trim().toLowerCase() || !EMAIL_RE.test(e))) throw new DomainError("VALIDATION", "Enter a valid email address.");
+      next.email_verified_at = null;
+      next.customer_user_id = null;
+      next.provisioning_status = e === null ? "not_applicable" : "pending";
+    }
+    if (next.customer_email || next.has_no_email) next.legacy_contact_unknown = false;
+    if (next.has_no_email) {
+      if (next.customer_email) throw new DomainError("VALIDATION", "A walk-in (paper slip only) order has no email.");
+      next.provisioning_status = "not_applicable";
+    }
+    if (!next.has_no_email && !next.customer_email && !next.legacy_contact_unknown)
+      throw new DomainError("VALIDATION", "Enter the customer's email, or mark the order as Walk-In / No Email.");
     this.recompute(next);
     if (next.wood_type === "Other" && !next.custom_wood_note?.trim())
       throw new DomainError("VALIDATION", 'Describe the wood when "Other" is selected.');
@@ -559,7 +603,7 @@ export class MemoryStore implements DataStore {
     ).length;
     if (failures >= PIN_MAX_FAILURES) return { ok: false, locked: true, remaining_attempts: 0 };
     const o = this.t.orders.find((x) => x.order_code === code);
-    const ok = !!o && verifyPinHash(pin, o.pin_code_hash);
+    const ok = !!o && !!o.pin_code_hash && verifyPinHash(pin, o.pin_code_hash);
     this.t.pin_attempts.push({ order_code: code, client_key: clientKey, succeeded: ok, at: Date.now() });
     if (ok) return { ok: true, order_id: o!.id };
     return {
@@ -567,5 +611,84 @@ export class MemoryStore implements DataStore {
       locked: failures + 1 >= PIN_MAX_FAILURES,
       remaining_attempts: Math.max(0, PIN_MAX_FAILURES - failures - 1),
     };
+  }
+
+  // ------------------------------------------------ customer email auth (005)
+  async issueReviewToken(input: { order_id: string; revision_id: string; token_hash: string; ttl_hours: number }) {
+    const o = this.find(this.t.orders, input.order_id, "Order"); // lock
+    if (o.has_no_email || !o.customer_email) throw new DomainError("VALIDATION", "This order has no customer email (walk-in / paper slip only).");
+    const rev = this.t.order_specification_revisions.find((r) => r.revision_id === input.revision_id && r.order_id === o.id);
+    if (!rev || rev.revision_number !== o.current_revision || !QUOTE_REVISION_TYPES.includes(rev.revision_type))
+      throw new DomainError("STALE_REVISION", "A review link can only be issued for the current shop quotation.");
+    const ts = now();
+    for (const t of this.t.quote_review_tokens)
+      if (t.order_id === o.id && !t.consumed_at && !t.invalidated_at) t.invalidated_at = ts;
+    const hours = Math.min(336, Math.max(1, Math.round(input.ttl_hours)));
+    const row: QuoteReviewToken = {
+      token_id: randomUUID(), order_id: o.id, revision_id: rev.revision_id, token_hash: input.token_hash.toLowerCase(),
+      sent_to_email: o.customer_email, expires_at: new Date(Date.now() + hours * 3_600_000).toISOString(),
+      consumed_at: null, invalidated_at: null, created_at: ts,
+    };
+    if (this.t.quote_review_tokens.some((t) => t.token_hash === row.token_hash)) throw new DomainError("VALIDATION", "Token collision.");
+    this.t.quote_review_tokens.push(row);
+    return { token_id: row.token_id, expires_at: row.expires_at, sent_to_email: row.sent_to_email };
+  }
+
+  async consumeReviewToken(tokenHash: string): Promise<ConsumeReviewResult> {
+    const t = this.t.quote_review_tokens.find((x) => x.token_hash === tokenHash.toLowerCase());
+    if (!t) return { ok: false, reason: "invalid" };
+    if (t.consumed_at) return { ok: false, reason: "used" };
+    if (t.invalidated_at) return { ok: false, reason: "replaced" };
+    if (Date.now() > Date.parse(t.expires_at)) return { ok: false, reason: "expired" };
+    const o = this.find(this.t.orders, t.order_id, "Order");
+    const rev = this.t.order_specification_revisions.find((r) => r.revision_id === t.revision_id)!;
+    if (o.customer_email !== t.sent_to_email) { t.invalidated_at = now(); return { ok: false, reason: "email_changed" }; }
+    if (rev.revision_number !== o.current_revision) { t.invalidated_at = now(); return { ok: false, reason: "replaced" }; }
+    t.consumed_at = now();
+    o.email_verified_at ??= now();
+    o.version += 1;
+    o.updated_at = now();
+    return { ok: true, order_id: o.id, revision_id: t.revision_id, revision_number: rev.revision_number, email: t.sent_to_email };
+  }
+
+  async linkCustomerAccount(orderId: string, userId: string) {
+    const o = this.find(this.t.orders, orderId, "Order");
+    const acct = this.t.customer_accounts.find((a) => a.id === userId);
+    if (!acct || !acct.is_active) throw new DomainError("FORBIDDEN", "Not an active customer account.");
+    if (!o.email_verified_at) throw new DomainError("FORBIDDEN", "Email ownership has not been verified for this order.");
+    if (acct.email.trim().toLowerCase() !== o.customer_email) throw new DomainError("FORBIDDEN", "Account email does not match the verified order email.");
+    if (o.customer_user_id === userId) return { linked: true, already: true };
+    if (o.customer_user_id) throw new DomainError("FORBIDDEN", "Order is linked to another account.");
+    Object.assign(o, { customer_user_id: userId, provisioning_status: "linked", version: o.version + 1, updated_at: now() });
+    return { linked: true, already: false };
+  }
+
+  async listCustomerOrders(userId: string) {
+    return clone(this.t.orders.filter((o) => o.customer_user_id === userId).sort((a, b) => b.created_at.localeCompare(a.created_at)));
+  }
+
+  private toAccount(a: CustomerAccount & { password_hash: string | null }): CustomerAccount {
+    return { id: a.id, email: a.email, full_name: a.full_name, is_active: a.is_active, created_at: a.created_at };
+  }
+  async findCustomerAccountByEmail(email: string) {
+    const e = email.trim().toLowerCase();
+    const a = this.t.customer_accounts.find((x) => x.email === e);
+    return a ? this.toAccount(a) : null;
+  }
+  async getCustomerAccount(id: string) {
+    const a = this.t.customer_accounts.find((x) => x.id === id);
+    return a ? this.toAccount(a) : null;
+  }
+  async emailBelongsToStaff(email: string) {
+    // demo staff have no email addresses on file; production checks every profile
+    void email;
+    return false;
+  }
+  async insertCustomerProfile(row: { id: string; email: string; full_name: string }) {
+    const e = row.email.trim().toLowerCase();
+    if (this.t.customer_accounts.some((a) => a.email === e)) throw new DomainError("DUPLICATE_REQUEST", "An account with this email already exists.");
+    const a = { id: row.id, email: e, full_name: row.full_name, is_active: true, created_at: now(), password_hash: null };
+    this.t.customer_accounts.push(a);
+    return this.toAccount(a);
   }
 }

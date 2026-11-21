@@ -23,12 +23,14 @@ describe("3. customer authentication & privacy", () => {
     );
     expect(JSON.stringify(t)).not.toMatch(/0900|Purok|45000|31500|33000/);
   });
-  it("rejects invalid PINs and locks after 5 failures", async () => {
+  it("legacy paper-slip PINs: rejects invalid PINs and locks after 5 failures", async () => {
     const store = await seededStore();
-    expect((await store.customerVerifyPin("JJ-2026-0136", "0000", "ip-a")).ok).toBe(false);
-    expect((await store.customerVerifyPin("JJ-2026-0136", "2468", "ip-a")).ok).toBe(true);
-    for (let i = 0; i < 5; i++) await store.customerVerifyPin("JJ-2026-0136", "9999", "ip-b");
-    const locked = await store.customerVerifyPin("JJ-2026-0136", "2468", "ip-b");
+    expect((await store.customerVerifyPin("JJ-2026-0133", "0000", "ip-a")).ok).toBe(false);
+    expect((await store.customerVerifyPin("JJ-2026-0133", "1357", "ip-a")).ok).toBe(true);
+    // orders created with email authentication have no PIN at all
+    expect((await store.customerVerifyPin("JJ-2026-0136", "2468", "ip-a")).ok).toBe(false);
+    for (let i = 0; i < 5; i++) await store.customerVerifyPin("JJ-2026-0133", "9999", "ip-b");
+    const locked = await store.customerVerifyPin("JJ-2026-0133", "1357", "ip-b");
     expect(locked.ok).toBe(false);
     expect(locked.locked).toBe(true);
   });
@@ -130,6 +132,7 @@ describe("5. offline synchronization", () => {
     // meanwhile at the shop, Gilbert corrects the address
     const o = (await store.getOrder(entry.order.id))!;
     await editOrderDetails(store, actors.staff, o.id, {
+      customer_email: o.customer_email ?? "", has_no_email: o.has_no_email,
       customer_phone: o.customer_phone, delivery_address: "Purok 7, Brgy. Poblacion — NEW: blue gate beside sari-sari store",
       municipality: o.municipality, delivery_fee: 0, estimated_completion_date: o.estimated_completion_date,
       scheduled_delivery_date: o.scheduled_delivery_date ?? "",

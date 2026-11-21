@@ -1,3 +1,5 @@
+import bcrypt from "bcryptjs";
+import { createHash, randomBytes } from "node:crypto";
 import { addDays, todayISO } from "@/lib/domain/dates";
 import { hashPin } from "@/lib/domain/pin";
 import type { Municipality, Order, OrderStatus, PaymentType, Profile, SpecRevision, WoodType } from "@/lib/domain/types";
@@ -40,14 +42,32 @@ export const DEMO_PERSONA: Record<Profile["role"], string> = {
   driver: STAFF.jesse,
 };
 
-/** Sample orders exposed as one-click buttons on the customer portal in Demo Mode. */
+/** Older paper slips that still carry a 4-digit PIN (created before email authentication). */
 export const DEMO_CUSTOMER_SAMPLES = [
-  { order_code: "JJ-2026-0145", pin: "4821", label: "Dining table · In Production (locked spec)" },
-  { order_code: "DR-0148", pin: "7314", label: "Bed frame · Waiting — accept the quote or try the configurator" },
-  { order_code: "DR-0147", pin: "3690", label: "Wardrobe · Quote Requested (Option 2 self-service)" },
-  { order_code: "JJ-2026-0136", pin: "2468", label: "Sala set · Out for Delivery" },
-  { order_code: "JJ-2026-0133", pin: "1357", label: "Wardrobe · Delivered (legacy dimensions)" },
+  { order_code: "JJ-2026-0133", pin: "1357", label: "Wardrobe · Delivered (older paper slip with PIN)" },
+  { order_code: "JJ-2026-0130", pin: "9090", label: "Coffee table · Delivered (older paper slip with PIN)" },
 ];
+
+/** Demo customer login (fictional) — shown on /customer/login in Demo Mode only. */
+export const DEMO_CUSTOMER_LOGIN = { email: "maria.santos@example.com", password: "Narra-Table-2026", name: "Maria Santos" };
+
+/** Fictional customer emails (example.com is reserved for documentation). Walk-ins have none. */
+const SEED_EMAIL: Record<string, string | "walk-in"> = {
+  "JJ-2026-0145": DEMO_CUSTOMER_LOGIN.email,
+  "DR-0148": "ramon.delacruz@example.com",
+  "JJ-2026-0136": "bautista.family@example.com",
+  "JJ-2026-0139": "jun.pacana@example.com",
+  "JJ-2026-0141": "walk-in",
+  "JJ-2026-0142": "rodel.aguilar@example.com",
+  "JJ-2026-0137": "walk-in",
+  "JJ-2026-0140": "benjie.saldivar@example.com",
+  "JJ-2026-0143": "edgar.villanueva@example.com",
+  "JJ-2026-0144": "jocelyn.tan@example.com",
+  "JJ-2026-0134": "nestor.galarrita@example.com",
+  "JJ-2026-0138": "mila.reyes@example.com",
+};
+/** Recorded before email authentication: keep their paper-slip PIN, no email on file. */
+const LEGACY_PIN_ORDERS = new Set(["JJ-2026-0133", "JJ-2026-0130"]);
 
 interface SeedOrder {
   code: string;
@@ -242,8 +262,10 @@ export async function buildSeedTables(): Promise<MemoryTables> {
       customer_phone: s.phone,
       delivery_address: s.address,
       municipality: s.municipality,
-      pin_code_hash: hashPin(s.pin, 6),
-      pin_code_display: s.pin,
+      pin_code_hash: LEGACY_PIN_ORDERS.has(s.code) ? hashPin(s.pin, 6) : null,
+      pin_code_display: LEGACY_PIN_ORDERS.has(s.code) ? s.pin : null,
+      customer_email: SEED_EMAIL[s.code] && SEED_EMAIL[s.code] !== "walk-in" ? SEED_EMAIL[s.code] : null,
+      has_no_email: !SEED_EMAIL[s.code] || SEED_EMAIL[s.code] === "walk-in",
       item_name: s.item,
       quantity: s.qty,
       dimensions: s.legacy ? s.dims : dimensionsText({ width_cm: s.w!, height_cm: s.h!, depth_cm: s.d! }),
@@ -408,9 +430,10 @@ export async function buildSeedTables(): Promise<MemoryTables> {
   // ---- Option 2: a customer self-service request waiting for its official quotation
   const req = await store.insertOrder({
     order_code: "DR-0147", paper_slip_number: null, encoded_by_id: null,
+    customer_email: "josefina.lagura@example.com", has_no_email: false,
     customer_name: "Josefina Lagura", customer_phone: "09000000147",
     delivery_address: "Purok 5, Brgy. Bangcud, beside the barangay hall", municipality: "Lantapan",
-    pin_code_hash: hashPin("3690", 6), pin_code_display: "3690",
+    pin_code_hash: null, pin_code_display: null,
     item_name: "Wardrobe / Aparador Custom Piece", quantity: 1,
     dimensions: dimensionsText({ width_cm: 150, height_cm: 190, depth_cm: 60 }),
     wood_type: "Mahogany", color_finish: "Dark Espresso",
@@ -433,6 +456,29 @@ export async function buildSeedTables(): Promise<MemoryTables> {
   t.order_status_history.push({
     id: crypto.randomUUID(), order_id: req.id, from_status: null, to_status: "Quote Requested", changed_by_id: null,
     notes: "Customer self-service request (Option 2) · specification revision 1", client_transaction_id: null, changed_at: ts(0, 8),
+  });
+
+  // ---- legacy rows: no email on file and not walk-ins (as migration 005 marks the live data)
+  for (const code of LEGACY_PIN_ORDERS) Object.assign(byCode(code), { has_no_email: false, legacy_contact_unknown: true, provisioning_status: "not_applicable" });
+
+  // ---- demo customer account: Maria verified her inbox for 0145 and set a password
+  const maria = byCode("JJ-2026-0145");
+  const mariaId = "c0000000-0000-4000-8000-000000000001";
+  t.customer_accounts.push({
+    id: mariaId, email: DEMO_CUSTOMER_LOGIN.email, full_name: DEMO_CUSTOMER_LOGIN.name, is_active: true, created_at: ts(20),
+    password_hash: bcrypt.hashSync(DEMO_CUSTOMER_LOGIN.password, 6),
+  });
+  Object.assign(maria, { email_verified_at: ts(19), customer_user_id: mariaId, provisioning_status: "linked" });
+
+  // ---- DR-0148: the quotation's single-use review link is waiting in Ramon's (simulated) inbox
+  const ramon = byCode("DR-0148");
+  const rev148 = t.order_specification_revisions.find((r) => r.order_id === ramon.id && r.revision_number === ramon.current_revision)!;
+  const raw148 = randomBytes(32).toString("base64url");
+  await store.issueReviewToken({ order_id: ramon.id, revision_id: rev148.revision_id, token_hash: createHash("sha256").update(raw148).digest("hex"), ttl_hours: 72 });
+  t.demo_mailbox.push({
+    id: crypto.randomUUID(), to: ramon.customer_email!, order_id: ramon.id, created_at: ts(1, 9),
+    subject: `JJ Furniture quotation for ${ramon.order_code} — please review`,
+    text: `Hello ${ramon.customer_name},\n\nYour quotation for ${ramon.item_name} is ready: ₱${ramon.furniture_price!.toLocaleString("en-PH")} furniture price + ₱${ramon.delivery_fee.toLocaleString("en-PH")} delivery.\n\nReview the exact specification and accept it here (single-use link):\n/customer/review?token=${raw148}\n\nIf you did not order from JJ Furniture, ignore this email.`,
   });
 
   // ---- notifications

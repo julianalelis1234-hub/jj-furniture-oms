@@ -39,7 +39,9 @@ export default async function SlipPage({ params, searchParams }: PageProps<"/sta
           <CheckCircle2 className="mt-0.5 size-5 shrink-0 text-success" aria-hidden />
           <p>
             <b>Order saved on the server as {o.order_code}.</b> Give this slip to the customer (or send a photo by Messenger).
-            The 4-digit PIN lets only them see prices and confirm the specs online.
+            {o.customer_email
+              ? <>A single-use link to review and accept the quotation was emailed to <b>{o.customer_email}</b>.</>
+              : <>Walk-in order: the customer accepts at the counter (signed slip); there is no portal login.</>}
           </p>
         </div>
       )}
@@ -58,7 +60,11 @@ export default async function SlipPage({ params, searchParams }: PageProps<"/sta
         <section className="grid grid-cols-3 gap-2 border-b border-black py-3 text-center">
           <div><p className="text-[0.65rem] uppercase">Order ID</p><p className="font-mono text-base font-black">{o.order_code}</p></div>
           <div><p className="text-[0.65rem] uppercase">Paper Slip #</p><p className="font-mono text-base font-black">{o.paper_slip_number}</p></div>
-          <div><p className="text-[0.65rem] uppercase">Customer PIN</p><p className="font-mono text-xl font-black tracking-[0.3em]">{o.pin_code_display ?? "----"}</p></div>
+          {o.pin_code_display ? (
+            <div><p className="text-[0.65rem] uppercase">Customer PIN</p><p className="font-mono text-xl font-black tracking-[0.3em]">{o.pin_code_display}</p></div>
+          ) : (
+            <div><p className="text-[0.65rem] uppercase">Customer updates</p><p className="text-xs font-bold break-all" data-testid="slip-contact">{o.customer_email ?? "Walk-in · paper slip only"}</p></div>
+          )}
         </section>
 
         <section className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 border-b border-black py-3 text-sm">
@@ -89,7 +95,11 @@ export default async function SlipPage({ params, searchParams }: PageProps<"/sta
         <section className="py-3 text-xs">
           <p>
             Track your order: scan the QR code or visit <b>{origin.replace(/^https?:\/\//, "")}/track</b> and enter your Order ID.
-            Use your PIN to see the payment summary and confirm the specifications. Keep your PIN private.
+            {o.pin_code_display
+              ? "Use your PIN to see the payment summary and confirm the specifications. Keep your PIN private."
+              : o.customer_email
+                ? "Your quotation review link is sent by email. After you accept, set your password and log in at /customer/login to follow all your orders."
+                : "Walk-in order: ask the shop for updates; status by Order ID is always available online."}
           </p>
           <div className="mt-6 grid grid-cols-2 gap-6">
             <div className="border-t border-black pt-1 text-center">Customer signature (specs &amp; price confirmed)</div>

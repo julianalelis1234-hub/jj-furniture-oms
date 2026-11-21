@@ -2,6 +2,8 @@ import "server-only";
 import type { PostgrestError, SupabaseClient } from "@supabase/supabase-js";
 import { DomainError, fromPostgresMessage } from "@/lib/domain/errors";
 import type {
+  ConsumeReviewResult,
+  CustomerAccount,
   CustomerTrack,
   DeliveryAssignment,
   NotificationLog,
@@ -89,7 +91,8 @@ export class SupabaseStore implements DataStore {
   }
 
   async listProfiles() {
-    const { data, error } = await this.db.from("profiles").select("*").order("full_name");
+    // staff only: customer logins (role 'customer') never appear in staff lists
+    const { data, error } = await this.db.from("profiles").select("*").neq("role", "customer").order("full_name");
     if (error) fail(error);
     return data as Profile[];
   }
@@ -308,5 +311,54 @@ export class SupabaseStore implements DataStore {
     });
     if (error) fail(error);
     return data as PinResult;
+  }
+
+  // ------------------------------------------------ customer email auth (005)
+  // The token / linking functions are executable by service_role only: call these on elevated().
+  async issueReviewToken(input: { order_id: string; revision_id: string; token_hash: string; ttl_hours: number }) {
+    const { data, error } = await this.db.rpc("issue_quote_review_token", {
+      p_order_id: input.order_id, p_revision_id: input.revision_id, p_token_hash: input.token_hash, p_ttl_hours: input.ttl_hours,
+    });
+    if (error) fail(error);
+    return data as { token_id: string; expires_at: string; sent_to_email: string };
+  }
+  async consumeReviewToken(tokenHash: string) {
+    const { data, error } = await this.db.rpc("consume_quote_review_token", { p_token_hash: tokenHash });
+    if (error) fail(error);
+    return data as ConsumeReviewResult;
+  }
+  async linkCustomerAccount(orderId: string, userId: string) {
+    const { data, error } = await this.db.rpc("link_customer_account", { p_order_id: orderId, p_user_id: userId });
+    if (error) fail(error);
+    return data as { linked: boolean; already: boolean };
+  }
+  async listCustomerOrders(userId: string) {
+    const { data, error } = await this.db.from("orders").select("*").eq("customer_user_id", userId).order("created_at", { ascending: false });
+    if (error) fail(error);
+    return (data as Order[]).map(normOrder);
+  }
+  async findCustomerAccountByEmail(email: string) {
+    const { data, error } = await this.db.from("profiles").select("id, email, full_name, is_active, created_at")
+      .eq("role", "customer").eq("email", email.trim().toLowerCase()).maybeSingle();
+    if (error) fail(error);
+    return (data as CustomerAccount | null) ?? null;
+  }
+  async getCustomerAccount(id: string) {
+    const { data, error } = await this.db.from("profiles").select("id, email, full_name, is_active, created_at")
+      .eq("role", "customer").eq("id", id).maybeSingle();
+    if (error) fail(error);
+    return (data as CustomerAccount | null) ?? null;
+  }
+  async emailBelongsToStaff(email: string) {
+    const { data, error } = await this.db.from("profiles").select("id").neq("role", "customer").eq("email", email.trim().toLowerCase()).limit(1);
+    if (error) fail(error);
+    return (data ?? []).length > 0;
+  }
+  async insertCustomerProfile(row: { id: string; email: string; full_name: string }) {
+    const { data, error } = await this.db.from("profiles")
+      .insert({ id: row.id, email: row.email.trim().toLowerCase(), full_name: row.full_name, role: "customer", is_active: true })
+      .select("id, email, full_name, is_active, created_at").single();
+    if (error) fail(error);
+    return data as CustomerAccount;
   }
 }

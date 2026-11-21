@@ -17,6 +17,8 @@ import { createUserClient } from "@/lib/server/supabase";
 import { signToken } from "@/lib/server/token";
 import { isHttpsRequest } from "@/lib/server/request";
 import { CUSTOMER_COOKIE, getVerifiedCustomerOrderId } from "@/lib/server/customer-session";
+import { issueReviewLink, provisionCustomerAccount } from "@/lib/services/customer-portal";
+import { getCustomerAuth } from "@/lib/server/customer-auth";
 import { createCustomerRequest, customerAcceptQuote, customerProposeChanges, customerRequestRepair, trackOrder } from "@/lib/services/customer";
 import { scheduleDelivery } from "@/lib/services/deliveries";
 import { decideException, requestException, reviewCustomerProposal } from "@/lib/services/exceptions";
@@ -110,11 +112,27 @@ export async function signOut() {
 }
 
 // ---------------------------------------------------------------- orders --
-export async function createOrderAction(_: unknown, fd: FormData): Promise<ActionResult<{ id: string; order_code: string; pin: string }>> {
+export async function createOrderAction(_: unknown, fd: FormData): Promise<ActionResult<{ id: string; order_code: string }>> {
   return run(["owner", "staff"], async (actor) => {
-    const { order, pin } = await createOrder(await getStore(), actor, Object.fromEntries(fd));
-    return { id: order.id, order_code: order.order_code, pin };
-  }, "Order saved. Print the confirmation slip for the customer.");
+    const { order } = await createOrder(await getStore(), actor, Object.fromEntries(fd));
+    return { id: order.id, order_code: order.order_code };
+  }, "Order saved. Print the paper slip for the customer.");
+}
+
+/** Staff: send a fresh single-use review link for the current quotation (older links stop working). */
+export async function resendReviewLinkAction(orderId: string) {
+  return run(["owner", "staff"], async () => {
+    const r = await issueReviewLink(await getStore(), orderId);
+    return { status: r.status };
+  }, "A new review link was issued to the customer's email.");
+}
+
+/** Staff: retry the post-acceptance account set-up (idempotent; never touches the acceptance). */
+export async function retryProvisioningAction(orderId: string) {
+  return run(["owner", "staff"], async () => {
+    const r = await provisionCustomerAccount(await getStore(), await getCustomerAuth(), orderId);
+    return { status: r.status, detail: r.detail };
+  }, "Account set-up re-checked.");
 }
 
 /** Staff record an in-store / Messenger acceptance of the exact revision + quotation shown. */
@@ -256,15 +274,16 @@ export async function customerAcceptAction(input: {
     "Thank you! You accepted the specifications and the quotation. Production starts once your 30% down payment is verified.");
 }
 
-/** Option 2: Design & Request Custom Furniture — creates a Quote Requested order and signs the customer in to it. */
-export async function customerRequestAction(_: unknown, fd: FormData): Promise<ActionResult<{ order_code: string; pin: string }>> {
+/**
+ * Option 2: Design & Request Custom Furniture — creates a Quote Requested order.
+ * No PIN and no session: the email is unverified until the customer opens the
+ * review link that comes with the official quotation.
+ */
+export async function customerRequestAction(_: unknown, fd: FormData): Promise<ActionResult<{ order_code: string; email: string }>> {
   return run(null, async () => {
-    const { order, pin } = await createCustomerRequest(await getPublicStore(), Object.fromEntries(fd));
-    (await cookies()).set(CUSTOMER_COOKIE, signToken({ oid: order.id }, 60 * 60), {
-      httpOnly: true, sameSite: "lax", secure: await isHttpsRequest(), path: "/track", maxAge: 60 * 60,
-    });
-    return { order_code: order.order_code, pin };
-  }, "Request sent. Save your Order ID and PIN.");
+    const { order } = await createCustomerRequest(await getPublicStore(), Object.fromEntries(fd));
+    return { order_code: order.order_code, email: order.customer_email ?? "" };
+  }, "Request sent. Your quotation will be emailed to you.");
 }
 
 /** Scenario 2: the customer proposes changes (saved for the shop's review; nothing is unlocked). */

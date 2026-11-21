@@ -32,7 +32,7 @@ export function LookupForm({ initialCode, samples }: { initialCode: string; samp
               <TextInput id="order_code" name="order_code" value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} required autoCapitalize="characters"
                 autoComplete="off" className="font-mono text-lg uppercase" placeholder="JJ-2026-0000" />
             </Field>
-            <Field label="4-digit PIN (optional)" htmlFor="pin" hint="Printed on your slip. Needed for prices, confirming specs and repair requests.">
+            <Field label="4-digit PIN (older paper slips only)" htmlFor="pin" hint="Only slips printed before email accounts have a PIN. Leave it empty to see the status.">
               <TextInput ref={pinRef} id="pin" name="pin" value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 4))} inputMode="numeric" pattern="\d{4}" maxLength={4} autoComplete="off"
                 className="font-mono text-lg tracking-[0.5em]" placeholder="••••" />
             </Field>
@@ -57,7 +57,7 @@ export function LookupForm({ initialCode, samples }: { initialCode: string; samp
 
       {samples.length > 0 && (
         <div className="rounded-xl border border-dashed p-3">
-          <p className="mb-2 text-sm font-semibold">Demo sample orders (1-click)</p>
+          <p className="mb-2 text-sm font-semibold">Demo: older paper slips with a PIN (1-click)</p>
           <div className="grid gap-2 sm:grid-cols-2">
             {samples.map((s) => (
               <button key={s.order_code} type="button" className="rounded-lg border bg-card p-2 text-left text-sm hover:border-primary"
