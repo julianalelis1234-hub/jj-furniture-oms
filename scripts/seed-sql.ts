@@ -23,7 +23,7 @@ buildSeedTables().then((t) => {
     `insert into public.profiles (id, full_name, role, phone, is_active) select id, full_name, role, phone, is_active from jsonb_populate_recordset(null::public.profiles, ${q(t.profiles)});`,
     `insert into public.orders (${Object.keys(orders[0]).join(",")}) select ${Object.keys(orders[0]).join(",")} from jsonb_populate_recordset(null::public.orders, ${q(orders)});`,
     `delete from public.order_exceptions_and_repairs where requested_by = 'System (payment terms)';`,
-    ...(["order_confirmations", "payments", "order_status_history", "delivery_assignments", "order_exceptions_and_repairs", "notifications"] as const).map(
+    ...(["order_specification_revisions", "order_confirmations", "payments", "order_status_history", "delivery_assignments", "order_exceptions_and_repairs", "notifications"] as const).map(
       (tbl) => `insert into public.${tbl} select * from jsonb_populate_recordset(null::public.${tbl}, ${q(t[tbl])});`,
     ),
     `create temp table expected as select * from jsonb_to_recordset(${q(t.orders.map((o) => ({ code: o.order_code, collectible: o.collectible_on_delivery, remaining: o.remaining_furniture_balance, down: o.standard_down_payment_due, fee: o.delivery_fee })))}) as x(code text, collectible numeric, remaining numeric, down numeric, fee numeric);`,

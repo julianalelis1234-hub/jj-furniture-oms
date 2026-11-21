@@ -8,7 +8,8 @@ import { STATUS_CUSTOMER_COPY } from "@/lib/domain/status";
 import { getPublicStore } from "@/lib/server/context";
 import { getVerifiedCustomerOrderId } from "@/lib/server/customer-session";
 import { customerOrderView } from "@/lib/services/customer";
-import { CustomerActions, CustomerSignOut } from "./customer-actions";
+import { CustomerSignOut } from "./customer-actions";
+import { SpecReview } from "./spec-review";
 
 export const metadata = { title: "My order" };
 
@@ -20,7 +21,7 @@ export default async function CustomerOrderPage() {
 
   return (
     <AppShell portal="customer" actor={null} headerExtra={<CustomerSignOut />}>
-      <div className="mx-auto grid max-w-2xl gap-4">
+      <div className="mx-auto grid max-w-5xl gap-4">
         <div>
           <p className="text-sm text-muted-foreground">Order {v.order_code} · for {v.customer_name}</p>
           <h1 className="text-2xl font-bold sm:text-3xl">{v.quantity} × {v.item_name}</h1>
@@ -34,19 +35,7 @@ export default async function CustomerOrderPage() {
           <div className="rounded-xl border bg-card p-3"><p className="text-xs uppercase text-muted-foreground">Scheduled delivery</p><p className="font-bold">{formatDate(v.scheduled_delivery_date)}</p></div>
         </div>
 
-        <Card className={!v.specs_confirmed ? "border-warning" : undefined}>
-          <CardHeader><CardTitle>Specifications {v.specs_confirmed ? "✅ confirmed" : "— please review"}</CardTitle></CardHeader>
-          <CardContent className="grid gap-3">
-            <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-sm">
-              <dt className="text-muted-foreground">Item</dt><dd className="font-semibold">{v.quantity} × {v.item_name}</dd>
-              <dt className="text-muted-foreground">Dimensions</dt><dd className="font-semibold">{v.dimensions}</dd>
-              <dt className="text-muted-foreground">Wood</dt><dd className="font-semibold">{v.wood_type}</dd>
-              <dt className="text-muted-foreground">Color / finish</dt><dd className="font-semibold">{v.color_finish}</dd>
-              {v.special_instructions && (<><dt className="text-muted-foreground">Notes</dt><dd className="whitespace-pre-line">{v.special_instructions}</dd></>)}
-              <dt className="text-muted-foreground">Deliver to</dt><dd>{v.delivery_address}, {v.municipality}</dd>
-            </dl>
-          </CardContent>
-        </Card>
+        <SpecReview key={`${v.current?.revision_number}-${v.spec_state}`} view={v} />
 
         <Card>
           <CardHeader><CardTitle>Payment summary</CardTitle></CardHeader>
@@ -66,16 +55,15 @@ export default async function CustomerOrderPage() {
           </CardContent>
         </Card>
 
-        <CustomerActions specsConfirmed={v.specs_confirmed} canConfirm={v.status === "Waiting for Confirmation"}
-          canRequestRepair={["Out for Delivery", "Delivered", "Ready for Delivery"].includes(v.status)} />
+        <p className="text-sm text-muted-foreground">Deliver to: {v.delivery_address}, {v.municipality}</p>
 
         {v.open_repairs.length > 0 && (
           <Card>
-            <CardHeader><CardTitle>Touch-up / repair requests</CardTitle></CardHeader>
+            <CardHeader><CardTitle>Your requests</CardTitle></CardHeader>
             <CardContent>
               <ul className="grid gap-2 text-sm">
                 {v.open_repairs.map((r, i) => (
-                  <li key={i} className="rounded-lg border p-2"><b>{r.status}</b> · {r.description}<span className="block text-xs text-muted-foreground">{formatDateTime(r.created_at)}</span></li>
+                  <li key={i} className="rounded-lg border p-2"><b>{r.status}</b> · <span className="whitespace-pre-line">{r.description}</span><span className="block text-xs text-muted-foreground">{formatDateTime(r.created_at)}</span></li>
                 ))}
               </ul>
             </CardContent>

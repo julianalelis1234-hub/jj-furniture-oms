@@ -17,9 +17,9 @@ import { createUserClient } from "@/lib/server/supabase";
 import { signToken } from "@/lib/server/token";
 import { isHttpsRequest } from "@/lib/server/request";
 import { CUSTOMER_COOKIE, getVerifiedCustomerOrderId } from "@/lib/server/customer-session";
-import { customerConfirmSpecs, customerRequestRepair, trackOrder } from "@/lib/services/customer";
+import { customerConfirmSpecs, customerProposeChanges, customerRequestRepair, trackOrder } from "@/lib/services/customer";
 import { scheduleDelivery } from "@/lib/services/deliveries";
-import { decideException, requestException } from "@/lib/services/exceptions";
+import { decideException, requestException, reviewCustomerProposal } from "@/lib/services/exceptions";
 import { retryNotification, SMS_SIMULATED_NOTE, smsMode } from "@/lib/services/notify";
 import {
   createOrder,
@@ -115,12 +115,18 @@ export async function createOrderAction(_: unknown, fd: FormData): Promise<Actio
   }, "Order saved. Print the confirmation slip for the customer.");
 }
 
-export async function recordConfirmationAction(input: { order_id: string; confirmation_method: ConfirmationMethod; confirmed_by_name: string }) {
-  return run(["owner", "staff"], async (a) => { await recordConfirmation(await getStore(), a, input); }, "Specifications confirmed. The order can now enter production.");
+export async function recordConfirmationAction(input: { order_id: string; confirmation_method: ConfirmationMethod; confirmed_by_name: string; revision_number: number }) {
+  return run(["owner", "staff"], async (a) => { await recordConfirmation(await getStore(), a, input); }, `Specification revision ${input.revision_number} confirmed. The order can now enter production.`);
 }
 
-export async function reviseSpecsAction(orderId: string, fd: FormData) {
-  return run(["owner", "staff"], async (a) => { await reviseSpecs(await getStore(), a, orderId, Object.fromEntries(fd)); }, "Specs revised. Ask the customer to confirm again.");
+export async function reviseSpecsAction(orderId: string, expectedRevision: number | null, fd: FormData) {
+  return run(["owner", "staff"], async (a) => { await reviseSpecs(await getStore(), a, orderId, Object.fromEntries(fd), expectedRevision); }, "Revised quote saved as a new revision. The customer must confirm it.");
+}
+
+export async function reviewProposalAction(exceptionId: string, decision: "quote" | "decline", fd: FormData) {
+  return run(["owner", "staff"], async (a) => {
+    await reviewCustomerProposal(await getStore(), a, exceptionId, decision, Object.fromEntries(fd), String(fd.get("note") ?? ""));
+  }, decision === "quote" ? "Revised quote sent. The customer must confirm it before production." : "Original specification kept. The customer must confirm it.");
 }
 
 export async function editOrderAction(orderId: string, fd: FormData) {
@@ -221,16 +227,29 @@ export async function customerLookupAction(_: unknown, fd: FormData) {
   }
 }
 
-export async function customerConfirmAction() {
+/** Scenario 1: the customer confirms the exact revision shown on their screen. */
+export async function customerConfirmAction(revisionNumber: number) {
   const oid = await getVerifiedCustomerOrderId();
   if (!oid) return { ok: false as const, message: "Your session expired. Enter your Order ID and PIN again." };
-  return run(null, async () => { await customerConfirmSpecs(await getPublicStore(), oid); }, "Thank you! Your specifications are confirmed.");
+  if (!Number.isInteger(revisionNumber)) return { ok: false as const, message: "Reload the page and try again." };
+  return run(null, async () => { await customerConfirmSpecs(await getPublicStore(), oid, revisionNumber); }, "Thank you! Your specifications are confirmed.");
 }
 
-export async function customerRepairAction(description: string) {
+/** Scenario 2: the customer proposes changes (saved for the shop's review; nothing is unlocked). */
+export async function customerProposeAction(seenRevision: number, fd: FormData) {
   const oid = await getVerifiedCustomerOrderId();
   if (!oid) return { ok: false as const, message: "Your session expired. Enter your Order ID and PIN again." };
-  return run(null, async () => { await customerRequestRepair(await getPublicStore(), oid, description); }, "Request sent. The shop will contact you to schedule the touch-up.");
+  return run(null, async () => {
+    const r = await customerProposeChanges(await getPublicStore(), oid, seenRevision, Object.fromEntries(fd));
+    return { revision_number: r.revision_number };
+  }, "Your changes were sent to JJ Furniture for review. Production stays on hold until you confirm the revised quote.");
+}
+
+export async function customerRepairAction(description: string, kind: "change" | "repair" = "repair") {
+  const oid = await getVerifiedCustomerOrderId();
+  if (!oid) return { ok: false as const, message: "Your session expired. Enter your Order ID and PIN again." };
+  return run(null, async () => { await customerRequestRepair(await getPublicStore(), oid, description, kind); },
+    kind === "change" ? "Change request sent. The shop will review it and contact you." : "Request sent. The shop will contact you to schedule the touch-up.");
 }
 
 export async function customerSignOut() {

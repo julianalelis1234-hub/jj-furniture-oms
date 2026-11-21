@@ -43,11 +43,12 @@ describe("3. customer authentication & privacy", () => {
   it("customers confirm specs from the portal (gate opens)", async () => {
     const store = await seededStore();
     const o = (await store.getOrderByCode("DR-0148"))!;
-    const confirmed = await customerConfirmSpecs(store, o.id);
+    const confirmed = await customerConfirmSpecs(store, o.id, o.current_revision!);
     expect(confirmed.status).toBe("Confirmed");
     expect(confirmed.order_code).toBe(`JJ-${new Date().getFullYear()}-0148`);
     const [c] = await store.listConfirmations(o.id);
     expect(c.confirmation_method).toBe("Customer Portal PIN");
+    expect(c.revision_number).toBe(1);
     expect(c.confirmed_specs_snapshot.furniture_price).toBe(18000);
   });
   it("craftsman workshop data contains no financial or contact fields", async () => {

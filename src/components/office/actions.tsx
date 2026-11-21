@@ -60,13 +60,14 @@ export function ConfirmSpecsDialog({ order }: { order: ClientOrder }) {
     <ActionDialog
       trigger="Record confirmation"
       icon={<ClipboardCheck aria-hidden />}
-      title={`Customer confirmed ${order.order_code}?`}
-      description="Only record this after the customer has agreed to the exact specs and price below. This opens the production gate."
+      title={`Customer confirmed ${order.order_code} · revision ${order.current_revision}?`}
+      description="Only record this after the customer agreed to this exact revision (specs and price below). If the specification changed since, the system rejects the confirmation."
       submitLabel="Confirm specifications"
       submitVariant="success"
       action={(fd) =>
         recordConfirmationAction({
           order_id: order.id,
+          revision_number: order.current_revision ?? 0,
           confirmation_method: s(fd, "confirmation_method") as ConfirmationMethod,
           confirmed_by_name: s(fd, "confirmed_by_name"),
         })
@@ -74,7 +75,8 @@ export function ConfirmSpecsDialog({ order }: { order: ClientOrder }) {
     >
       <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 rounded-lg border bg-muted p-3 text-sm">
         <dt className="text-muted-foreground">Item</dt><dd className="font-medium">{order.quantity} × {order.item_name}</dd>
-        <dt className="text-muted-foreground">Size</dt><dd className="font-medium">{order.dimensions}</dd>
+        <dt className="text-muted-foreground">Design</dt><dd className="font-medium">{order.design_variant ?? "—"}</dd>
+        <dt className="text-muted-foreground">Size</dt><dd className="font-medium tabular-nums">{order.dimensions}</dd>
         <dt className="text-muted-foreground">Wood</dt><dd className="font-medium">{order.wood_type}</dd>
         <dt className="text-muted-foreground">Finish</dt><dd className="font-medium">{order.color_finish}</dd>
         <dt className="text-muted-foreground">Price</dt><dd className="font-bold">{formatPeso(order.furniture_price)}</dd>
@@ -274,35 +276,7 @@ export function EditDetailsDialog({ order }: { order: ClientOrder }) {
   );
 }
 
-export function ReviseSpecsDialog({ order }: { order: ClientOrder }) {
-  return (
-    <ActionDialog trigger="Revise specs" icon={<Pencil aria-hidden />} variant="outline" title={`Revise specs · ${order.order_code}`}
-      description="Changing size, wood, color, quantity or price voids the customer's confirmation. They must confirm again before production."
-      submitLabel="Save & require re-confirmation" submitVariant="warning" action={(fd) => reviseSpecsAction(order.id, fd)}>
-      {(errors) => (
-        <div className="grid gap-3">
-          <Field label="Dimensions" htmlFor="dimensions" required error={errors.dimensions}>
-            <TextInput id="dimensions" name="dimensions" defaultValue={order.dimensions} required />
-          </Field>
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Wood" htmlFor="wood_type" required>
-              <NativeSelect id="wood_type" name="wood_type" defaultValue={order.wood_type} options={WOOD_TYPES} />
-            </Field>
-            <Field label="Quantity" htmlFor="quantity" required error={errors.quantity}>
-              <TextInput id="quantity" name="quantity" type="number" min="1" defaultValue={order.quantity} required />
-            </Field>
-          </div>
-          <Field label="Color / finish" htmlFor="color_finish" required error={errors.color_finish}>
-            <TextInput id="color_finish" name="color_finish" defaultValue={order.color_finish} required />
-          </Field>
-          <Field label="Furniture price (₱)" htmlFor="furniture_price" required error={errors.furniture_price}>
-            <TextInput id="furniture_price" name="furniture_price" type="number" min="1" step="0.01" defaultValue={order.furniture_price} required />
-          </Field>
-        </div>
-      )}
-    </ActionDialog>
-  );
-}
+export { ReviseSpecsDialog } from "./spec-dialogs";
 
 export function PaymentTermsSelect({ order }: { order: ClientOrder }) {
   const { pending, run } = useServerAction();

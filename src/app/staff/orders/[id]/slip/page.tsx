@@ -49,6 +49,7 @@ export default async function SlipPage({ params, searchParams }: PageProps<"/sta
             <p className="text-lg font-black">JJ FURNITURE SHOP AND ENTERPRISES</p>
             <p className="text-xs">Poblacion, Valencia City, Bukidnon</p>
             <p className="mt-2 text-sm font-bold tracking-wide uppercase">Specification Confirmation Slip</p>
+            <p className="text-xs tabular-nums">Specification revision {o.current_revision ?? "—"}{o.approved_revision_number ? ` · confirmed` : " · awaiting customer confirmation"}</p>
           </div>
           <SlipQr value={trackUrl} />
         </header>
@@ -63,8 +64,9 @@ export default async function SlipPage({ params, searchParams }: PageProps<"/sta
           <span>Customer</span><b>{o.customer_name} · {o.customer_phone}</b>
           <span>Deliver to</span><b>{o.delivery_address}, {o.municipality}</b>
           <span>Item</span><b>{o.quantity} × {o.item_name}</b>
-          <span>Dimensions</span><b>{o.dimensions}</b>
-          <span>Wood</span><b>{o.wood_type}</b>
+          {o.design_variant && (<><span>Design</span><b>{o.furniture_category} · {o.design_variant}</b></>)}
+          <span>Dimensions</span><b className="tabular-nums">{o.width_cm != null ? `W ${o.width_cm} × H ${o.height_cm} × D ${o.depth_cm} cm` : `${o.dimensions} (pending clarification)`}</b>
+          <span>Wood</span><b>{o.wood_type}{o.custom_wood_note ? ` — ${o.custom_wood_note}` : ""}</b>
           <span>Color / finish</span><b>{o.color_finish}</b>
           {o.special_instructions && (<><span>Notes</span><b className="whitespace-pre-line">{o.special_instructions}</b></>)}
         </section>

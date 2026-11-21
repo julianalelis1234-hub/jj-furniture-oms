@@ -89,7 +89,7 @@ export default function AboutPage() {
           <ul className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
             {PORTALS.map((p) => (
               <li key={p.code} className="rounded-xl border bg-card p-4">
-                <span className="flex size-10 items-center justify-center rounded-lg bg-accent text-accent-foreground [&_svg]:size-5">{p.icon}</span>
+                <span className="flex size-10 items-center justify-center rounded-lg bg-accent-soft text-primary [&_svg]:size-5">{p.icon}</span>
                 <p className="mt-2 font-bold">{p.title} <span className="text-xs font-normal text-muted-foreground">{p.code}</span></p>
                 <p className="mt-1 text-sm text-muted-foreground">{p.text}</p>
               </li>

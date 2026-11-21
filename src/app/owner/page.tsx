@@ -29,7 +29,9 @@ import { toClientOrder } from "@/lib/client-order";
 import { formatDate, formatDateTime, todayISO } from "@/lib/domain/dates";
 import { formatPeso } from "@/lib/domain/finance";
 import { getStore, requireActor } from "@/lib/server/context";
-import { loadOfficeData, nameOf } from "@/lib/server/office-data";
+import { loadOfficeData, loadProposalSpecs, nameOf } from "@/lib/server/office-data";
+import { ReviewProposalControls } from "@/components/office/spec-dialogs";
+import { isCustomerProposal } from "@/lib/services/exceptions";
 import { ownerKpis, riskOf } from "@/lib/services/insights";
 import { productionQueue } from "@/lib/services/orders";
 import { SMS_SIMULATED_NOTE, smsMode } from "@/lib/services/notify";
@@ -57,11 +59,13 @@ export default async function OwnerPage() {
 
   const approvals = data.exceptions.filter((e) => e.status === "Pending" && ["Installment Approval", "Credit / Unpaid Balance", "Special Delivery Terms"].includes(e.category));
   const inspections = data.orders.filter((o) => o.status === "Completed / For Inspection");
-  const questions = data.exceptions.filter((e) => e.status === "Pending" && e.category === "Spec Clarification");
+  const questions = data.exceptions.filter((e) => e.status === "Pending" && e.category === "Spec Clarification" && !isCustomerProposal(e));
+  const proposals = data.exceptions.filter((e) => e.status === "Pending" && isCustomerProposal(e));
+  const proposalSpecs = await loadProposalSpecs(await getStore(), proposals.map((e) => e.order_id));
   const repairs = data.exceptions.filter((e) => e.status === "Pending" && e.category === "On-Site Scratch Touch-Up / Repair");
   const failedSms = data.notifications.filter((n) => n.delivery_status === "Failed");
   const unranked = data.orders.filter((o) => o.status === "Confirmed" && o.priority_rank === 99);
-  const attention = approvals.length + inspections.length + questions.length + repairs.length + failedSms.length + unranked.length;
+  const attention = proposals.length + approvals.length + inspections.length + questions.length + repairs.length + failedSms.length + unranked.length;
   const watch = data.deliveries.filter((d) => d.dispatch_status === "Failed / Reschedule" || d.dispatch_status === "Out for Delivery" || (d.dispatch_status === "Scheduled" && d.scheduled_date <= today));
 
   return (
@@ -88,6 +92,11 @@ export default async function OwnerPage() {
         <Section title="Needs your attention" count={attention}>
           {attention === 0 ? <EmptyState title="Nothing needs your decision right now" /> : (
             <ul className="grid gap-2">
+              {proposals.map((e) => {
+                const o = byId.get(e.order_id); if (!o) return null;
+                return <TaskCard key={e.id} order={o} tone="warning" meta={<><b className="text-foreground">Customer proposed spec changes</b> · <span className="whitespace-pre-line">{e.description.replace(/^Customer proposed specification changes /, "")}</span></>}
+                  actions={<ReviewProposalControls ex={e} order={o} proposal={proposalSpecs[o.id] ?? null} />} />;
+              })}
               {approvals.map((e) => {
                 const o = byId.get(e.order_id); if (!o) return null;
                 return <TaskCard key={e.id} order={o} tone="warning" meta={<><b className="text-foreground">{e.category}</b> · {e.description} <span className="block text-xs">{e.requested_by} · {formatDateTime(e.created_at)}</span></>} actions={<DecideExceptionControls ex={e} canApprove />} />;

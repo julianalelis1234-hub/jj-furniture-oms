@@ -10,7 +10,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { addDays, todayISO } from "@/lib/domain/dates";
 import { formatPeso, previewNewOrder } from "@/lib/domain/finance";
-import { MUNICIPALITIES, PAYMENT_EXCEPTION_TYPES, WOOD_TYPES, type Municipality } from "@/lib/domain/types";
+import { MUNICIPALITIES, PAYMENT_EXCEPTION_TYPES, type Municipality } from "@/lib/domain/types";
+import { itemNameFor } from "@/lib/domain/furniture";
+import { emptyConfig, FurnitureConfigurator, type ConfigValue } from "@/components/orders/FurnitureConfigurator";
 
 export function NewOrderForm({ staff, currentUserId }: { staff: { id: string; full_name: string }[]; currentUserId: string }) {
   const router = useRouter();
@@ -19,6 +21,7 @@ export function NewOrderForm({ staff, currentUserId }: { staff: { id: string; fu
   const [municipality, setMunicipality] = useState<Municipality>("Valencia City");
   const [fee, setFee] = useState("");
   const [terms, setTerms] = useState("Standard 30/70");
+  const [config, setConfig] = useState<ConfigValue>(emptyConfig);
   const preview = previewNewOrder(Number(price) || 0, municipality, Number(fee) || 0);
   const today = todayISO();
   const err = (k: string) => errors[k];
@@ -31,7 +34,7 @@ export function NewOrderForm({ staff, currentUserId }: { staff: { id: string; fu
         const fd = new FormData(e.currentTarget);
         run(() => createOrderAction(null, fd), (r) => r.data && router.push(`/staff/orders/${r.data.id}/slip?new=1`));
       }}
-      className="grid gap-4 lg:grid-cols-[1fr_320px]"
+      className="mx-auto grid max-w-6xl gap-4"
     >
       <div className="grid gap-4">
         <Card>
@@ -80,29 +83,24 @@ export function NewOrderForm({ staff, currentUserId }: { staff: { id: string; fu
 
         <Card>
           <CardHeader><CardTitle>3 · Furniture specifications</CardTitle></CardHeader>
-          <CardContent className="grid gap-3 sm:grid-cols-2">
-            <Field label="Item" htmlFor="item_name" required error={err("item_name")} className="sm:col-span-2">
-              <TextInput id="item_name" name="item_name" placeholder="e.g. 6-Seater Dining Table" invalid={!!err("item_name")} />
-            </Field>
-            <Field label="Dimensions" htmlFor="dimensions" required error={err("dimensions")} hint="L × W × H, e.g. 210cm x 90cm x 76cm">
-              <TextInput id="dimensions" name="dimensions" invalid={!!err("dimensions")} />
-            </Field>
-            <Field label="Quantity" htmlFor="quantity" required error={err("quantity")}>
-              <TextInput id="quantity" name="quantity" type="number" inputMode="numeric" min="1" defaultValue="1" invalid={!!err("quantity")} />
-            </Field>
-            <Field label="Wood type" htmlFor="wood_type" required error={err("wood_type")}>
-              <NativeSelect id="wood_type" name="wood_type" defaultValue="Mahogany" options={WOOD_TYPES} />
-            </Field>
-            <Field label="Color / finish" htmlFor="color_finish" required error={err("color_finish")}>
-              <TextInput id="color_finish" name="color_finish" placeholder="e.g. Dark Walnut Gloss" invalid={!!err("color_finish")} />
-            </Field>
-            <Field label="Special instructions" htmlFor="special_instructions" className="sm:col-span-2">
-              <TextArea id="special_instructions" name="special_instructions" />
-            </Field>
-            <Field label="Reference photo link" htmlFor="reference_photo_url" error={err("reference_photo_url")} className="sm:col-span-2"
-              hint="Paste a Messenger / Google Drive photo link if the customer sent one.">
-              <TextInput id="reference_photo_url" name="reference_photo_url" type="url" placeholder="https://…" invalid={!!err("reference_photo_url")} />
-            </Field>
+          <CardContent className="grid gap-4">
+            <FurnitureConfigurator value={config} onChange={setConfig} errors={errors} showQuantity />
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Field label="Item label (optional)" htmlFor="item_name" error={err("item_name")}
+                hint={`Leave blank to use “${itemNameFor({ furniture_category: config.furniture_category || null, design_variant: config.design_variant || null })}”.`}>
+                <TextInput id="item_name" name="item_name" maxLength={120} />
+              </Field>
+              <Field label="Reference photo link" htmlFor="reference_photo_url" error={err("reference_photo_url")}
+                hint="Paste a Messenger / Google Drive photo link if the customer sent one.">
+                <TextInput id="reference_photo_url" name="reference_photo_url" type="url" placeholder="https://…" invalid={!!err("reference_photo_url")} />
+              </Field>
+              <Field label="Special instructions" htmlFor="special_instructions" className="sm:col-span-2">
+                <TextArea id="special_instructions" name="special_instructions" />
+              </Field>
+            </div>
+            <DesignNote>
+              Structured category, design and W × H × D replace free-text sizes, so the workshop, the customer and the owner read the same numbers. The preview is a reference aid only.
+            </DesignNote>
           </CardContent>
         </Card>
 
@@ -122,8 +120,8 @@ export function NewOrderForm({ staff, currentUserId }: { staff: { id: string; fu
         </Card>
       </div>
 
-      <div className="lg:sticky lg:top-24 lg:self-start">
-        <Card className="border-primary/40">
+      <div>
+        <Card className="border-accent/60">
           <CardHeader><CardTitle>5 · Price & payment</CardTitle></CardHeader>
           <CardContent className="grid gap-3">
             <Field label="Furniture price (₱)" htmlFor="furniture_price" required error={err("furniture_price")}>

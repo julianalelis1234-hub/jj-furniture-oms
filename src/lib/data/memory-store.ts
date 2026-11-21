@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 import { DomainError } from "@/lib/domain/errors";
 import { computeFinancials } from "@/lib/domain/finance";
 import { verifyPinHash } from "@/lib/domain/pin";
+import { dimensionsText, diffSpecs } from "@/lib/domain/furniture";
+import { assertProductionGate, specOrQuoteChanged } from "@/lib/domain/gate";
 import { assertTransition } from "@/lib/domain/status";
 import type {
   CustomerTrack,
@@ -13,10 +15,20 @@ import type {
   Payment,
   PinResult,
   Profile,
+  SpecRevision,
   StatusHistory,
   WorkshopOrder,
 } from "@/lib/domain/types";
-import type { DataStore, Insert, NewOrderRow, OrderPatch, UpdateResult } from "./store";
+import type {
+  AddRevisionInput,
+  AddRevisionResult,
+  ConfirmRevisionInput,
+  DataStore,
+  Insert,
+  NewOrderRow,
+  OrderPatch,
+  UpdateResult,
+} from "./store";
 
 export interface MemoryTables {
   profiles: Profile[];
@@ -27,6 +39,7 @@ export interface MemoryTables {
   delivery_assignments: DeliveryAssignment[];
   order_exceptions_and_repairs: OrderException[];
   notifications: NotificationLog[];
+  order_specification_revisions: SpecRevision[];
   pin_attempts: { order_code: string; client_key: string; succeeded: boolean; at: number }[];
 }
 
@@ -40,6 +53,7 @@ export function emptyTables(): MemoryTables {
     delivery_assignments: [],
     order_exceptions_and_repairs: [],
     notifications: [],
+    order_specification_revisions: [],
     pin_attempts: [],
   };
 }
@@ -130,9 +144,20 @@ export class MemoryStore implements DataStore {
       throw new DomainError("SPECS_NOT_CONFIRMED", "Customer must confirm specifications first.");
     if (!(row.furniture_price > 0)) throw new DomainError("VALIDATION", "Furniture price must be greater than ₱0.");
     if (!(row.quantity > 0)) throw new DomainError("VALIDATION", "Quantity must be at least 1.");
+    const legacy = row.is_legacy_incomplete ?? false;
+    if (!legacy && (!row.furniture_category || !row.design_variant?.trim() || row.width_cm == null || row.height_cm == null || row.depth_cm == null))
+      throw new DomainError("VALIDATION", "Category, design and dimensions (0–1000 cm) are required.");
+    for (const v of [row.width_cm, row.height_cm, row.depth_cm])
+      if (v != null && !(v > 0 && v <= 1000)) throw new DomainError("VALIDATION", "Dimensions must be between 0 and 1000 cm.");
+    if (row.wood_type === "Other" && !row.custom_wood_note?.trim())
+      throw new DomainError("VALIDATION", 'Describe the wood when "Other" is selected.');
     const ts = now();
     const order: Order = {
       ...row,
+      current_revision: null,
+      approved_revision_number: null,
+      spec_preview_config: {},
+      is_legacy_incomplete: legacy,
       id: randomUUID(),
       standard_down_payment_due: 0,
       remaining_furniture_balance: 0,
@@ -159,12 +184,23 @@ export class MemoryStore implements DataStore {
 
     const next: Order = { ...current, ...patch };
     this.recompute(next);
+    if (next.wood_type === "Other" && !next.custom_wood_note?.trim())
+      throw new DomainError("VALIDATION", 'Describe the wood when "Other" is selected.');
+    if (specOrQuoteChanged(current, next)) {
+      if (next.status !== "Waiting for Confirmation")
+        throw new DomainError("SPEC_LOCKED", "Specifications and quote are locked once confirmed; use a change request.");
+      next.specs_confirmed = false;
+      next.approved_revision_number = null;
+    }
     if (patch.status && patch.status !== current.status) {
       assertTransition(
-        { ...next, status: current.status },
+        { ...next, status: current.status, specs_confirmed: true },
         patch.status,
         this.t.payments.filter((p) => p.order_id === id),
       );
+      if (patch.status === "Confirmed" || patch.status === "In Production") {
+        assertProductionGate(next, this.t.order_specification_revisions, this.t.order_exceptions_and_repairs);
+      }
     }
     if (next.status !== "Waiting for Confirmation" && !next.specs_confirmed)
       throw new DomainError("SPECS_NOT_CONFIRMED", "Customer must confirm specifications first.");
@@ -204,8 +240,126 @@ export class MemoryStore implements DataStore {
           updated_at: o.updated_at,
           needs_revision:
             !!last && last.from_status === "Completed / For Inspection" && last.to_status === "In Production",
+          furniture_category: o.furniture_category,
+          design_variant: o.design_variant,
+          width_cm: o.width_cm,
+          height_cm: o.height_cm,
+          depth_cm: o.depth_cm,
+          custom_wood_note: o.custom_wood_note,
+          approved_revision_number: o.approved_revision_number,
+          is_legacy_incomplete: o.is_legacy_incomplete,
         };
       });
+  }
+
+  // ------------------------------------------------------------ revisions
+  async listRevisions(orderId: string) {
+    return clone(
+      this.t.order_specification_revisions
+        .filter((r) => r.order_id === orderId)
+        .sort((a, b) => a.revision_number - b.revision_number),
+    );
+  }
+
+  private specJson(r: Partial<SpecRevision> & { quoted_furniture_price: number; quoted_delivery_fee: number }) {
+    return {
+      furniture_category: r.furniture_category ?? null,
+      design_variant: r.design_variant ?? null,
+      width_cm: r.width_cm ?? null,
+      height_cm: r.height_cm ?? null,
+      depth_cm: r.depth_cm ?? null,
+      wood_type: r.wood_type ?? null,
+      custom_wood_note: r.custom_wood_note ?? null,
+      color_finish: r.color_finish ?? null,
+      quantity: r.quantity ?? null,
+      quoted_furniture_price: r.quoted_furniture_price,
+      quoted_delivery_fee: r.quoted_delivery_fee,
+    };
+  }
+
+  async addSpecRevision(input: AddRevisionInput): Promise<AddRevisionResult> {
+    const o = this.find(this.t.orders, input.order_id, "Order"); // single-threaded: equivalent of SELECT ... FOR UPDATE
+    if ((input.expected_revision ?? null) !== (o.current_revision ?? null))
+      throw new DomainError("STALE_REVISION", `The specification changed (now revision ${o.current_revision}); reload before editing.`);
+    if (!["Waiting for Confirmation", "Confirmed"].includes(o.status) || (input.type === "customer_proposal" && o.status !== "Waiting for Confirmation"))
+      throw new DomainError("SPEC_LOCKED", "Specifications are locked for workshop production.");
+    const sp = input.spec;
+    const w = sp.width_cm, h = sp.height_cm, d = sp.depth_cm;
+    if (!sp.furniture_category || !sp.design_variant?.trim() || w == null || h == null || d == null || !sp.wood_type || !sp.color_finish?.trim())
+      throw new DomainError("VALIDATION", "Category, design, width, height, depth, wood and finish are required.");
+    if ([w, h, d].some((v) => !(v > 0 && v <= 1000))) throw new DomainError("VALIDATION", "Dimensions must be between 0 and 1000 cm.");
+    if (sp.wood_type === "Other" && !sp.custom_wood_note?.trim())
+      throw new DomainError("VALIDATION", 'Describe the wood when "Other" is selected.');
+    let price = sp.quoted_furniture_price ?? o.furniture_price;
+    let fee = sp.quoted_delivery_fee ?? o.delivery_fee;
+    if (o.municipality === "Valencia City") fee = 0;
+    if (input.type === "customer_proposal") { price = o.furniture_price; fee = o.delivery_fee; }
+    const qty = sp.quantity || o.quantity;
+    const note = sp.wood_type === "Other" ? sp.custom_wood_note!.trim() : null;
+    const next = this.specJson({
+      furniture_category: sp.furniture_category, design_variant: sp.design_variant.trim(), width_cm: w, height_cm: h, depth_cm: d,
+      wood_type: sp.wood_type, custom_wood_note: note, color_finish: sp.color_finish.trim(), quantity: qty,
+      quoted_furniture_price: price, quoted_delivery_fee: fee,
+    });
+    const prev = this.t.order_specification_revisions.find((r) => r.order_id === o.id && r.revision_number === o.current_revision);
+    const diff = prev ? diffSpecs(this.specJson(prev), next) : diffSpecs({}, next);
+    if (prev && input.type === "customer_proposal" && Object.keys(diff).length === 0)
+      throw new DomainError("VALIDATION", "No changes to submit.");
+    const num = (o.current_revision ?? 0) + 1;
+    const rev: SpecRevision = {
+      id: randomUUID(), order_id: o.id, revision_number: num, revision_type: input.type,
+      furniture_category: sp.furniture_category, design_variant: next.design_variant, width_cm: w, height_cm: h, depth_cm: d,
+      wood_type: sp.wood_type, custom_wood_note: note, color_finish: next.color_finish!, quantity: qty,
+      legacy_dimensions_text: null, quoted_furniture_price: price, quoted_delivery_fee: fee,
+      spec_preview_config: input.preview_config ?? {}, changed_fields: diff,
+      created_by_role: input.created_by_role, created_by_id: input.created_by_id, created_at: now(),
+    };
+    this.t.order_specification_revisions.push(rev);
+    if (input.type === "customer_proposal") {
+      Object.assign(o, { current_revision: num, specs_confirmed: false, approved_revision_number: null });
+    } else {
+      Object.assign(o, {
+        current_revision: num, furniture_category: sp.furniture_category, design_variant: rev.design_variant,
+        width_cm: w, height_cm: h, depth_cm: d, wood_type: sp.wood_type, custom_wood_note: note, color_finish: rev.color_finish,
+        quantity: qty, furniture_price: price, delivery_fee: fee, dimensions: dimensionsText({ width_cm: w, height_cm: h, depth_cm: d }),
+        spec_preview_config: input.preview_config ?? {}, is_legacy_incomplete: false, specs_confirmed: false,
+        approved_revision_number: null, status: "Waiting for Confirmation",
+      });
+      this.recompute(o);
+    }
+    o.version += 1;
+    o.updated_at = now();
+    return { id: rev.id, revision_number: num, revision_type: input.type, changed_fields: diff };
+  }
+
+  async confirmSpecRevision(input: ConfirmRevisionInput) {
+    const o = this.find(this.t.orders, input.order_id, "Order");
+    if (o.status !== "Waiting for Confirmation") throw new DomainError("INVALID_TRANSITION", "Order is not waiting for confirmation.");
+    if (o.is_legacy_incomplete)
+      throw new DomainError("VALIDATION", "Complete the structured specification (category, design, W × H × D) with a revised quote before confirming.");
+    if (input.revision_number !== o.current_revision)
+      throw new DomainError("STALE_REVISION", `Revision ${input.revision_number} is outdated; the latest is revision ${o.current_revision}.`);
+    const rev = this.t.order_specification_revisions.find((r) => r.order_id === o.id && r.revision_number === input.revision_number);
+    if (!rev || rev.revision_type === "customer_proposal")
+      throw new DomainError("PENDING_REVIEW", "The shop must review the proposed changes and send a revised quote first.");
+    if (this.t.order_exceptions_and_repairs.some((e) => e.order_id === o.id && e.status === "Pending"))
+      throw new DomainError("PENDING_REVIEW", "Resolve the open review items for this order first.");
+    if (input.new_order_code && this.t.orders.some((x) => x.id !== o.id && x.order_code === input.new_order_code))
+      throw new DomainError("VALIDATION", `Order code ${input.new_order_code} already exists.`);
+    const conf: OrderConfirmation = {
+      id: randomUUID(), order_id: o.id, version_number: rev.revision_number, revision_number: rev.revision_number, revision_id: rev.id,
+      confirmed_specs_snapshot: {
+        ...this.specJson(rev), item_name: o.item_name, dimensions: o.dimensions, wood_type: rev.wood_type,
+        color_finish: rev.color_finish, quantity: rev.quantity, furniture_price: rev.quoted_furniture_price,
+      },
+      confirmation_method: input.method, confirmed_by_name: input.confirmed_by_name.trim() || o.customer_name,
+      recorded_by_staff_id: input.recorded_by, confirmed_at: now(),
+    };
+    const next: Order = { ...o, approved_revision_number: rev.revision_number, specs_confirmed: true, status: "Confirmed", order_code: input.new_order_code ?? o.order_code };
+    assertProductionGate(next, this.t.order_specification_revisions, this.t.order_exceptions_and_repairs);
+    this.t.order_confirmations.push(conf);
+    Object.assign(o, next, { version: o.version + 1, updated_at: now() });
+    return { confirmation_id: conf.id, revision_id: rev.id, revision_number: rev.revision_number };
   }
 
   // ---------------------------------------------------------- confirmations

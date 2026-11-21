@@ -120,10 +120,18 @@ try {
   await page.selectOption("#municipality", "Lantapan");
   await page.fill("#delivery_fee", "800");
   await page.fill("#delivery_address", "Purok 3, Brgy. Poblacion, beside the chapel");
-  await page.fill("#item_name", "4-Seater Dining Set");
-  await page.fill("#dimensions", "150cm x 90cm x 76cm");
-  await page.selectOption("#wood_type", "Mahogany");
-  await page.fill("#color_finish", "Dark Walnut Gloss");
+  await caption("Real-time configurator: category, design, size preset, wood and finish — preview updates live");
+  await scrollTo(page.getByText("Furniture category").first());
+  await page.getByTestId("cat-Dining Table").click();
+  await page.getByRole("radio", { name: "6-Seater Classic" }).check({ force: true });
+  await page.getByRole("button", { name: "180 × 76 × 90 cm" }).click();
+  await page.getByTestId("wood-Gmelina").click();
+  await pause(1200);
+  await page.getByTestId("wood-Mahogany").click();
+  for (const f of ["Gloss White", "Dark Espresso", "Walnut Stain"]) {
+    await page.getByTestId(`finish-${f}`).click();
+    await pause(900);
+  }
   await page.fill("#furniture_price", "24000");
   await scrollTo(page.locator("dl[aria-live]"));
   await caption("Provincial delivery (Lantapan): 30% down ₱7,200 · 70% ₱16,800 · fee ₱800 → collect ₱17,600");
@@ -164,9 +172,16 @@ try {
   await page.waitForLoadState("networkidle");
   await checkLayout("customer order");
   await pause(2500);
-  await scrollTo(page.getByText("Payment summary"));
+  await pause(1000);
+  await caption("While waiting for confirmation the customer can explore woods and finishes live");
+  await scrollTo(page.getByText("Your furniture specification"));
+  await page.getByTestId("wood-Gmelina").first().click();
+  await page.getByText("Your changes:").waitFor();
   await pause(2500);
-  await caption("Customer clicks Confirm Specifications — this clears the production gate");
+  await caption("Changing anything would be sent for review — here the customer keeps the quote");
+  await page.getByRole("button", { name: "Undo my changes" }).click();
+  await pause(1200);
+  await caption("Customer clicks Confirm Specifications — confirms this exact revision and clears the production gate");
   await page.getByRole("button", { name: "Confirm Specifications" }).click();
   await pause(1200);
   await page.getByRole("button", { name: "Yes, these are correct" }).click();

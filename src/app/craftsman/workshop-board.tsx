@@ -10,6 +10,8 @@ import { PriorityBadge } from "@/components/status";
 import { formatDate, todayISO, daysBetween } from "@/lib/domain/dates";
 import type { WorkshopOrder } from "@/lib/domain/types";
 import { cn } from "@/lib/utils";
+import { FurniturePreview } from "@/components/orders/FurniturePreview";
+import { formatDims } from "@/lib/domain/furniture";
 
 type Tab = "todo" | "progress" | "revision" | "done";
 type Question = { id: string; order_id: string; description: string; status: string; requested_by: string | null };
@@ -65,11 +67,21 @@ export function WorkshopBoard({ jobs, names, me, questions }: { jobs: WorkshopOr
                   <PriorityBadge label={j.priority_label} rank={j.priority_rank} />
                 </div>
                 <p className="mt-1 text-lg font-semibold">{j.quantity} × {j.item_name}</p>
+                {j.approved_revision_number && (
+                  <p className="text-xs font-semibold text-success tabular-nums">Build from confirmed spec revision {j.approved_revision_number}</p>
+                )}
+                <FurniturePreview
+                  compact
+                  className="mt-2"
+                  legacyDimensions={j.is_legacy_incomplete ? j.dimensions : null}
+                  spec={{ furniture_category: j.furniture_category, design_variant: j.design_variant, width_cm: j.width_cm, height_cm: j.height_cm, depth_cm: j.depth_cm, wood_type: j.wood_type, color_finish: j.color_finish }}
+                />
                 <dl className="mt-2 grid gap-1 text-base">
-                  <div className="flex gap-2"><Ruler className="mt-1 size-4 shrink-0" aria-hidden /><dd className="font-bold">{j.dimensions}</dd></div>
-                  <div><dt className="inline text-muted-foreground">Wood: </dt><dd className="inline font-semibold">{j.wood_type}</dd></div>
+                  <div className="flex gap-2"><Ruler className="mt-1 size-4 shrink-0" aria-hidden /><dd className="font-bold tabular-nums">{formatDims(j) ? `W ${j.width_cm} × H ${j.height_cm} × D ${j.depth_cm} cm` : <span className="text-warning">Dimensions Pending Clarification — {j.dimensions}</span>}</dd></div>
+                  {j.design_variant && <div><dt className="inline text-muted-foreground">Design: </dt><dd className="inline font-semibold">{j.design_variant}</dd></div>}
+                  <div><dt className="inline text-muted-foreground">Wood: </dt><dd className="inline font-semibold">{j.wood_type}{j.custom_wood_note ? ` (${j.custom_wood_note})` : ""}</dd></div>
                   <div><dt className="inline text-muted-foreground">Finish: </dt><dd className="inline font-semibold">{j.color_finish}</dd></div>
-                  {j.special_instructions && <p className="mt-1 rounded-lg bg-accent p-2 text-sm whitespace-pre-line text-accent-foreground">{j.special_instructions}</p>}
+                  {j.special_instructions && <p className="mt-1 rounded-lg bg-accent-soft p-2 text-sm whitespace-pre-line text-foreground">{j.special_instructions}</p>}
                   {j.reference_photo_url && <a href={j.reference_photo_url} target="_blank" rel="noreferrer noopener" className="text-sm text-primary underline">Open reference photo</a>}
                 </dl>
                 <p className={cn("mt-2 text-sm", due < 0 ? "font-bold text-destructive" : due <= 2 ? "font-semibold text-warning" : "text-muted-foreground")}>

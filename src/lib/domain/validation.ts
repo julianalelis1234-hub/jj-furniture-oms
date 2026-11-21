@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { CATALOG, FINISHES, FURNITURE_CATEGORIES } from "./furniture";
 import {
   CONFIRMATION_METHODS,
   EXCEPTION_CATEGORIES,
@@ -17,6 +18,37 @@ const isoDate = (label: string) =>
 const pesos = (label: string) =>
   z.coerce.number({ error: `${label} must be a number.` }).finite().nonnegative({ error: `${label} cannot be negative.` });
 
+const cm = (label: string) =>
+  z.coerce
+    .number({ error: `${label} must be a number.` })
+    .finite()
+    .gt(0, { error: `${label} must be more than 0 cm.` })
+    .max(1000, { error: `${label} must be at most 1000 cm.` });
+
+/** The authoritative structured specification (configurator). */
+export const furnitureSpecShape = {
+  furniture_category: z.enum(FURNITURE_CATEGORIES, { error: "Choose a furniture category." }),
+  design_variant: required("Design"),
+  width_cm: cm("Width"),
+  height_cm: cm("Height"),
+  depth_cm: cm("Depth"),
+  wood_type: z.enum(WOOD_TYPES, { error: "Choose a wood type." }),
+  custom_wood_note: z.string().trim().max(120).optional().default(""),
+  color_finish: z.enum(FINISHES, { error: "Choose a finish." }),
+  quantity: z.coerce.number().int({ error: "Quantity must be a whole number." }).positive({ error: "Quantity must be at least 1." }),
+};
+export function refineSpec(v: { furniture_category: string; design_variant: string; wood_type: string; custom_wood_note?: string }, ctx: z.RefinementCtx) {
+  if (v.wood_type === "Other" && !v.custom_wood_note?.trim()) {
+    ctx.addIssue({ code: "custom", path: ["custom_wood_note"], message: 'Describe the wood when "Other" is selected.' });
+  }
+  const cat = CATALOG[v.furniture_category as keyof typeof CATALOG];
+  if (cat && !cat.variants.includes(v.design_variant)) {
+    ctx.addIssue({ code: "custom", path: ["design_variant"], message: `Choose a ${v.furniture_category} design.` });
+  }
+}
+export const furnitureSpecSchema = z.object(furnitureSpecShape).superRefine(refineSpec);
+export type FurnitureSpecInput = z.infer<typeof furnitureSpecSchema>;
+
 /** Philippine mobile number: 09XXXXXXXXX or +639XXXXXXXXX */
 export const PH_PHONE = /^(09\d{9}|\+639\d{9})$/;
 
@@ -32,11 +64,8 @@ export const newOrderSchema = z
       .pipe(z.string().regex(PH_PHONE, { error: "Use a PH mobile number, e.g. 09XX XXX XXXX." })),
     delivery_address: required("Delivery address").max(300),
     municipality: z.enum(MUNICIPALITIES, { error: "Choose a municipality." }),
-    item_name: required("Item").max(120),
-    quantity: z.coerce.number().int({ error: "Quantity must be a whole number." }).positive({ error: "Quantity must be at least 1." }),
-    dimensions: required("Dimensions").max(120),
-    wood_type: z.enum(WOOD_TYPES, { error: "Choose a wood type." }),
-    color_finish: required("Color / finish").max(120),
+    item_name: z.string().trim().max(120).optional().default(""),
+    ...furnitureSpecShape,
     special_instructions: z.string().trim().max(1000).optional().default(""),
     reference_photo_url: z
       .union([z.literal(""), z.url({ error: "Reference photo must be a link (https://…)." })])
@@ -53,6 +82,7 @@ export const newOrderSchema = z
     scheduled_delivery_date: z.union([z.literal(""), isoDate("Scheduled delivery date")]).optional().default(""),
   })
   .superRefine((v, ctx) => {
+    refineSpec(v, ctx);
     if (v.municipality !== "Valencia City" && v.delivery_fee <= 0) {
       ctx.addIssue({
         code: "custom",
@@ -81,13 +111,17 @@ export const editOrderSchema = z.object({
   scheduled_delivery_date: z.union([z.literal(""), isoDate("Scheduled delivery date")]).optional().default(""),
 });
 
-export const specRevisionSchema = z.object({
-  dimensions: required("Dimensions"),
-  wood_type: z.enum(WOOD_TYPES),
-  color_finish: required("Color / finish"),
-  quantity: z.coerce.number().int().positive(),
-  furniture_price: z.coerce.number().positive({ error: "Furniture price must be greater than ₱0." }),
-});
+/** Staff/owner revised quote: full spec + price (+ provincial fee). */
+export const specRevisionSchema = z
+  .object({
+    ...furnitureSpecShape,
+    furniture_price: z.coerce.number().positive({ error: "Furniture price must be greater than ₱0." }).max(99_999_999),
+    delivery_fee: pesos("Delivery fee").max(999_999).default(0),
+  })
+  .superRefine(refineSpec);
+
+/** Customer proposal: spec only (customers never set prices). */
+export const customerProposalSchema = furnitureSpecSchema;
 
 export const confirmationSchema = z.object({
   order_id: z.uuid(),

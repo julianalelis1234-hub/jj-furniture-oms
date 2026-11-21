@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 const TONE: Record<OrderStatus, string> = {
   "Waiting for Confirmation": "bg-warning-soft text-warning border-warning/40",
   Confirmed: "bg-info-soft text-info border-info/40",
-  "In Production": "bg-accent text-accent-foreground border-primary/30",
+  "In Production": "bg-accent-soft text-primary border-accent/60",
   "Completed / For Inspection": "bg-info-soft text-info border-info/40",
   "Ready for Delivery": "bg-success-soft text-success border-success/40",
   "Out for Delivery": "bg-info-soft text-info border-info/40",

@@ -7,6 +7,7 @@ import { DesignNote } from "@/components/design-note";
 import { Logo } from "@/components/app-shell";
 import { LinkButton } from "@/components/link-button";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { SwayingTree } from "@/components/ui/SwayingTree";
 import { isDemoMode } from "@/lib/config";
 import { SEED_PROFILES } from "@/lib/data/seed";
 import type { Role } from "@/lib/domain/types";
@@ -32,10 +33,16 @@ export default async function Home() {
         </div>
       </header>
       <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-8">
-        <h1 className="text-3xl font-black tracking-tight sm:text-4xl">Order Monitoring System</h1>
-        <p className="mt-2 max-w-2xl text-lg text-muted-foreground">
-          Paper slips at the counter, one shared live record for the owner, store, workshop, drivers and customers. Works in any phone browser. Nothing to install.
-        </p>
+        <div className="flex items-end gap-4 sm:gap-6">
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-semibold tracking-[0.18em] text-primary uppercase">Custom Mahogany &amp; Gmelina furniture</p>
+            <h1 className="mt-1 text-3xl font-extrabold tracking-tight text-balance sm:text-4xl">Order Monitoring System</h1>
+            <p className="mt-2 max-w-2xl text-base text-muted-foreground sm:text-lg">
+              Paper slips at the counter, one shared live record for the owner, store, workshop, drivers and customers. Works in any phone browser. Nothing to install.
+            </p>
+          </div>
+          <SwayingTree className="mb-1" />
+        </div>
 
         <LinkButton href="/about" className="mt-4">About this project</LinkButton>
 
@@ -47,7 +54,7 @@ export default async function Home() {
         )}
 
         <div className="mt-6 grid gap-3 sm:grid-cols-2">
-          <Link href="/track" className="group flex items-start gap-4 rounded-2xl border-2 border-primary bg-card p-5 hover:bg-accent sm:col-span-2">
+          <Link href="/track" className="group flex items-start gap-4 rounded-2xl border-2 border-primary bg-card p-5 hover:bg-accent-soft sm:col-span-2">
             <span className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground"><PackageSearch /></span>
             <span>
               <span className="block text-lg font-bold">Customers: track your order <span className="text-xs font-normal text-muted-foreground">CU-01</span></span>
@@ -72,7 +79,7 @@ export default async function Home() {
                   <div className="mt-3 flex flex-wrap gap-2">
                     {people.map((p) => (
                       <form key={p.id} action={switchDemoPersona.bind(null, p.id)}>
-                        <button type="submit" className="h-11 rounded-lg border px-3 text-sm font-semibold hover:border-primary hover:bg-accent">
+                        <button type="submit" className="h-11 rounded-lg border px-3 text-sm font-semibold hover:border-primary hover:bg-accent-soft">
                           Enter as {p.full_name}
                         </button>
                       </form>
@@ -82,7 +89,7 @@ export default async function Home() {
               );
             })
           ) : (
-            <Link href="/login" className="flex items-start gap-4 rounded-2xl border bg-card p-5 hover:bg-accent sm:col-span-2">
+            <Link href="/login" className="flex items-start gap-4 rounded-2xl border bg-card p-5 hover:bg-accent-soft sm:col-span-2">
               <span className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-secondary"><ShieldCheck /></span>
               <span>
                 <span className="block text-lg font-bold">Shop staff sign in</span>

@@ -69,6 +69,26 @@ export const NOTIFICATION_CHANNELS = ["SMS", "Messenger", "In-App"] as const;
 export type NotificationChannel = (typeof NOTIFICATION_CHANNELS)[number];
 export type NotificationStatus = "Sent" | "Failed" | "Pending";
 
+export const REVISION_TYPES = ["staff_draft", "customer_proposal", "revised_quote", "final_approved"] as const;
+export type RevisionType = (typeof REVISION_TYPES)[number];
+
+export type FurnitureCategoryName =
+  | "Panel Door"
+  | "Dining Table"
+  | "Living Room Set"
+  | "Kitchen / Wall Cabinet"
+  | "Custom Piece";
+
+/** Authoritative structured specification columns (migration 003). */
+export interface StructuredSpecColumns {
+  furniture_category: FurnitureCategoryName | null;
+  design_variant: string | null;
+  width_cm: number | null;
+  height_cm: number | null;
+  depth_cm: number | null;
+  custom_wood_note: string | null;
+}
+
 export interface Profile {
   id: string;
   full_name: string;
@@ -78,7 +98,7 @@ export interface Profile {
   created_at: string;
 }
 
-export interface Order {
+export interface Order extends StructuredSpecColumns {
   id: string;
   order_code: string;
   paper_slip_number: string;
@@ -111,8 +131,32 @@ export interface Order {
   estimated_completion_date: string; // YYYY-MM-DD
   scheduled_delivery_date: string | null;
   version: number;
+  current_revision: number | null;
+  approved_revision_number: number | null;
+  /** presentation-only preview settings; never specification data */
+  spec_preview_config: Record<string, unknown>;
+  is_legacy_incomplete: boolean;
   created_at: string;
   updated_at: string;
+}
+
+/** Immutable row of order_specification_revisions. */
+export interface SpecRevision extends StructuredSpecColumns {
+  id: string;
+  order_id: string;
+  revision_number: number;
+  revision_type: RevisionType;
+  wood_type: WoodType;
+  color_finish: string;
+  quantity: number;
+  legacy_dimensions_text: string | null;
+  quoted_furniture_price: number;
+  quoted_delivery_fee: number;
+  spec_preview_config: Record<string, unknown>;
+  changed_fields: Record<string, { from: unknown; to: unknown }> | Record<string, unknown>;
+  created_by_role: string;
+  created_by_id: string | null;
+  created_at: string;
 }
 
 /** Columns a craftsman may see — mirrors the public.workshop_orders view. */
@@ -134,6 +178,14 @@ export interface WorkshopOrder {
   version: number;
   updated_at: string;
   needs_revision: boolean;
+  furniture_category: FurnitureCategoryName | null;
+  design_variant: string | null;
+  width_cm: number | null;
+  height_cm: number | null;
+  depth_cm: number | null;
+  custom_wood_note: string | null;
+  approved_revision_number: number | null;
+  is_legacy_incomplete: boolean;
 }
 
 export interface OrderConfirmation {
@@ -141,6 +193,8 @@ export interface OrderConfirmation {
   order_id: string;
   version_number: number;
   confirmed_specs_snapshot: SpecSnapshot;
+  revision_id: string | null;
+  revision_number: number | null;
   confirmation_method: ConfirmationMethod;
   confirmed_by_name: string;
   recorded_by_staff_id: string | null;
@@ -148,6 +202,7 @@ export interface OrderConfirmation {
 }
 
 export interface SpecSnapshot {
+  [key: string]: unknown;
   item_name: string;
   dimensions: string;
   wood_type: WoodType;
