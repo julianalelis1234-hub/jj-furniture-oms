@@ -13,6 +13,7 @@ import {
 } from "@/lib/services/customer-auth";
 import { sendEmail, siteUrl } from "@/lib/services/email";
 import { getPublicStore } from "./context";
+import { SupabaseStore } from "@/lib/data/supabase-store";
 import { isHttpsRequest } from "./request";
 import { createAdminClient, createUserClient } from "./supabase";
 import { signToken, verifyToken } from "./token";
@@ -74,19 +75,31 @@ export async function getReviewSession(): Promise<{ order_id: string; revision_i
 }
 
 // ----------------------------------------------------------- customer session ----
-/** The signed-in customer (never a staff member), or null. */
+/** The signed-in customer (never a staff member), or null. The session is checked before any data access. */
 export async function getCustomer(): Promise<CustomerAccount | null> {
-  const store = await getPublicStore();
+  let uid: string | null = null;
   if (supabaseAuthEnabled()) {
     const { data } = await (await createUserClient()).auth.getUser();
-    if (!data.user) return null;
-    const acct = await store.elevated().getCustomerAccount(data.user.id);
-    return acct?.is_active ? acct : null;
+    uid = data.user?.id ?? null;
+  } else {
+    uid = verifyToken<{ uid: string }>((await cookies()).get(CUSTOMER_AUTH_COOKIE)?.value)?.uid ?? null;
   }
-  const d = verifyToken<{ uid: string }>((await cookies()).get(CUSTOMER_AUTH_COOKIE)?.value);
-  if (!d) return null;
-  const acct = await store.elevated().getCustomerAccount(d.uid);
+  if (!uid) return null;
+  const acct = await (await getPublicStore()).elevated().getCustomerAccount(uid);
   return acct?.is_active ? acct : null;
+}
+
+/**
+ * Store for a signed-in customer's own data. In production its default client
+ * carries the CUSTOMER's JWT, so order reads go through the RLS policy
+ * orders_select_customer_own (customer_user_id = auth.uid(), migration 006):
+ * the database itself decides which orders are theirs. elevated() is used only
+ * afterwards, for the details of an order the database already returned.
+ * Demo: the demo store; the services still check customer_user_id themselves.
+ */
+export async function getCustomerStore(): Promise<DataStore> {
+  if (supabaseAuthEnabled()) return new SupabaseStore(await createUserClient(), createAdminClient());
+  return getPublicStore(); // demo: same store as the rest of the demo portal
 }
 
 async function setDemoCustomerCookie(uid: string) {

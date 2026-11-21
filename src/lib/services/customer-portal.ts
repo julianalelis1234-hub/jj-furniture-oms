@@ -4,7 +4,7 @@ import { formatDate } from "@/lib/domain/dates";
 import { formatPeso } from "@/lib/domain/finance";
 import { isQuoteExpired } from "@/lib/domain/gate";
 import { QUOTE_REVISION_TYPES, type ConsumeReviewResult, type Order, type ProvisioningStatus } from "@/lib/domain/types";
-import { customerAcceptQuote, customerOrderView, customerProposeChanges, type CustomerOrderView } from "./customer";
+import { customerAcceptQuote, customerOrderView, customerProposeChanges, customerRequestRepair, type CustomerOrderView } from "./customer";
 import type { CustomerAuthProvider } from "./customer-auth";
 import { newSecret, sha256 } from "./customer-auth";
 import { sendEmail, siteUrl } from "./email";
@@ -237,18 +237,36 @@ export async function provisionCustomerAccount(publicStore: DataStore, auth: Cus
 
 // ----------------------------------------------------------------- dashboard ----
 /** Orders of a signed-in customer — only those linked to their verified account. */
-export async function customerDashboard(publicStore: DataStore, userId: string) {
-  const store = publicStore.elevated();
-  const orders = await store.listCustomerOrders(userId);
-  return Promise.all(orders.map((o) => customerOrderView(store, o.id).then((v) => ({ id: o.id, view: v }))));
+/**
+ * A signed-in customer's orders. `customerStore` must be the customer-scoped
+ * store (getCustomerStore): in production its reads carry the customer's JWT,
+ * so RLS (orders_select_customer_own) returns only their rows; the explicit
+ * customer_user_id check below is the second, independent layer. Details
+ * (revisions, payments, history) are then loaded elevated for those ids only.
+ */
+export async function customerDashboard(customerStore: DataStore, userId: string) {
+  const owned = (await customerStore.listCustomerOrders(userId)).filter((o) => o.customer_user_id === userId);
+  const store = customerStore.elevated();
+  return Promise.all(owned.map((o) => customerOrderView(store, o.id).then((v) => ({ id: o.id, view: v }))));
 }
 
-/** One order for a signed-in customer; refuses anything not linked to them. */
-export async function customerOwnedOrder(publicStore: DataStore, userId: string, orderCode: string): Promise<{ order: Order; view: CustomerOrderView }> {
-  const store = publicStore.elevated();
-  const o = await store.getOrderByCode(orderCode);
+/** One order for a signed-in customer; anything not linked to them is NOT_FOUND (no existence leak). */
+export async function customerOwnedOrder(customerStore: DataStore, userId: string, orderCode: string): Promise<{ order: Order; view: CustomerOrderView }> {
+  const o = await customerStore.getOrderByCode(orderCode); // RLS-filtered in production
   if (!o || o.customer_user_id !== userId) throw new DomainError("NOT_FOUND", "Order not found.");
-  return { order: o, view: await customerOrderView(store, o.id) };
+  return { order: o, view: await customerOrderView(customerStore.elevated(), o.id) };
+}
+
+/** "Request Post-Confirmation Change / Repair" from the signed-in dashboard: own orders only. */
+export async function customerOwnedRequest(
+  customerStore: DataStore,
+  userId: string,
+  orderCode: string,
+  description: string,
+  kind: "change" | "repair",
+) {
+  const { order } = await customerOwnedOrder(customerStore, userId, orderCode);
+  return customerRequestRepair(customerStore.elevated(), order.id, description, kind);
 }
 
 /**

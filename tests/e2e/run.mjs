@@ -224,48 +224,54 @@ await step("staff: driver cash appears as a handover to verify", async () => {
 });
 
 // ------------------------------------------------------------- customer --
-await step("customer: Order ID status, email login dashboard, legacy PIN slip, review link → accept → set password", async () => {
+await step("customer: no Order ID + PIN lookup; Option 1 email login (demo button) → own orders + change request; review link → accept → set password; forgot password", async () => {
   const ctx = await browser.newContext({ ...mobile, baseURL: BASE });
   const page = await ctx.newPage();
-  await page.goto("/track");
-  await page.fill("#order_code", "JJ-2026-0145");
-  await page.getByRole("button", { name: "Check status only" }).click();
-  await page.getByText("Estimated completion").first().waitFor();
-  const card = await page.getByTestId("track-result").innerText();
-  expect(!card.includes("₱") && !card.includes("0900"), "Order-ID-only view must not show money or phone");
-  await noHorizontalScroll(page, "customer-track-mobile");
-  await page.screenshot({ path: `${SHOTS}/customer-track-mobile.png`, fullPage: true });
-  // older paper slips keep their PIN
-  await page.fill("#order_code", "JJ-2026-0133");
-  await page.fill("#pin", "0000");
-  await page.getByRole("button", { name: "Open with PIN" }).click();
-  await page.getByText(/do not match/).waitFor();
-  await page.fill("#pin", "1357");
-  await page.getByRole("button", { name: "Open with PIN" }).click();
-  await page.waitForURL(/\/track\/order/);
+  // the retired lookup URL (old slips / QR codes) lands on the email login; no Order ID or PIN fields anywhere
+  await page.goto("/track?code=JJ-2026-0145");
+  await page.waitForURL(/\/customer\/login/);
+  await page.goto("/customer");
+  await page.waitForURL(/\/customer\/login/);
+  expect((await page.locator("#order_code, #pin").count()) === 0, "no Order ID / PIN inputs");
+  for (const label of ["Check status only", "Open with PIN"])
+    expect((await page.getByRole("button", { name: label }).count()) === 0, `no [${label}] button`);
+  await page.getByRole("heading", { name: /Option 1 · Log In to Track My Orders/ }).waitFor();
+  await page.getByRole("heading", { name: /Option 2 · Customize & Request a Quote/ }).waitFor();
+  await noHorizontalScroll(page, "customer-portal-mobile");
+  await page.screenshot({ path: `${SHOTS}/customer-portal-mobile.png`, fullPage: true });
+  // the dashboard needs a customer session
+  await page.goto("/customer/orders");
+  await page.waitForURL(/\/customer\/login/);
 
-  // email + password login → dashboard of linked orders only
-  await page.goto("/customer/login");
+  // wrong password: generic error (no account enumeration)
   await page.fill("#email", "maria.santos@example.com");
   await page.fill("#password", "wrong-password-123");
-  await page.getByRole("button", { name: "Log in" }).click();
+  await page.getByRole("button", { name: "Log in", exact: true }).click();
   await page.getByTestId("login-error").waitFor();
   expect((await page.getByTestId("login-error").innerText()).includes("Email or password is incorrect"), "generic login error");
-  await page.getByTestId("demo-login-fill").click();
-  await page.getByRole("button", { name: "Log in" }).click();
+  // [Demo Customer Login (Maria Santos)] (demo mode only) → dashboard of her linked orders only
+  await page.getByTestId("demo-customer-login").click();
   await page.waitForURL(/\/customer\/orders/);
   const list = await page.getByTestId("customer-orders").innerText();
-  expect(list.includes("JJ-2026-0145") && !list.includes("JJ-2026-0136"), "dashboard lists only this account's orders");
+  expect(list.includes("JJ-2026-0145") && !list.includes("JJ-2026-0136") && !list.includes("JJ-2026-0133"), "dashboard lists only this account's orders (legacy orders are not auto-linked)");
   await noHorizontalScroll(page, "customer-dashboard-mobile");
   await page.screenshot({ path: `${SHOTS}/customer-dashboard-mobile.png`, fullPage: true });
   await page.getByText("JJ-2026-0145").first().click();
   await page.getByTestId("approved-spec").waitFor();
   expect((await page.getByTestId("payment-summary").innerText()).includes("₱"), "payment summary on the order page");
+  // post-confirmation change / repair request (own order only)
+  await page.getByRole("button", { name: "Request Post-Confirmation Change / Repair" }).click();
+  await page.selectOption("#kind", "repair");
+  await page.fill("#description", "Small scratch on the left leg, about 3 cm.");
+  await page.getByRole("dialog").getByRole("button", { name: "Send request" }).click();
+  await page.getByText("Request sent. The shop will contact you").first().waitFor();
   await page.goto("/customer/orders/JJ-2026-0136");
-  expect((await page.content()).includes("404") || (await page.getByText(/could not be found|not found/i).count()) > 0, "another customer's order is not reachable");
-  await page.getByTestId("customer-logout").first().click().catch(() => {});
+  expect((await page.getByText(/could not be found|not found|404/i).count()) > 0, "another customer's order is not reachable");
+  await page.goto("/customer/orders");
+  await page.getByTestId("customer-logout").first().click();
+  await page.waitForURL(/\/customer\/login/);
 
-  // Ramon: the review link from his (simulated) inbox → accept → password set-up
+  // review links still work WITHOUT a login: Ramon accepts from his (simulated) inbox, then sets a password
   const href = await inboxLink(page, "ramon.delacruz@example.com");
   await openReview(page, href);
   await noHorizontalScroll(page, "customer-review-mobile");
@@ -277,11 +283,13 @@ await step("customer: Order ID status, email login dashboard, legacy PIN slip, r
   await page.getByTestId("accept-quotation").check();
   await page.getByRole("dialog").getByRole("button", { name: "Accept quote & confirm" }).click();
   await page.getByTestId("setup-email-sent").waitFor();
-  // the same link cannot be used twice
+  // the same link cannot be used twice; a made-up token is refused
   await page.goto(href);
   await page.getByRole("button", { name: "Open my quotation" }).click();
   expect((await page.getByTestId("review-error").innerText()).includes("already used"), "review link is single-use");
-  // set the password from the emailed link, land on the dashboard
+  await page.goto("/customer/review?token=not-a-real-token-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA");
+  await page.getByRole("button", { name: "Open my quotation" }).click();
+  await page.getByTestId("review-error").waitFor();
   const setup = await inboxLink(page, "ramon.delacruz@example.com", "/customer/setup-password");
   await page.goto(setup);
   await page.fill("#password", "short");
@@ -294,6 +302,29 @@ await step("customer: Order ID status, email login dashboard, legacy PIN slip, r
   await page.waitForURL(/\/customer\/orders/);
   await page.getByTestId("welcome").waitFor();
   expect((await page.getByTestId("customer-orders").innerText()).includes("0148"), "accepted order appears in the new account");
+  await page.getByTestId("customer-logout").first().click();
+  await page.waitForURL(/\/customer\/login/);
+
+  // [Forgot Password?] → one-time reset link → new password → typed email + password login → /customer/orders
+  await page.getByRole("link", { name: "Forgot Password?" }).click();
+  await page.waitForURL(/\/customer\/forgot-password/);
+  await page.fill("#email", "ramon.delacruz@example.com");
+  await page.getByRole("button", { name: "Send reset link" }).click();
+  await page.getByTestId("forgot-result").waitFor();
+  const reset = await inboxLink(page, "ramon.delacruz@example.com", "/customer/setup-password");
+  expect(reset !== setup, "a fresh reset link was emailed");
+  await page.goto(reset);
+  await page.fill("#password", "Yakal-Chair-2027");
+  await page.fill("#confirm", "Yakal-Chair-2027");
+  await page.getByRole("button", { name: "Save password" }).click();
+  await page.waitForURL(/\/customer\/orders/);
+  await page.getByTestId("customer-logout").first().click();
+  await page.waitForURL(/\/customer\/login/);
+  await page.fill("#email", "ramon.delacruz@example.com");
+  await page.fill("#password", "Yakal-Chair-2027");
+  await page.getByRole("button", { name: "Log in", exact: true }).click();
+  await page.waitForURL(/\/customer\/orders/);
+  await page.getByTestId("customer-orders").waitFor();
   await ctx.close();
 });
 
@@ -352,11 +383,9 @@ await step("customer: staff resend link → propose changes in the review sessio
 await step("Option 2: customer designs & requests → staff quotation → customer accepts → 30% gate", async () => {
   const ctx = await browser.newContext({ ...mobile, baseURL: BASE });
   const page = await ctx.newPage();
-  await page.goto("/track");
-  await noHorizontalScroll(page, "customer-portal-options-mobile");
-  await page.screenshot({ path: `${SHOTS}/customer-portal-options-mobile.png`, fullPage: true });
+  await page.goto("/customer/login");
   await page.getByTestId("option-2").click();
-  await page.waitForURL(/\/track\/request/);
+  await page.waitForURL(/\/customer\/customize/);
   await page.getByTestId("cat-Kitchen / Wall Cabinet").click();
   await page.getByRole("radio", { name: "3-Door Base Counter" }).check({ force: true });
   await page.getByRole("button", { name: "150 × 85 × 55 cm" }).click();
@@ -406,7 +435,7 @@ await step("3D turntable: exact W×H×D labels, non-blocking warning, NULL → 2
   const page = await ctx.newPage();
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
-  await page.goto("/track/request");
+  await page.goto("/customer/customize");
   await page.getByTestId("cat-Living Room Set").click();
   await page.getByTestId("preview-3d").waitFor({ timeout: 20000 });
   expect((await page.getByTestId("preview-3d").innerText()).includes("Illustrative 3D Preview — Reference Aid Only (Not a Manufacturing Drawing)"), "3D disclaimer");
@@ -430,7 +459,7 @@ await step("3D turntable: exact W×H×D labels, non-blocking warning, NULL → 2
   const p2 = await ctx2.newPage();
   const errors2 = [];
   p2.on("pageerror", (e) => errors2.push(e.message));
-  await p2.goto("/track/request");
+  await p2.goto("/customer/customize");
   await p2.getByTestId("cat-Dining Table").click();
   await p2.locator('figure[aria-label="Illustrative furniture preview"] svg').first().waitFor();
   expect((await p2.getByTestId("preview-3d").count()) === 0 && errors2.length === 0, "WebGL off: 2D SVG preview, no crash");

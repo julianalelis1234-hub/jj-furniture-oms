@@ -13,7 +13,7 @@ const PORTAL_LABEL: Record<Role | "customer", { title: string; code: string }> =
   staff: { title: "Store Assistant", code: "S-01" },
   craftsman: { title: "Workshop", code: "C-01" },
   driver: { title: "Deliveries", code: "D-01" },
-  customer: { title: "Order Status", code: "CU-01" },
+  customer: { title: "Customer Portal", code: "CU-01" },
 };
 
 export function Logo() {

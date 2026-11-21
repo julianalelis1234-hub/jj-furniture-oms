@@ -32,9 +32,9 @@ data and real application features. Nothing is faked except where it says
 | JJ-2026-0145 | Maria Santos | Urgent dining table, In Production |
 | DR-0148 | Ramon dela Cruz (ramon.delacruz@example.com) | Waiting — review link in the Demo Inbox |
 | DR-0147 | Josefina Lagura | Quote Requested — Option 2 request awaiting the shop's quotation |
-| Customer login | maria.santos@example.com / Narra-Table-2026 | Dashboard with JJ-2026-0145 |
+| Customer login | **Demo Customer Login (Maria Santos)** button, or maria.santos@example.com / Narra-Table-2026 | Dashboard with JJ-2026-0145 |
 | JJ-2026-0136 | Pedro & Ana Bautista | Out for Delivery (driver Jesse) |
-| JJ-2026-0133 (PIN 1357) | Lourdes Ybañez | Delivered, unpaid balance (approved credit) |
+| JJ-2026-0133 | Lourdes Ybañez | Delivered, unpaid balance (approved credit); legacy order, no email, not linked to any account |
 
 New orders get the next slip number. After a reset, the first new order is **DR-0149**, which becomes **JJ-2026-0149** once the customer confirms.
 
@@ -87,15 +87,15 @@ Scroll to **What we found in the Discover phase**, then **One record, five porta
 
 ## 3. Customer Portal (CU-01) — 1:15
 
-1. Top bar → **Customer**. Type **DR-0149** in Order ID and click **Check status only**.
-   **Say:** "With only the Order ID, anyone sees the stage and the two dates — no phone, no address, no money."
+1. Top bar → **Customer**. The portal shows **Option 1 · Log In to Track My Orders** (email + password, **Forgot Password?**) and **Option 2 · Customize & Request a Quote**.
+   **Say:** "No Order ID and PIN to type in or lose: customers log in with their email, and quotations come by email."
 2. Top bar → **Demo Inbox**. Open the newest email to **rosalinda.abellana@example.com** → **Open secure link** → **Open my quotation**.
    **Say:** "The quotation link is single-use and opens only this order. Opening it proves the email is hers."
 3. Tap **Gmelina**: *"Your changes: Wood: Mahogany -> Gmelina"* appears with **Submit Specification Changes for Review**. Click **Undo my changes**.
 4. **Accept Quote & Confirm Specifications** → tick both boxes → **Accept quote & confirm**. The page says a password set-up email was sent.
 5. **Demo Inbox** → newest email → **Open secure link** → type a password twice → **Save password**. She lands on **My orders**.
    **Say:** "No PIN to lose and no password ever emailed. Returning customers just log in and see every order."
-6. Optional: log out, then **Customer login** with the demo account shown on the login page (Maria Santos) to show a multi-order dashboard.
+6. Optional: log out, then click **Demo Customer Login (Maria Santos)** (Demo Mode only) to show her dashboard; open JJ-2026-0145 → **Request Post-Confirmation Change / Repair**.
 
 **Staff: verified 30% → release to the workshop (about 20 seconds)**
 5. Top bar → **Staff** → **Log 30% down payment** → JJ-2026-0149 → **Log payment** (₱7,200 pre-filled) → **Save payment**.
@@ -103,7 +103,7 @@ Scroll to **What we found in the Discover phase**, then **One record, five porta
    **Say:** "The server re-checks the verified 30%, the accepted latest revision, price drift and open spec questions before the specification locks."
 
 **Optional — Option 2 self-service (about 40 seconds)**
-* Top bar → **Customer** → **Design & Request Custom Furniture**. Pick a design, size, wood and finish, fill name / email / mobile / address → **Send request for quotation**. The Order ID appears, and the page says the quotation will be emailed to that address.
+* Top bar → **Customer** → **Customize & Request a Quote**. Pick a design, size, wood and finish, fill name / email / mobile / address → **Send request for quotation**. The Order ID appears, and the page says the quotation will be emailed to that address.
 * Or use the prepared request **DR-0147**. In **Staff → Customer quote requests (Option 2)** click **Issue quotation**, enter price, delivery fee and the paper slip # → **Send quotation**. The review link appears in the **Demo Inbox** for the customer to accept.
 
 ## 4. Craftsmen Portal (C-01) and Owner Dashboard (O-01) — 2:00

@@ -10,30 +10,11 @@ import {
   saveManifest,
 } from "@/lib/offline/driver-db";
 import { applyDriverAction, driverManifest, type DriverAction } from "@/lib/services/deliveries";
-import { customerOrderView, trackOrder } from "@/lib/services/customer";
+import { customerOrderView } from "@/lib/services/customer";
 import { editOrderDetails } from "@/lib/services/orders";
 import { actors, customerAccept, seededStore } from "./helpers";
 
 describe("3. customer authentication & privacy", () => {
-  it("Order-ID-only lookup strips phone, address and money", async () => {
-    const store = await seededStore();
-    const t = (await trackOrder(store, "jj-2026-0136"))!;
-    expect(Object.keys(t).sort()).toEqual(
-      ["estimated_completion_date", "item_name", "order_code", "scheduled_delivery_date", "status", "updated_at"].sort(),
-    );
-    expect(JSON.stringify(t)).not.toMatch(/0900|Purok|45000|31500|33000/);
-  });
-  it("legacy paper-slip PINs: rejects invalid PINs and locks after 5 failures", async () => {
-    const store = await seededStore();
-    expect((await store.customerVerifyPin("JJ-2026-0133", "0000", "ip-a")).ok).toBe(false);
-    expect((await store.customerVerifyPin("JJ-2026-0133", "1357", "ip-a")).ok).toBe(true);
-    // orders created with email authentication have no PIN at all
-    expect((await store.customerVerifyPin("JJ-2026-0136", "2468", "ip-a")).ok).toBe(false);
-    for (let i = 0; i < 5; i++) await store.customerVerifyPin("JJ-2026-0133", "9999", "ip-b");
-    const locked = await store.customerVerifyPin("JJ-2026-0133", "1357", "ip-b");
-    expect(locked.ok).toBe(false);
-    expect(locked.locked).toBe(true);
-  });
   it("verified view exposes this order only and never the PIN hash", async () => {
     const store = await seededStore();
     const o = (await store.getOrderByCode("JJ-2026-0145"))!;

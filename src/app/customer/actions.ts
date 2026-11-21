@@ -3,6 +3,8 @@
 import { redirect } from "next/navigation";
 import { ZodError } from "zod";
 import type { ActionResult } from "@/lib/action-result";
+import { isDemoMode } from "@/lib/config";
+import { DEMO_CUSTOMER_LOGIN } from "@/lib/data/seed";
 import { DomainError } from "@/lib/domain/errors";
 import { customerLoginSchema, emailField, firstErrors } from "@/lib/domain/validation";
 import { getPublicStore } from "@/lib/server/context";
@@ -11,11 +13,13 @@ import {
   customerSetPassword,
   customerSignIn,
   customerSignOut,
+  getCustomer,
   getCustomerAuth,
+  getCustomerStore,
   getReviewSession,
   setReviewSession,
 } from "@/lib/server/customer-auth";
-import { acceptFromReview, openReviewLink, proposeFromReview, type ProvisionResult } from "@/lib/services/customer-portal";
+import { acceptFromReview, customerOwnedRequest, openReviewLink, proposeFromReview, type ProvisionResult } from "@/lib/services/customer-portal";
 
 function fail(e: unknown): { ok: false; message: string; code?: string; fieldErrors?: Record<string, string> } {
   if (e instanceof DomainError) {
@@ -79,6 +83,34 @@ export async function customerLoginAction(_: unknown, fd: FormData): Promise<Act
     return fail(e);
   }
   redirect("/customer/orders");
+}
+
+/**
+ * [Demo Customer Login (Maria Santos)] — Demo Mode ONLY. Refused on the server
+ * in production regardless of what the browser sends (the button is not even
+ * rendered there). Signs in the fictional seeded account through the normal
+ * password check, so it gets exactly the same session as a typed login.
+ */
+export async function demoCustomerLoginAction(): Promise<ActionResult> {
+  if (!isDemoMode()) return { ok: false, code: "FORBIDDEN", message: "Demo login is not available." };
+  try {
+    await customerSignIn(DEMO_CUSTOMER_LOGIN.email, DEMO_CUSTOMER_LOGIN.password);
+  } catch (e) {
+    return fail(e);
+  }
+  redirect("/customer/orders");
+}
+
+/** Request Post-Confirmation Change / Repair — signed-in customers, for their OWN orders only. */
+export async function customerOrderRequestAction(orderCode: string, kind: "change" | "repair", fd: FormData): Promise<ActionResult> {
+  const customer = await getCustomer();
+  if (!customer) return { ok: false, code: "UNAUTHENTICATED", message: "Please log in again." };
+  try {
+    await customerOwnedRequest(await getCustomerStore(), customer.id, orderCode, String(fd.get("description") ?? ""), kind);
+  } catch (e) {
+    return fail(e);
+  }
+  return { ok: true, message: kind === "change" ? "Change request sent. The shop will review it and contact you." : "Request sent. The shop will contact you to schedule the touch-up." };
 }
 
 export async function customerForgotAction(_: unknown, fd: FormData): Promise<ActionResult> {

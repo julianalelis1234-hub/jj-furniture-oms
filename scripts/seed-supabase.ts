@@ -62,7 +62,7 @@ async function main() {
   await must("deliveries", db.from("delivery_assignments").insert(t.delivery_assignments));
   await must("exceptions", db.from("order_exceptions_and_repairs").insert(t.order_exceptions_and_repairs));
   await must("notifications", db.from("notifications").insert(t.notifications));
-  console.log(`Seeded ${t.orders.length} orders. Customer PINs are on each order's printable slip.`);
+  console.log(`Seeded ${t.orders.length} orders. Demo customer login: see DEMO_CUSTOMER_LOGIN in src/lib/data/seed.ts.`);
 }
 
 main().catch((e) => {

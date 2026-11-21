@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { DomainError } from "@/lib/domain/errors";
 import { computeFinancials } from "@/lib/domain/finance";
-import { verifyPinHash } from "@/lib/domain/pin";
 import { dimensionsText, diffSpecs } from "@/lib/domain/furniture";
 import { assertProductionGate, blockingItems, isQuoteExpired, specOrQuoteChanged } from "@/lib/domain/gate";
 import { assertTransition } from "@/lib/domain/status";
@@ -11,14 +10,12 @@ import type {
   ConsumeReviewResult,
   CustomerAccount,
   QuoteReviewToken,
-  CustomerTrack,
   DeliveryAssignment,
   NotificationLog,
   Order,
   OrderConfirmation,
   OrderException,
   Payment,
-  PinResult,
   Profile,
   SpecRevision,
   StatusHistory,
@@ -46,7 +43,6 @@ export interface MemoryTables {
   order_exceptions_and_repairs: OrderException[];
   notifications: NotificationLog[];
   order_specification_revisions: SpecRevision[];
-  pin_attempts: { order_code: string; client_key: string; succeeded: boolean; at: number }[];
   quote_review_tokens: QuoteReviewToken[];
   /** demo stand-in for Supabase Auth users + customer profiles */
   customer_accounts: (CustomerAccount & { password_hash: string | null })[];
@@ -67,7 +63,6 @@ export function emptyTables(): MemoryTables {
     order_exceptions_and_repairs: [],
     notifications: [],
     order_specification_revisions: [],
-    pin_attempts: [],
     quote_review_tokens: [],
     customer_accounts: [],
     password_tokens: [],
@@ -78,9 +73,7 @@ export function emptyTables(): MemoryTables {
 const clone = <T>(v: T): T => structuredClone(v);
 const now = () => new Date().toISOString();
 const WORKSHOP_STATUSES = new Set(["Confirmed", "In Production", "Completed / For Inspection", "Ready for Delivery"]);
-const PIN_MAX_FAILURES = 5;
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
-const PIN_WINDOW_MS = 15 * 60 * 1000;
 
 /**
  * In-memory implementation used for Demo Mode without a Supabase project and
@@ -579,38 +572,6 @@ export class MemoryStore implements DataStore {
     const n = this.find(this.t.notifications, id, "Notification");
     Object.assign(n, patch, { id });
     return clone(n);
-  }
-
-  // --------------------------------------------------------------- customer
-  async customerTrack(orderCode: string): Promise<CustomerTrack | null> {
-    const o = this.t.orders.find((x) => x.order_code === orderCode.trim().toUpperCase());
-    if (!o) return null;
-    return {
-      order_code: o.order_code,
-      item_name: o.item_name,
-      status: o.status,
-      estimated_completion_date: o.estimated_completion_date,
-      scheduled_delivery_date: o.scheduled_delivery_date,
-      updated_at: o.updated_at,
-    };
-  }
-
-  async customerVerifyPin(orderCode: string, pin: string, clientKey: string): Promise<PinResult> {
-    const code = orderCode.trim().toUpperCase();
-    const since = Date.now() - PIN_WINDOW_MS;
-    const failures = this.t.pin_attempts.filter(
-      (a) => a.order_code === code && a.client_key === clientKey && !a.succeeded && a.at > since,
-    ).length;
-    if (failures >= PIN_MAX_FAILURES) return { ok: false, locked: true, remaining_attempts: 0 };
-    const o = this.t.orders.find((x) => x.order_code === code);
-    const ok = !!o && !!o.pin_code_hash && verifyPinHash(pin, o.pin_code_hash);
-    this.t.pin_attempts.push({ order_code: code, client_key: clientKey, succeeded: ok, at: Date.now() });
-    if (ok) return { ok: true, order_id: o!.id };
-    return {
-      ok: false,
-      locked: failures + 1 >= PIN_MAX_FAILURES,
-      remaining_attempts: Math.max(0, PIN_MAX_FAILURES - failures - 1),
-    };
   }
 
   // ------------------------------------------------ customer email auth (005)

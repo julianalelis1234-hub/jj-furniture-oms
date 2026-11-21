@@ -34,12 +34,11 @@ await p.locator("li", { hasText: "JJ-2026-0138" }).getByRole("button", { name: "
 await p.getByText("Offline • Saved Locally (1 pending)").waitFor();
 screens.push(["D-01 Driver · Offline (Dark)", await grab(p), true]);
 const c = await (await b.newContext({ viewport: { width: 390, height: 844 }, baseURL: BASE })).newPage();
-await c.goto("/track"); await c.fill("#order_code", "JJ-2026-0145");
-await c.getByRole("button", { name: "Check status only" }).click(); await c.getByTestId("track-result").waitFor();
-screens.push(["CU-01 Customer · Order ID only", await grab(c), false]);
-await c.fill("#pin", "4821"); await c.getByRole("button", { name: "Open with PIN" }).click(); await c.waitForURL(/track\/order/);
+await c.goto("/customer/login");
+screens.push(["CU-01 Customer · Portal (Option 1 login / Option 2 quote)", await grab(c), false]);
+await c.getByTestId("demo-customer-login").click(); await c.waitForURL(/customer\/orders/);
 await c.waitForLoadState("networkidle");
-screens.push(["CU-01 Customer · Verified (PIN)", await grab(c), false]);
+screens.push(["CU-01 Customer · My orders", await grab(c), false]);
 
 // collect CSS + inline fonts
 const html0 = await c.content();

@@ -1,7 +1,6 @@
 import bcrypt from "bcryptjs";
 import { createHash, randomBytes } from "node:crypto";
 import { addDays, todayISO } from "@/lib/domain/dates";
-import { hashPin } from "@/lib/domain/pin";
 import type { Municipality, Order, OrderStatus, PaymentType, Profile, SpecRevision, WoodType } from "@/lib/domain/types";
 import { WORKSHOP_STAGES } from "@/lib/domain/types";
 import { dimensionsText, type FurnitureCategory } from "@/lib/domain/furniture";
@@ -41,12 +40,6 @@ export const DEMO_PERSONA: Record<Profile["role"], string> = {
   craftsman: STAFF.nolito,
   driver: STAFF.jesse,
 };
-
-/** Older paper slips that still carry a 4-digit PIN (created before email authentication). */
-export const DEMO_CUSTOMER_SAMPLES = [
-  { order_code: "JJ-2026-0133", pin: "1357", label: "Wardrobe · Delivered (older paper slip with PIN)" },
-  { order_code: "JJ-2026-0130", pin: "9090", label: "Coffee table · Delivered (older paper slip with PIN)" },
-];
 
 /** Demo customer login (fictional) — shown on /customer/login in Demo Mode only. */
 export const DEMO_CUSTOMER_LOGIN = { email: "maria.santos@example.com", password: "Narra-Table-2026", name: "Maria Santos" };
@@ -262,7 +255,8 @@ export async function buildSeedTables(): Promise<MemoryTables> {
       customer_phone: s.phone,
       delivery_address: s.address,
       municipality: s.municipality,
-      pin_code_hash: LEGACY_PIN_ORDERS.has(s.code) ? hashPin(s.pin, 6) : null,
+      // historical data only: these slips were printed with a PIN before email login; nothing verifies it any more
+      pin_code_hash: LEGACY_PIN_ORDERS.has(s.code) ? bcrypt.hashSync(s.pin, 6).replace(/^\$2b\$/, "$2a$") : null,
       pin_code_display: LEGACY_PIN_ORDERS.has(s.code) ? s.pin : null,
       customer_email: SEED_EMAIL[s.code] && SEED_EMAIL[s.code] !== "walk-in" ? SEED_EMAIL[s.code] : null,
       has_no_email: !SEED_EMAIL[s.code] || SEED_EMAIL[s.code] === "walk-in",

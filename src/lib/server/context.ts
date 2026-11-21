@@ -41,10 +41,11 @@ export const getStore = cache(async (): Promise<DataStore> => {
 });
 
 /**
- * Store for the public customer portal. The customer RPCs are callable only by
- * the server (service role, migration 002), so a browser can never call the PIN
- * check directly and dodge the rate limit. Full order data is read only after
- * the PIN has been verified (see customer-session.ts).
+ * Server-side store for the public customer entry points: the anonymous quote
+ * request (Option 2) and the single-use review link (/customer/review?token=).
+ * The review-token RPCs are executable by the service role only (migration
+ * 005), so a browser can never call them directly. Signed-in customers read
+ * their own orders through getCustomerStore() (RLS, migration 006) instead.
  */
 export const getPublicStore = cache(async (): Promise<DataStore> => {
   if (hasSupabase()) {

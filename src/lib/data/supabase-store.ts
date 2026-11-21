@@ -4,14 +4,12 @@ import { DomainError, fromPostgresMessage } from "@/lib/domain/errors";
 import type {
   ConsumeReviewResult,
   CustomerAccount,
-  CustomerTrack,
   DeliveryAssignment,
   NotificationLog,
   Order,
   OrderConfirmation,
   OrderException,
   Payment,
-  PinResult,
   Profile,
   SpecRevision,
   StatusHistory,
@@ -75,8 +73,8 @@ function fail(error: PostgrestError): never {
  * authenticated staff member it carries their JWT, so every read and write is
  * filtered by the RLS policies in 001_init.sql. `admin` (service role) is only
  * reachable through elevated(), which services call for narrowly-scoped,
- * already-authorized operations (customer portal after PIN verification,
- * craftsman workflow updates, notification logging).
+ * already-authorized operations (customer order details after the database
+ * confirmed ownership, review links, craftsman workflow updates, notification logging).
  */
 export class SupabaseStore implements DataStore {
   readonly kind = "supabase" as const;
@@ -296,21 +294,6 @@ export class SupabaseStore implements DataStore {
     const { data, error } = await this.db.from("notifications").update(patch).eq("id", id).select("*").single();
     if (error) fail(error);
     return data as NotificationLog;
-  }
-
-  async customerTrack(orderCode: string) {
-    const { data, error } = await this.db.rpc("customer_track", { p_order_code: orderCode });
-    if (error) fail(error);
-    return (data as CustomerTrack) ?? null;
-  }
-  async customerVerifyPin(orderCode: string, pin: string, clientKey: string) {
-    const { data, error } = await this.db.rpc("customer_verify_pin", {
-      p_order_code: orderCode,
-      p_pin: pin,
-      p_client_key: clientKey,
-    });
-    if (error) fail(error);
-    return data as PinResult;
   }
 
   // ------------------------------------------------ customer email auth (005)

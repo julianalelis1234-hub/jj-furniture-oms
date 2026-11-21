@@ -68,10 +68,11 @@ async function checkLayout(label) {
   if (sw > iw + 1) throw new Error(`${label}: horizontal scroll (${sw}px content on ${iw}px screen)`);
   if (await page.getByText(/Application error|Something went wrong on the server|404/).count()) throw new Error(`${label}: error screen`);
 }
-const PORTAL = { Owner: "/owner", Staff: "/staff", Craftsmen: "/craftsman", "Delivery Driver": "/driver", Customer: "/track" };
+const PORTAL = { Owner: "/owner", Staff: "/staff", Craftsmen: "/craftsman", "Delivery Driver": "/driver", Customer: "/customer/login" };
 async function role(name) {
   await page.getByRole("navigation", { name: "Switch demo role" }).getByRole("button", { name: new RegExp(`^${name}`) }).click();
-  await page.waitForURL((u) => u.pathname === PORTAL[name], { timeout: 20000 });
+  // a signed-in customer is sent straight on from the login page to their orders
+  await page.waitForURL((u) => u.pathname === PORTAL[name] || (name === "Customer" && u.pathname === "/customer/orders"), { timeout: 20000 });
   await page.waitForLoadState("networkidle");
 }
 async function toast(text) {
@@ -155,15 +156,12 @@ try {
 
   // --------------------------------------------------- 3. Customer portal 1:00
   await role("Customer");
-  await caption("3 · Customer portal (CU-01) — Order ID only: stage and dates, nothing private");
-  await page.fill("#order_code", newCode);
-  await page.getByRole("button", { name: "Check status only" }).click();
-  const card = page.getByTestId("track-result");
-  await card.waitFor();
-  const cardText = await card.innerText();
-  if (cardText.includes("₱") || cardText.includes("0900")) throw new Error("Order-ID-only view leaked money or phone");
-  await scrollTo(card);
-  await pause(4000);
+  await caption("3 · Customer portal (CU-01) — Option 1: log in with email + password · Option 2: customize & request a quote");
+  if (await page.locator("#order_code, #pin").count()) throw new Error("retired Order ID + PIN lookup is still on the page");
+  await checkLayout("customer portal");
+  await pause(3000);
+  await scrollTo(page.getByTestId("option-2"));
+  await pause(2500);
   await caption("The quotation arrives by email (demo inbox) with a single-use review link");
   await page.goto("/demo/inbox");
   const mail = page.getByTestId("inbox-item").filter({ hasText: "rosalinda.abellana@example.com" }).first();
@@ -364,12 +362,12 @@ try {
   await caption("Every step is in the audit trail, including actions synced from the driver's phone");
   await pause(4000);
   await role("Customer");
-  await page.fill("#order_code", newCode);
-  await page.fill("#pin", "");
-  await page.getByRole("button", { name: "Check status only" }).click();
-  await page.getByTestId("track-result").waitFor();
-  await scrollTo(page.getByTestId("track-result"));
-  await caption("The customer sees Delivered without calling the shop");
+  await page.waitForURL(/\/customer\/orders/);
+  const mine = page.getByTestId("customer-orders");
+  await mine.waitFor();
+  if (!(await mine.innerText()).includes("Delivered")) throw new Error("customer dashboard should show Delivered");
+  await scrollTo(mine);
+  await caption("Logged in, the customer sees Delivered on their dashboard without calling the shop");
   await pause(3500);
   await role("Owner");
   await caption("Owner KPIs updated — one shared record, no extra software costs");

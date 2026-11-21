@@ -220,11 +220,6 @@ export const prioritySchema = z.object({
   priority_label: z.enum(PRIORITY_LABELS),
 });
 
-export const pinSchema = z.object({
-  order_code: required("Order ID").transform((s) => s.toUpperCase()),
-  pin: z.string().regex(/^\d{4}$/, { error: "PIN must be 4 digits." }),
-});
-
 export function firstErrors(error: z.ZodError): Record<string, string> {
   const out: Record<string, string> = {};
   for (const issue of error.issues) {

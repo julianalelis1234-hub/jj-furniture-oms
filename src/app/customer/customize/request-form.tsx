@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCircle2, Loader2, MailCheck, Search, Send } from "lucide-react";
+import { CheckCircle2, KeyRound, Loader2, MailCheck, Send } from "lucide-react";
 import { useState } from "react";
 import { customerRequestAction } from "@/app/actions";
 import { Field, NativeSelect, TextArea, TextInput, useServerAction } from "@/components/form";
@@ -36,8 +36,8 @@ export function RequestForm() {
               accept it. Opening that link confirms the email is yours; after you accept, you can create your password and log in.
             </span>
           </p>
-          <p className="text-xs text-muted-foreground">You can check the status anytime on the Customer portal with your Order ID.</p>
-          <LinkButton href={`/track?code=${encodeURIComponent(done.order_code)}`} variant="outline"><Search aria-hidden /> Track status</LinkButton>
+          <p className="text-xs text-muted-foreground">Keep the Order ID for reference when you talk to the shop. After you accept the quotation you can log in to follow this order.</p>
+          <LinkButton href="/customer/login" variant="outline"><KeyRound aria-hidden /> Customer login</LinkButton>
         </CardContent>
       </Card>
     );
@@ -83,7 +83,7 @@ export function RequestForm() {
           <Field label="Your name" htmlFor="customer_name" required error={err("customer_name")}>
             <TextInput id="customer_name" name="customer_name" autoComplete="name" invalid={!!err("customer_name")} />
           </Field>
-          <Field label="Email" htmlFor="customer_email" required error={err("customer_email")} hint="Your quotation and a secure review link are sent here.">
+          <Field label="Customer Email" htmlFor="customer_email" required error={err("customer_email")} hint="Your quotation and a secure review link are sent here.">
             <TextInput id="customer_email" name="customer_email" type="email" inputMode="email" autoComplete="email" placeholder="name@example.com" invalid={!!err("customer_email")} />
           </Field>
           <Field label="Mobile number" htmlFor="customer_phone" required error={err("customer_phone")} hint="09XX XXX XXXX">

@@ -32,7 +32,7 @@ import { PreviewPanel } from "@/components/orders/preview-panel";
 import { describeDiff, formatDims, type FurnitureSpec, type SpecDiff } from "@/lib/domain/furniture";
 import { isCustomerProposal } from "@/lib/services/exceptions";
 import { blockingItems, isQuoteExpired, quoteValidityDays } from "@/lib/domain/gate";
-import type { Order, SpecRevision } from "@/lib/domain/types";
+import { CONFIRMATION_METHOD_LABEL, type Order, type SpecRevision } from "@/lib/domain/types";
 
 const REVISION_LABEL: Record<SpecRevision["revision_type"], string> = {
   staff_draft: "Shop quotation",
@@ -168,7 +168,7 @@ export default async function OrderDetailPage({ params }: PageProps<"/staff/orde
               </dl>
               <p className="mt-3 text-sm">
                 {o.specs_confirmed
-                  ? <>✅ Revision {o.approved_revision_number} confirmed by customer{confirmations.at(-1) && <> · {confirmations.at(-1)!.confirmation_method} · {formatDateTime(confirmations.at(-1)!.confirmed_at)}</>}</>
+                  ? <>✅ Revision {o.approved_revision_number} confirmed by customer{confirmations.at(-1) && <> · {CONFIRMATION_METHOD_LABEL[confirmations.at(-1)!.confirmation_method]} · {formatDateTime(confirmations.at(-1)!.confirmed_at)}</>}</>
                   : <span className="font-semibold text-warning">⚠ Not yet confirmed — production is blocked.</span>}
               </p>
               <details className="mt-3 rounded-lg border p-3 text-sm" open={revisions.length > 1}>
@@ -206,7 +206,6 @@ export default async function OrderDetailPage({ params }: PageProps<"/staff/orde
                   : "— (recorded before emails were collected)"}
               </dd>
               {o.customer_email && <><dt className="text-muted-foreground">Account</dt><dd>{PROVISIONING_LABEL[o.provisioning_status]}</dd></>}
-              {o.pin_code_display && <><dt className="text-muted-foreground">Legacy PIN</dt><dd className="font-mono font-bold tracking-widest">{o.pin_code_display}</dd></>}
             </dl>
             {o.customer_email && (
               <div className="flex flex-wrap gap-2">

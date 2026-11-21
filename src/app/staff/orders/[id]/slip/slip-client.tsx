@@ -19,7 +19,7 @@ export function PrintButton() {
         variant="outline"
         size="touch"
         onClick={async () => {
-          const data = { title: document.title, url: window.location.origin + "/track" };
+          const data = { title: document.title, url: window.location.origin + "/customer/login" };
           if (navigator.share) await navigator.share(data).catch(() => undefined);
           else await navigator.clipboard?.writeText(data.url);
         }}
