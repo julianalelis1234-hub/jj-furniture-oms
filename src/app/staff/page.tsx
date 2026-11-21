@@ -10,6 +10,7 @@ import {
   ResolveRepairDialog,
   RetrySmsDialog,
   ScheduleDeliveryDialog,
+  StartProductionDialog,
   VerifyHandoverButton,
 } from "@/components/office/actions";
 import { TaskCard } from "@/components/office/order-card";
@@ -20,7 +21,9 @@ import { formatDate, formatDateTime } from "@/lib/domain/dates";
 import { formatPeso } from "@/lib/domain/finance";
 import { getStore, requireActor } from "@/lib/server/context";
 import { loadOfficeData, loadProposalSpecs, nameOf } from "@/lib/server/office-data";
-import { ReviewProposalControls } from "@/components/office/spec-dialogs";
+import { ReviewProposalControls, ReviseSpecsDialog } from "@/components/office/spec-dialogs";
+import { furniturePaidFrom } from "@/lib/domain/finance";
+import { quoteValidityDays } from "@/lib/domain/gate";
 import { staffTasks } from "@/lib/services/insights";
 import { SMS_SIMULATED_NOTE, smsMode } from "@/lib/services/notify";
 
@@ -33,8 +36,10 @@ export default async function StaffPage() {
   const proposalSpecs = await loadProposalSpecs(await getStore(), t.specProposals.map((e) => e.order_id));
   const byId = new Map(data.orders.map((o) => [o.id, toClientOrder(o)]));
   const drivers = data.profiles.filter((p) => p.role === "driver" && p.is_active);
+  const craftsmen = data.profiles.filter((p) => p.role === "craftsman" && p.is_active);
+  const validityDays = quoteValidityDays();
   const total =
-    t.specProposals.length + t.needsConfirmation.length + t.needsDownPayment.length + t.specQuestions.length + t.toSchedule.length +
+    t.quoteRequests.length + t.readyForProduction.length + t.specProposals.length + t.needsConfirmation.length + t.needsDownPayment.length + t.specQuestions.length + t.toSchedule.length +
     t.failedDeliveries.length + t.cashHandovers.length + t.touchUps.length + t.missingFields.length + t.failedSms.length;
 
   return (
@@ -56,6 +61,32 @@ export default async function StaffPage() {
 
         <TabsContent value="today">
           <div className="grid gap-x-6 lg:grid-cols-2">
+            <Section title="Customer quote requests (Option 2)" count={t.quoteRequests.length}>
+              {t.quoteRequests.length === 0 ? <EmptyState title="No new design requests from the portal" /> : (
+                <ul className="grid gap-2">
+                  {t.quoteRequests.map((o) => (
+                    <TaskCard key={o.id} order={byId.get(o.id)!} tone="info"
+                      meta={<>Designed by the customer · <span className="tabular-nums">{o.dimensions}</span> · {o.wood_type} · {o.color_finish} · {o.municipality} · {formatDateTime(o.created_at)}</>}
+                      actions={<><ReviseSpecsDialog order={byId.get(o.id)!} validityDays={validityDays} /><LinkButton href={`/staff/orders/${o.id}`}>Open</LinkButton></>} />
+                  ))}
+                </ul>
+              )}
+            </Section>
+
+            <Section title="Release to workshop (30% verified)" count={t.readyForProduction.length}>
+              {t.readyForProduction.length === 0 ? <EmptyState title="No confirmed order is ready for production yet" /> : (
+                <ul className="grid gap-2">
+                  {t.readyForProduction.map((o) => (
+                    <TaskCard key={o.id} order={byId.get(o.id)!} tone="info"
+                      meta={<>{o.payment_exception_approved && furniturePaidFrom(data.payments.filter((p) => p.order_id === o.id)) < o.standard_down_payment_due
+                        ? "Owner-approved payment exception"
+                        : <>30% verified: <b className="text-foreground tabular-nums">{formatPeso(furniturePaidFrom(data.payments.filter((p) => p.order_id === o.id)))}</b></>} · accepted revision {o.approved_revision_number}</>}
+                      actions={<StartProductionDialog order={byId.get(o.id)!} verifiedPaid={furniturePaidFrom(data.payments.filter((p) => p.order_id === o.id))} blocking={0} craftsmen={craftsmen} />} />
+                  ))}
+                </ul>
+              )}
+            </Section>
+
             {t.specProposals.length > 0 && (
               <Section title="Customer proposed specification changes" count={t.specProposals.length}>
                 <ul className="grid gap-2">
@@ -71,15 +102,15 @@ export default async function StaffPage() {
               </Section>
             )}
 
-            <Section title="Record customer spec confirmation" count={t.needsConfirmation.length}>
+            <Section title="Record customer acceptance (spec + quote)" count={t.needsConfirmation.length}>
               {t.needsConfirmation.length === 0 ? <EmptyState title="No orders waiting for confirmation" /> : (
                 <ul className="grid gap-2">
                   {t.needsConfirmation.map((o) => {
                     const c = byId.get(o.id)!;
                     const blocked = o.is_legacy_incomplete
                       ? "Legacy order: issue a revised quote with exact W × H × D first."
-                      : data.exceptions.some((e) => e.order_id === o.id && e.status === "Pending")
-                        ? "Open review item (e.g. owner approval) must be resolved before confirmation."
+                      : data.exceptions.some((e) => e.order_id === o.id && e.status === "Pending" && e.is_production_blocking)
+                        ? "An open specification item must be resolved before acceptance."
                         : null;
                     return (
                       <TaskCard key={o.id} order={c} tone="warning"

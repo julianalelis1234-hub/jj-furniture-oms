@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { DomainError } from "@/lib/domain/errors";
 import { computeFinancials, previewNewOrder, splitDeliveryCollection } from "@/lib/domain/finance";
 import { isValidTransition } from "@/lib/domain/status";
-import { ORDER_STATUSES, type OrderStatus, type Payment } from "@/lib/domain/types";
+import { ORDER_STATUSES, WORKSHOP_STAGES, type OrderStatus, type Payment } from "@/lib/domain/types";
 import { newOrderSchema } from "@/lib/domain/validation";
 import { logPayment } from "@/lib/services/payments";
 import {
@@ -11,14 +11,14 @@ import {
   moveInQueue,
   passInspection,
   productionQueue,
-  recordConfirmation,
   setPaymentTerms,
   setPriorityLabel,
+  startProduction,
   transitionOrder,
 } from "@/lib/services/orders";
 import { decideException, requestException } from "@/lib/services/exceptions";
 import { scheduleDelivery } from "@/lib/services/deliveries";
-import { actors, seededStore, validOrderInput } from "./helpers";
+import { actors, payDown, seededStore, staffAccept, validOrderInput } from "./helpers";
 
 const err = async (p: Promise<unknown>) => {
   try {
@@ -106,27 +106,28 @@ describe("2. the 7-stage status machine", () => {
   it("walks a new order through all 7 stages with the right roles", async () => {
     const store = await seededStore();
     const { order } = await createOrder(store, actors.staff, validOrderInput());
-    let o = await recordConfirmation(store, actors.staff, {
-      order_id: order.id, confirmation_method: "Signed Paper Slip", confirmed_by_name: "Juan Dela Cruz", revision_number: 1,
-    });
+    let o = await staffAccept(store, actors.staff, order.id);
     expect(o.approved_revision_number).toBe(1);
     expect(o.status).toBe("Confirmed");
     expect(o.order_code).toMatch(/^JJ-\d{4}-\d{4}$/);
-    o = await transitionOrder(store, actors.craftsman, o.id, "In Production");
-    expect(o.assigned_craftsman_id).toBe(actors.craftsman.id);
-    o = await transitionOrder(store, actors.craftsman, o.id, "Completed / For Inspection");
-    expect((await err(transitionOrder(store, actors.staff, o.id, "Ready for Delivery"))).code).toBe("OWNER_ONLY");
-    o = await passInspection(store, actors.owner, o.id);
-    expect(o.status).toBe("Ready for Delivery");
-    expect((await err(transitionOrder(store, actors.driver, o.id, "Out for Delivery"))).code).toBe("DOWN_PAYMENT_REQUIRED");
+    expect((await err(transitionOrder(store, actors.craftsman, o.id, "In Production"))).code).toBe("FORBIDDEN");
+    expect((await err(startProduction(store, actors.staff, o.id))).code).toBe("DOWN_PAYMENT_REQUIRED");
     await logPayment(store, actors.staff, {
       order_id: o.id, client_transaction_id: crypto.randomUUID(), payment_type: "Down Payment (30%)", amount: 3000, payment_method: "Cash",
     });
+    o = await startProduction(store, actors.staff, o.id, actors.craftsman.id);
+    expect(o.status).toBe("In Production");
+    expect(o.assigned_craftsman_id).toBe(actors.craftsman.id);
+    o = await transitionOrder(store, actors.craftsman, o.id, "Completed / For Inspection");
+    expect((await err(transitionOrder(store, actors.staff, o.id, "Ready for Delivery"))).code).toBe("OWNER_ONLY");
+    expect((await err(transitionOrder(store, actors.craftsman, o.id, "Ready for Delivery"))).code).toBe("OWNER_ONLY");
+    o = await passInspection(store, actors.owner, o.id);
+    expect(o.status).toBe("Ready for Delivery");
     o = await transitionOrder(store, actors.staff, o.id, "Out for Delivery");
     o = await transitionOrder(store, actors.staff, o.id, "Delivered");
     expect(o.status).toBe("Delivered");
     const history = await store.listHistory(o.id);
-    expect(new Set(history.map((h) => h.to_status))).toEqual(new Set(ORDER_STATUSES));
+    expect(new Set(history.map((h) => h.to_status))).toEqual(new Set(WORKSHOP_STAGES));
   });
 
   it("blocks In Production while specs_confirmed is false (hard gate)", async () => {
@@ -218,16 +219,25 @@ describe("owner approvals, priority and the exception gate", () => {
     await decideException(store, actors.owner, ex.id, "Approved");
     expect((await store.getOrder(o.id))!.payment_exception_approved).toBe(true);
   });
-  it("scheduling dispatch with < 30% down payment raises an owner approval", async () => {
+  it("an installment order still needs the verified 30% (or the owner's approval) before production", async () => {
     const store = await seededStore();
-    const o = (await store.getOrderByCode("JJ-2026-0140"))!; // installment pending, only ₱3,000 paid
+    const { order } = await createOrder(store, actors.staff, validOrderInput({ payment_exception_type: "Installment" }));
+    const approval = (await store.listExceptions(order.id)).find((e) => e.category === "Installment Approval")!;
+    expect(approval.is_production_blocking).toBe(false); // the payment gate covers it
+    await staffAccept(store, actors.staff, order.id);
+    expect((await err(startProduction(store, actors.staff, order.id))).code).toBe("DOWN_PAYMENT_REQUIRED");
+    await decideException(store, actors.owner, approval.id, "Approved");
+    const started = await startProduction(store, actors.owner, order.id);
+    expect(started.status).toBe("In Production"); // audited owner exception instead of 30%
+  });
+  it("scheduling a seeded installment order keeps one pending approval (no duplicates)", async () => {
+    const store = await seededStore();
+    const o = (await store.getOrderByCode("JJ-2026-0140"))!;
     const before = (await store.listExceptions(o.id)).filter((e) => e.status === "Pending").length;
     await scheduleDelivery(store, actors.staff, {
       order_id: o.id, driver_id: actors.driver.id, vehicle_type: "Multicab", scheduled_date: "2026-12-01", time_window: "9:00 AM - 11:00 AM",
     });
-    // existing pending installment approval covers it — no duplicate
     expect((await store.listExceptions(o.id)).filter((e) => e.status === "Pending").length).toBe(before);
-    expect((await err(transitionOrder(store, actors.driver, o.id, "Out for Delivery"))).code).toBe("DOWN_PAYMENT_REQUIRED");
   });
   it("spec questions are answered into the order instructions", async () => {
     const store = await seededStore();

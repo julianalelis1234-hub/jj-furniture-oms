@@ -17,7 +17,7 @@ import { createUserClient } from "@/lib/server/supabase";
 import { signToken } from "@/lib/server/token";
 import { isHttpsRequest } from "@/lib/server/request";
 import { CUSTOMER_COOKIE, getVerifiedCustomerOrderId } from "@/lib/server/customer-session";
-import { customerConfirmSpecs, customerProposeChanges, customerRequestRepair, trackOrder } from "@/lib/services/customer";
+import { createCustomerRequest, customerAcceptQuote, customerProposeChanges, customerRequestRepair, trackOrder } from "@/lib/services/customer";
 import { scheduleDelivery } from "@/lib/services/deliveries";
 import { decideException, requestException, reviewCustomerProposal } from "@/lib/services/exceptions";
 import { retryNotification, SMS_SIMULATED_NOTE, smsMode } from "@/lib/services/notify";
@@ -31,7 +31,9 @@ import {
   reviseSpecs,
   setPaymentTerms,
   setPriorityLabel,
+  startProduction,
   transitionOrder,
+  type AcceptanceInput,
 } from "@/lib/services/orders";
 import { logPayment, verifyCashHandover } from "@/lib/services/payments";
 
@@ -115,12 +117,22 @@ export async function createOrderAction(_: unknown, fd: FormData): Promise<Actio
   }, "Order saved. Print the confirmation slip for the customer.");
 }
 
-export async function recordConfirmationAction(input: { order_id: string; confirmation_method: ConfirmationMethod; confirmed_by_name: string; revision_number: number }) {
-  return run(["owner", "staff"], async (a) => { await recordConfirmation(await getStore(), a, input); }, `Specification revision ${input.revision_number} confirmed. The order can now enter production.`);
+/** Staff record an in-store / Messenger acceptance of the exact revision + quotation shown. */
+export async function recordConfirmationAction(input: AcceptanceInput & { confirmation_method: ConfirmationMethod }) {
+  return run(["owner", "staff"], async (a) => { await recordConfirmation(await getStore(), a, input); },
+    `Specification + quotation of revision ${input.revision_number} accepted. Production starts once the 30% down payment is verified.`);
 }
 
+/** Issues a quotation (first quote for a customer request, or a revised quote). */
 export async function reviseSpecsAction(orderId: string, expectedRevision: number | null, fd: FormData) {
-  return run(["owner", "staff"], async (a) => { await reviseSpecs(await getStore(), a, orderId, Object.fromEntries(fd), expectedRevision); }, "Revised quote saved as a new revision. The customer must confirm it.");
+  return run(["owner", "staff"], async (a) => { await reviseSpecs(await getStore(), a, orderId, Object.fromEntries(fd), expectedRevision); },
+    "Quotation saved as a new revision. The customer must accept it before it expires.");
+}
+
+/** Confirmed -> In Production after the server-side 30% / approval / drift / blocking checks. */
+export async function startProductionAction(orderId: string, craftsmanId: string | null) {
+  return run(["owner", "staff"], async (a) => { await startProduction(await getStore(), a, orderId, craftsmanId || null); },
+    "Released to the workshop. The specification is now locked for production.");
 }
 
 export async function reviewProposalAction(exceptionId: string, decision: "quote" | "decline", fd: FormData) {
@@ -227,12 +239,32 @@ export async function customerLookupAction(_: unknown, fd: FormData) {
   }
 }
 
-/** Scenario 1: the customer confirms the exact revision shown on their screen. */
-export async function customerConfirmAction(revisionNumber: number) {
+/** Scenario 1: [Accept Quote & Confirm Specifications] for the exact revision + quotation shown. */
+export async function customerAcceptAction(input: {
+  revision_id: string;
+  expected_revision_number: number;
+  accepted_furniture_price: number;
+  accepted_delivery_fee: number;
+  client_idempotency_key: string;
+  accept_specification: boolean;
+  accept_quotation: boolean;
+}) {
   const oid = await getVerifiedCustomerOrderId();
   if (!oid) return { ok: false as const, message: "Your session expired. Enter your Order ID and PIN again." };
-  if (!Number.isInteger(revisionNumber)) return { ok: false as const, message: "Reload the page and try again." };
-  return run(null, async () => { await customerConfirmSpecs(await getPublicStore(), oid, revisionNumber); }, "Thank you! Your specifications are confirmed.");
+  if (!Number.isInteger(input.expected_revision_number)) return { ok: false as const, message: "Reload the page and try again." };
+  return run(null, async () => { await customerAcceptQuote(await getPublicStore(), oid, input); },
+    "Thank you! You accepted the specifications and the quotation. Production starts once your 30% down payment is verified.");
+}
+
+/** Option 2: Design & Request Custom Furniture — creates a Quote Requested order and signs the customer in to it. */
+export async function customerRequestAction(_: unknown, fd: FormData): Promise<ActionResult<{ order_code: string; pin: string }>> {
+  return run(null, async () => {
+    const { order, pin } = await createCustomerRequest(await getPublicStore(), Object.fromEntries(fd));
+    (await cookies()).set(CUSTOMER_COOKIE, signToken({ oid: order.id }, 60 * 60), {
+      httpOnly: true, sameSite: "lax", secure: await isHttpsRequest(), path: "/track", maxAge: 60 * 60,
+    });
+    return { order_code: order.order_code, pin };
+  }, "Request sent. Save your Order ID and PIN.");
 }
 
 /** Scenario 2: the customer proposes changes (saved for the shop's review; nothing is unlocked). */

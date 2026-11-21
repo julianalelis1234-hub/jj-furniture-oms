@@ -22,7 +22,7 @@ export function OrdersTable({ orders }: { orders: ClientOrder[] }) {
         (status === "all" || o.status === status) &&
         (place === "all" || o.municipality === place) &&
         (!needle ||
-          [o.order_code, o.paper_slip_number, o.customer_name, o.customer_phone, o.item_name].some((f) => f.toLowerCase().includes(needle))),
+          [o.order_code, o.paper_slip_number, o.customer_name, o.customer_phone, o.item_name].some((f) => (f ?? "").toLowerCase().includes(needle))),
     );
   }, [orders, q, status, place]);
 
@@ -49,7 +49,7 @@ export function OrdersTable({ orders }: { orders: ClientOrder[] }) {
               <Link href={`/staff/orders/${o.id}`} className="block rounded-xl border bg-card p-3 hover:border-primary focus-visible:ring-3 focus-visible:ring-ring/40 focus-visible:outline-none">
                 <div className="flex items-start gap-2">
                   <div className="min-w-0 flex-1">
-                    <p className="font-bold">{o.order_code} <span className="text-xs font-normal text-muted-foreground">Slip #{o.paper_slip_number}</span></p>
+                    <p className="font-bold">{o.order_code} <span className="text-xs font-normal text-muted-foreground">{o.paper_slip_number ? `Slip #${o.paper_slip_number}` : "Portal request"}</span></p>
                     <p className="truncate text-sm">{o.customer_name} · {o.municipality}</p>
                     <p className="truncate text-sm text-muted-foreground">{o.quantity} × {o.item_name}</p>
                   </div>

@@ -10,9 +10,9 @@ import {
   saveManifest,
 } from "@/lib/offline/driver-db";
 import { applyDriverAction, driverManifest, type DriverAction } from "@/lib/services/deliveries";
-import { customerConfirmSpecs, customerOrderView, trackOrder } from "@/lib/services/customer";
+import { customerOrderView, trackOrder } from "@/lib/services/customer";
 import { editOrderDetails } from "@/lib/services/orders";
-import { actors, seededStore } from "./helpers";
+import { actors, customerAccept, seededStore } from "./helpers";
 
 describe("3. customer authentication & privacy", () => {
   it("Order-ID-only lookup strips phone, address and money", async () => {
@@ -43,7 +43,7 @@ describe("3. customer authentication & privacy", () => {
   it("customers confirm specs from the portal (gate opens)", async () => {
     const store = await seededStore();
     const o = (await store.getOrderByCode("DR-0148"))!;
-    const confirmed = await customerConfirmSpecs(store, o.id, o.current_revision!);
+    const confirmed = await customerAccept(store, o.id);
     expect(confirmed.status).toBe("Confirmed");
     expect(confirmed.order_code).toBe(`JJ-${new Date().getFullYear()}-0148`);
     const [c] = await store.listConfirmations(o.id);

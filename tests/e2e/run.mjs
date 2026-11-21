@@ -59,7 +59,7 @@ let newOrderCode = "";
 await step("staff: Today's Work lists task queues", async () => {
   const { page, ctx } = await asPersona("Gilbert Decena", desktop);
   expect(page.url().endsWith("/staff"), `expected /staff, got ${page.url()}`);
-  for (const h of ["Record customer spec confirmation", "Log 30% down payment", "Verify driver cash handover", "Failed SMS updates"])
+  for (const h of ["Customer quote requests (Option 2)", "Release to workshop (30% verified)", "Record customer acceptance (spec + quote)", "Log 30% down payment", "Verify driver cash handover", "Failed SMS updates"])
     expect(await page.getByRole("heading", { name: h }).isVisible(), `missing section ${h}`);
   await page.screenshot({ path: `${SHOTS}/staff-desktop.png`, fullPage: true });
   await ctx.close();
@@ -103,15 +103,28 @@ await step("staff: new order form validates then saves a DR draft with PIN slip"
   await noHorizontalScroll(page, "staff-slip-mobile");
   await page.screenshot({ path: `${SHOTS}/staff-slip-mobile.png`, fullPage: true });
 
-  // record confirmation from the order page → JJ code + Confirmed
+  // record acceptance (spec + quote) from the order page → JJ code + Confirmed
   await page.getByRole("link", { name: "Back to order" }).click();
-  await page.getByRole("button", { name: "Record confirmation" }).click();
-  await page.getByRole("button", { name: "Confirm specifications" }).click();
-  await page.getByText(/Specification revision \d+ confirmed/).first().waitFor();
+  await page.getByRole("button", { name: "Record acceptance" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Record acceptance" }).click();
+  await page.getByText(/Specification \+ quotation of revision \d+ accepted/).first().waitFor();
   await page.waitForLoadState("networkidle");
   const title = await page.locator("h1").innerText();
   expect(/^JJ-\d{4}-0149$/.test(title.trim()), `promoted code expected, got ${title}`);
   newOrderCode = title.trim();
+
+  // Confirmed is not authorization to cut wood: the release is refused until 30% is verified
+  await page.getByRole("button", { name: "Release to workshop" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Start production" }).click();
+  await page.getByText(/verified 30% down payment .* is required before production/).first().waitFor();
+  await page.keyboard.press("Escape");
+  await page.getByRole("button", { name: "Log payment" }).first().click();
+  await page.getByRole("dialog").getByRole("button", { name: "Save payment" }).click();
+  await page.getByText("Payment recorded.").first().waitFor();
+  await page.getByRole("button", { name: "Release to workshop" }).click();
+  expect((await page.getByRole("dialog").innerText()).includes("30% verified ✓"), "release dialog shows the verified gate");
+  await page.getByRole("dialog").getByRole("button", { name: "Start production" }).click();
+  await page.getByText("Released to the workshop.").first().waitFor();
   await ctx.close();
 });
 
@@ -141,7 +154,7 @@ await step("owner: KPIs, approve installment, pass inspection, reprioritise", as
 });
 
 // ------------------------------------------------------------ craftsman --
-await step("craftsman: no money on screen; start work moves job to In Progress", async () => {
+await step("craftsman: no money on screen; cannot start production; finishes a released job", async () => {
   const { page, ctx } = await asPersona("Nolito Remulta");
   expect(page.url().endsWith("/craftsman"), "craftsman portal");
   const html = await page.content();
@@ -149,12 +162,16 @@ await step("craftsman: no money on screen; start work moves job to In Progress",
   await noHorizontalScroll(page, "craftsman-mobile");
   await page.screenshot({ path: `${SHOTS}/craftsman-mobile.png`, fullPage: true });
   expect(newOrderCode, "depends on the new-order step");
-  const card = page.locator("li", { hasText: newOrderCode }).first();
-  await card.getByRole("button", { name: "Start Work" }).click();
-  await page.getByRole("button", { name: "Yes, start now" }).click();
-  await page.getByText("Moved to “In Production”").waitFor();
+  // craftsmen cannot start production: Confirmed jobs are "Up next" with no start button
+  expect((await page.getByTestId("awaiting-release").count()) > 0, "Up next jobs show the awaiting-release note");
+  expect((await page.getByRole("button", { name: "Start Work" }).count()) === 0, "no Start Work button for craftsmen");
+  // the job released by the office is in progress; the craftsman finishes the build
   await page.getByRole("tab", { name: /In Progress/ }).click();
-  expect(await page.locator("li", { hasText: newOrderCode }).isVisible(), "job should appear in In Progress");
+  const card = page.locator("li", { hasText: newOrderCode }).first();
+  await card.getByRole("button", { name: "Mark Ready for Owner Inspection" }).click();
+  for (const box of await page.getByRole("dialog").getByRole("checkbox").all()) await box.check();
+  await page.getByRole("dialog").getByRole("button", { name: "Send to owner" }).click();
+  await page.getByText("Moved to “Completed / For Inspection”").waitFor();
   await ctx.close();
 });
 
@@ -194,7 +211,7 @@ await step("staff: driver cash appears as a handover to verify", async () => {
 });
 
 // ------------------------------------------------------------- customer --
-await step("customer: Order ID only hides money; PIN unlocks full view and confirm", async () => {
+await step("customer: Order ID only hides money; PIN unlocks full view; accept quote + spec (both boxes)", async () => {
   const ctx = await browser.newContext({ ...mobile, baseURL: BASE });
   const page = await ctx.newPage();
   await page.goto("/track");
@@ -218,9 +235,15 @@ await step("customer: Order ID only hides money; PIN unlocks full view and confi
   await page.goto("/track");
   await page.getByRole("button", { name: /DR-0148/ }).click();
   await page.waitForURL(/\/track\/order/);
-  await page.getByRole("button", { name: "Confirm Specifications" }).click();
-  await page.getByRole("button", { name: "Yes, these are correct" }).click();
-  await page.getByText("Thank you! Your specifications are confirmed.").waitFor();
+  await page.getByTestId("quote-validity").waitFor();
+  await page.getByRole("button", { name: "Accept Quote & Confirm Specifications" }).click();
+  // both acceptances are required
+  await page.getByTestId("accept-specification").check();
+  await page.getByRole("dialog").getByRole("button", { name: "Accept quote & confirm" }).click();
+  expect(await page.getByRole("dialog").isVisible(), "dialog stays open until the quotation box is ticked");
+  await page.getByTestId("accept-quotation").check();
+  await page.getByRole("dialog").getByRole("button", { name: "Accept quote & confirm" }).click();
+  await page.getByText(/You accepted the specifications and the quotation/).first().waitFor();
   await ctx.close();
 });
 
@@ -245,7 +268,7 @@ await step("customer: propose spec changes → staff revised quote → customer 
   await page.screenshot({ path: `${SHOTS}/customer-proposal-mobile.png`, fullPage: false });
   await page.getByRole("button", { name: "Submit Specification Changes for Review" }).click();
   await page.getByText(/sent to JJ Furniture for review/).first().waitFor();
-  expect(!(await page.getByRole("button", { name: "Confirm Specifications" }).isVisible()), "cannot self-confirm own proposal");
+  expect(!(await page.getByRole("button", { name: "Accept Quote & Confirm Specifications" }).isVisible()), "cannot accept own proposal");
 
   // staff sees the proposal with the exact diff and sends a revised quote
   const staff = await asPersona("Gilbert Decena", desktop);
@@ -260,13 +283,71 @@ await step("customer: propose spec changes → staff revised quote → customer 
   await staff.page.screenshot({ path: `${SHOTS}/staff-after-proposal-desktop.png`, fullPage: false });
   await staff.ctx.close();
 
-  // customer confirms the new revision (3)
+  // customer accepts the new revision (3)
   await page.reload();
-  await page.getByRole("button", { name: "Confirm Specifications" }).click();
-  await page.getByText("Confirm revision 3?").waitFor();
+  await page.getByRole("button", { name: "Accept Quote & Confirm Specifications" }).click();
+  await page.getByText("Accept revision 3?").waitFor();
   expect((await page.getByRole("dialog").innerText()).includes("₱14,500"), "dialog shows revised price");
-  await page.getByRole("button", { name: "Yes, these are correct" }).click();
-  await page.getByText("Thank you! Your specifications are confirmed.").waitFor();
+  await page.getByTestId("accept-specification").check();
+  await page.getByTestId("accept-quotation").check();
+  await page.getByRole("dialog").getByRole("button", { name: "Accept quote & confirm" }).click();
+  await page.getByText(/You accepted the specifications and the quotation/).first().waitFor();
+  await ctx.close();
+});
+
+await step("Option 2: customer designs & requests → staff quotation → customer accepts → 30% gate", async () => {
+  const ctx = await browser.newContext({ ...mobile, baseURL: BASE });
+  const page = await ctx.newPage();
+  await page.goto("/track");
+  await noHorizontalScroll(page, "customer-portal-options-mobile");
+  await page.screenshot({ path: `${SHOTS}/customer-portal-options-mobile.png`, fullPage: true });
+  await page.getByTestId("option-2").click();
+  await page.waitForURL(/\/track\/request/);
+  await page.getByTestId("cat-Kitchen / Wall Cabinet").click();
+  await page.getByRole("radio", { name: "3-Door Base Counter" }).check({ force: true });
+  await page.getByRole("button", { name: "150 × 85 × 55 cm" }).click();
+  await page.getByTestId("wood-Mahogany").click();
+  await page.getByTestId("finish-Walnut Stain").click();
+  await page.getByRole("button", { name: "Send request for quotation" }).click();
+  await page.getByText("Your name is required.").first().waitFor();
+  await page.fill("#customer_name", "Teodora Bacus");
+  await page.fill("#customer_phone", "0900 000 0601");
+  await page.selectOption("#municipality", "Lantapan");
+  await page.fill("#delivery_address", "Purok 2, Brgy. Songco, near the health center");
+  await noHorizontalScroll(page, "customer-request-mobile");
+  await page.getByRole("button", { name: "Send request for quotation" }).click();
+  await page.getByTestId("request-done").waitFor();
+  const reqCode = (await page.getByTestId("request-code").innerText()).trim();
+  expect(/^DR-\d{4}$/.test(reqCode), `request code expected, got ${reqCode}`);
+  expect(/^\d{4}$/.test((await page.getByTestId("request-pin").innerText()).trim()), "PIN shown once");
+  await page.screenshot({ path: `${SHOTS}/customer-request-done-mobile.png`, fullPage: false });
+  await page.getByRole("link", { name: "View my request" }).click();
+  await page.waitForURL(/\/track\/order/);
+  await page.getByTestId("quote-requested-banner").waitFor();
+  await page.getByTestId("payment-pending").waitFor();
+  expect((await page.getByRole("button", { name: "Accept Quote & Confirm Specifications" }).count()) === 0, "nothing to accept before the quotation");
+
+  // staff issue the official quotation from the Option 2 queue
+  const staff = await asPersona("Gilbert Decena", desktop);
+  const reqCard = staff.page.locator("li", { hasText: reqCode }).first();
+  await reqCard.getByRole("button", { name: "Issue quotation" }).click();
+  await staff.page.fill("#q-price", "26000");
+  await staff.page.fill("#q-fee", "800");
+  await staff.page.fill("#q-slip", "0161");
+  await staff.page.getByRole("button", { name: "Send quotation" }).click();
+  await staff.page.getByText("Quotation saved as a new revision.").first().waitFor();
+  await staff.ctx.close();
+
+  // the customer accepts the quotation (valid 7 days)
+  await page.reload();
+  await page.getByTestId("quote-validity").waitFor();
+  await page.getByRole("button", { name: "Accept Quote & Confirm Specifications" }).click();
+  expect((await page.getByRole("dialog").innerText()).includes("₱26,800"), "total = price + delivery fee");
+  await page.getByTestId("accept-specification").check();
+  await page.getByTestId("accept-quotation").check();
+  await page.getByRole("dialog").getByRole("button", { name: "Accept quote & confirm" }).click();
+  await page.getByText(/You accepted the specifications and the quotation/).first().waitFor();
+  await noHorizontalScroll(page, "customer-request-accepted-mobile");
   await ctx.close();
 });
 

@@ -4,8 +4,9 @@ import { ORDER_STATUSES } from "./types";
 import { furniturePaidFrom } from "./finance";
 import type { Payment } from "./types";
 
-/** Mirrors private.is_valid_transition() in 001_init.sql. */
+/** Mirrors private.is_valid_transition() (migration 004b). */
 export const TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
+  "Quote Requested": ["Waiting for Confirmation"], // official quotation issued
   "Waiting for Confirmation": ["Confirmed"],
   Confirmed: ["In Production", "Waiting for Confirmation"],
   "In Production": ["Completed / For Inspection"],
@@ -19,15 +20,20 @@ export function isValidTransition(from: OrderStatus, to: OrderStatus): boolean {
   return from === to || TRANSITIONS[from].includes(to);
 }
 
+/** 0 = Quote Requested (pre-production), 1..7 = the seven workshop & delivery stages. */
 export function stageIndex(status: OrderStatus): number {
   return ORDER_STATUSES.indexOf(status);
 }
 
-/** Which roles may request a given transition (application-level authorization). */
+/**
+ * Which roles may request a given transition (application-level authorization;
+ * mirrors private.role_may_transition()). Craftsmen may only finish a build.
+ */
 export function rolesAllowedFor(from: OrderStatus, to: OrderStatus): Role[] {
+  if (from === "Quote Requested" && to === "Waiting for Confirmation") return ["owner", "staff"];
   if (from === "Waiting for Confirmation" && to === "Confirmed") return ["owner", "staff"];
   if (from === "Confirmed" && to === "Waiting for Confirmation") return ["owner", "staff"];
-  if (from === "Confirmed" && to === "In Production") return ["owner", "staff", "craftsman"];
+  if (from === "Confirmed" && to === "In Production") return ["owner", "staff"]; // the 30% gate release
   if (from === "In Production" && to === "Completed / For Inspection") return ["owner", "staff", "craftsman"];
   if (from === "Completed / For Inspection") return ["owner"]; // inspection pass / fail
   if (from === "Ready for Delivery" && to === "Out for Delivery") return ["owner", "staff", "driver"];
@@ -54,6 +60,7 @@ export function assertTransition(
       "The customer must confirm the specifications before production can start.",
     );
   }
+  assertDownPaymentGate(order, to, payments);
   if (to === "Out for Delivery") {
     const paid = furniturePaidFrom(payments.filter((p) => p.order_id === order.id));
     if (paid < order.standard_down_payment_due && !order.payment_exception_approved) {
@@ -65,7 +72,28 @@ export function assertTransition(
   }
 }
 
+/**
+ * The wood-cutting gate: Confirmed -> In Production needs verified furniture
+ * payments (server-summed, centavo-rounded) of at least 30% of the price, or an
+ * owner-approved credit / installment exception. Same check as the DB trigger.
+ */
+export function assertDownPaymentGate(
+  order: Pick<Order, "status" | "standard_down_payment_due" | "payment_exception_approved" | "id">,
+  to: OrderStatus,
+  payments: Payment[],
+): void {
+  if (!(order.status === "Confirmed" && to === "In Production")) return;
+  const verified = furniturePaidFrom(payments.filter((p) => p.order_id === order.id));
+  if (verified < order.standard_down_payment_due && !order.payment_exception_approved) {
+    throw new DomainError(
+      "DOWN_PAYMENT_REQUIRED",
+      `A verified 30% down payment (₱${order.standard_down_payment_due.toLocaleString("en-PH")}) is required before production. Verified so far: ₱${verified.toLocaleString("en-PH")}.`,
+    );
+  }
+}
+
 export const STATUS_SHORT: Record<OrderStatus, string> = {
+  "Quote Requested": "Quote Requested",
   "Waiting for Confirmation": "Waiting",
   Confirmed: "Confirmed",
   "In Production": "In Production",
@@ -76,8 +104,9 @@ export const STATUS_SHORT: Record<OrderStatus, string> = {
 };
 
 export const STATUS_CUSTOMER_COPY: Record<OrderStatus, string> = {
-  "Waiting for Confirmation": "We are waiting for you to confirm the size, wood, color and price.",
-  Confirmed: "Your specifications are confirmed. Your order is in the workshop queue.",
+  "Quote Requested": "We received your design. The shop will check it and send you an official quotation.",
+  "Waiting for Confirmation": "We are waiting for you to accept the specifications and the quotation.",
+  Confirmed: "Your order is confirmed. Production starts once your 30% down payment is verified.",
   "In Production": "Our craftsmen are building your furniture.",
   "Completed / For Inspection": "Building is done. The owner is checking the quality.",
   "Ready for Delivery": "Your furniture passed inspection and is ready for delivery.",

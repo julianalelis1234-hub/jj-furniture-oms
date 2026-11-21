@@ -47,6 +47,7 @@ export async function scheduleDelivery(store: DataStore, actor: Actor, raw: unkn
         description: `Scheduled for dispatch with ${formatPeso(shortfall)} of the 30% down payment unpaid. Owner approval needed before the trip.`,
         requested_by: actor.full_name,
         status: "Pending",
+        is_production_blocking: false,
         resolved_by_id: null,
         created_at: new Date().toISOString(),
         resolved_at: null,
@@ -178,7 +179,7 @@ export async function applyDriverAction(store: DataStore, actor: Actor, action: 
         await store.elevated().insertException({
           order_id: order.id, category: "Credit / Unpaid Balance",
           description: `Delivered with ${formatPeso(shortBy)} not collected (collected ${formatPeso(amount)} of ${formatPeso(order.collectible_on_delivery)}). ${action.notes ?? ""}`.trim(),
-          requested_by: actor.full_name, status: "Pending", resolved_by_id: null, created_at: new Date().toISOString(), resolved_at: null,
+          requested_by: actor.full_name, status: "Pending", is_production_blocking: false, resolved_by_id: null, created_at: new Date().toISOString(), resolved_at: null,
         });
       }
     }
@@ -211,7 +212,8 @@ async function failAssignment(store: DataStore, actor: Actor, delivery: Delivery
     await store.insertException({
       order_id: order.id, category: "On-Site Scratch Touch-Up / Repair",
       description: action.notes?.trim() || "Touch-up needed after failed delivery", requested_by: actor.full_name,
-      status: "Pending", resolved_by_id: null, created_at: new Date().toISOString(), resolved_at: null,
+      status: "Pending",
+      is_production_blocking: false, resolved_by_id: null, created_at: new Date().toISOString(), resolved_at: null,
     });
   }
 }
@@ -234,7 +236,7 @@ export async function driverManifest(store: DataStore, actor: Actor) {
           collectible_on_delivery: o.collectible_on_delivery, delivery_fee: o.delivery_fee,
           remaining_furniture_balance: o.remaining_furniture_balance, payment_exception_type: o.payment_exception_type,
           payment_exception_approved: o.payment_exception_approved, special_instructions: o.special_instructions,
-          down_payment_ok: o.payment_exception_approved || o.furniture_price - o.remaining_furniture_balance >= o.standard_down_payment_due,
+          down_payment_ok: o.payment_exception_approved || (o.furniture_price ?? 0) - o.remaining_furniture_balance >= o.standard_down_payment_due,
         },
       };
     })

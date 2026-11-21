@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import {
   ArrowDown,
   ArrowUp,
@@ -8,6 +9,7 @@ import {
   CheckCircle2,
   ClipboardCheck,
   HandCoins,
+  Hammer,
   MessageSquareReply,
   Pencil,
   RefreshCw,
@@ -27,6 +29,7 @@ import {
   scheduleDeliveryAction,
   setPaymentTermsAction,
   setPriorityAction,
+  startProductionAction,
   verifyHandoverAction,
 } from "@/app/actions";
 import { ActionButton, ActionDialog } from "@/components/action-dialog";
@@ -56,20 +59,25 @@ import { newUuid } from "@/lib/uuid";
 const s = (fd: FormData, k: string) => String(fd.get(k) ?? "");
 
 export function ConfirmSpecsDialog({ order }: { order: ClientOrder }) {
+  // one idempotency key per dialog: a double tap or a retry can never record two acceptances
+  const [key] = useState(() => newUuid());
   return (
     <ActionDialog
-      trigger="Record confirmation"
+      trigger="Record acceptance"
       icon={<ClipboardCheck aria-hidden />}
-      title={`Customer confirmed ${order.order_code} · revision ${order.current_revision}?`}
-      description="Only record this after the customer agreed to this exact revision (specs and price below). If the specification changed since, the system rejects the confirmation."
-      submitLabel="Confirm specifications"
+      title={`Customer accepted ${order.order_code} · revision ${order.current_revision}?`}
+      description="Record this only after the customer accepted this exact specification AND quotation (below). Stale revisions, expired quotations and changed amounts are rejected by the server."
+      submitLabel="Record acceptance"
       submitVariant="success"
       action={(fd) =>
         recordConfirmationAction({
           order_id: order.id,
-          revision_number: order.current_revision ?? 0,
+          revision_number: order.current_revision,
           confirmation_method: s(fd, "confirmation_method") as ConfirmationMethod,
           confirmed_by_name: s(fd, "confirmed_by_name"),
+          accepted_furniture_price: order.furniture_price ?? 0,
+          accepted_delivery_fee: order.delivery_fee,
+          client_idempotency_key: key,
         })
       }
     >
@@ -79,9 +87,10 @@ export function ConfirmSpecsDialog({ order }: { order: ClientOrder }) {
         <dt className="text-muted-foreground">Size</dt><dd className="font-medium tabular-nums">{order.dimensions}</dd>
         <dt className="text-muted-foreground">Wood</dt><dd className="font-medium">{order.wood_type}</dd>
         <dt className="text-muted-foreground">Finish</dt><dd className="font-medium">{order.color_finish}</dd>
-        <dt className="text-muted-foreground">Price</dt><dd className="font-bold">{formatPeso(order.furniture_price)}</dd>
+        <dt className="text-muted-foreground">Price</dt><dd className="font-bold tabular-nums">{formatPeso(order.furniture_price)}</dd>
+        <dt className="text-muted-foreground">Delivery</dt><dd className="tabular-nums">{order.delivery_fee === 0 ? "FREE" : formatPeso(order.delivery_fee)}</dd>
       </dl>
-      <Field label="How did the customer confirm?" htmlFor="confirmation_method" required>
+      <Field label="How did the customer accept?" htmlFor="confirmation_method" required>
         <NativeSelect id="confirmation_method" name="confirmation_method" defaultValue="Signed Paper Slip"
           options={CONFIRMATION_METHODS.filter((m) => m !== "Customer Portal PIN")} />
       </Field>
@@ -262,7 +271,7 @@ export function EditDetailsDialog({ order }: { order: ClientOrder }) {
             <TextInput id="reference_photo_url" name="reference_photo_url" type="url" defaultValue={order.reference_photo_url ?? ""} placeholder="https://…" />
           </Field>
           <Field label="Estimated completion" htmlFor="estimated_completion_date" required>
-            <TextInput id="estimated_completion_date" name="estimated_completion_date" type="date" defaultValue={order.estimated_completion_date} required />
+            <TextInput id="estimated_completion_date" name="estimated_completion_date" type="date" defaultValue={order.estimated_completion_date ?? ""} required />
           </Field>
           <Field label="Scheduled delivery" htmlFor="scheduled_delivery_date">
             <TextInput id="scheduled_delivery_date" name="scheduled_delivery_date" type="date" defaultValue={order.scheduled_delivery_date ?? ""} />
@@ -338,5 +347,50 @@ export function PriorityControls({ order, first, last }: { order: ClientOrder; f
         </button>
       ))}
     </div>
+  );
+}
+
+/**
+ * Confirmed -> In Production. Shows the 30% gate (verified, server-summed) and
+ * the open blocking items; the server re-checks everything on submit.
+ */
+export function StartProductionDialog({
+  order,
+  verifiedPaid,
+  craftsmen,
+  blocking,
+}: {
+  order: ClientOrder;
+  verifiedPaid: number;
+  craftsmen: Pick<Profile, "id" | "full_name">[];
+  blocking: number;
+}) {
+  const due = order.standard_down_payment_due;
+  const ok = verifiedPaid >= due || order.payment_exception_approved;
+  return (
+    <ActionDialog
+      trigger="Release to workshop"
+      icon={<Hammer aria-hidden />}
+      variant={ok && blocking === 0 ? "default" : "outline"}
+      title={`Start production · ${order.order_code}`}
+      description="Wood cutting starts only after a verified 30% down payment (or an owner-approved credit / installment exception). The specification then locks for the workshop."
+      submitLabel="Start production"
+      submitVariant="success"
+      action={(fd) => startProductionAction(order.id, s(fd, "assigned_craftsman_id") || null)}
+    >
+      <dl className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-1 rounded-lg border bg-muted p-3 text-sm">
+        <dt className="text-muted-foreground">30% down payment due</dt><dd className="font-semibold tabular-nums">{formatPeso(due)}</dd>
+        <dt className="text-muted-foreground">Verified furniture payments</dt><dd className="font-semibold tabular-nums">{formatPeso(verifiedPaid)}</dd>
+        <dt className="text-muted-foreground">Gate</dt>
+        <dd className={cn("font-bold", ok ? "text-success" : "text-warning")}>
+          {verifiedPaid >= due ? "30% verified ✓" : order.payment_exception_approved ? "Owner-approved exception ✓" : `Short ${formatPeso(due - verifiedPaid)}`}
+        </dd>
+        {blocking > 0 && (<><dt className="text-muted-foreground">Blocking items</dt><dd className="font-bold text-warning">{blocking} open</dd></>)}
+      </dl>
+      <Field label="Assign craftsman" htmlFor="assigned_craftsman_id" hint="Optional — the workshop board shows every job either way.">
+        <NativeSelect id="assigned_craftsman_id" name="assigned_craftsman_id" defaultValue={order.assigned_craftsman_id ?? ""}
+          options={[{ value: "", label: "Not assigned yet" }, ...craftsmen.map((c) => ({ value: c.id, label: c.full_name }))]} />
+      </Field>
+    </ActionDialog>
   );
 }

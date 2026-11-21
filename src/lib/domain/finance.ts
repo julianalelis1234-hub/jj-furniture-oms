@@ -4,6 +4,8 @@ import type { Municipality, Order, Payment } from "./types";
 export function money(n: number): number {
   return Math.round((n + Number.EPSILON) * 100) / 100;
 }
+/** Spec name for the same rounding: roundToCurrency(val) = Math.round((val + Number.EPSILON) * 100) / 100 */
+export const roundToCurrency = money;
 
 export const DOWN_PAYMENT_RATE = 0.3;
 
@@ -45,17 +47,19 @@ export interface Financials {
  *  collectible       = remaining balance + unpaid delivery fee
  */
 export function computeFinancials(
-  input: { furniture_price: number; delivery_fee: number; municipality: Municipality },
+  input: { furniture_price: number | null; delivery_fee: number; municipality: Municipality },
   payments: Payment[],
 ): Financials {
+  // a customer request has no price until the shop quotes it: everything is ₱0 until then
+  const price = input.furniture_price ?? 0;
   const delivery_fee = effectiveDeliveryFee(input.municipality, input.delivery_fee);
   const furniturePaid = furniturePaidFrom(payments);
   const feePaid = feePaidFrom(payments);
-  const remaining = money(Math.max(0, input.furniture_price - furniturePaid));
-  const overflow = money(Math.max(0, furniturePaid - input.furniture_price));
+  const remaining = money(Math.max(0, price - furniturePaid));
+  const overflow = money(Math.max(0, furniturePaid - price));
   return {
     delivery_fee,
-    standard_down_payment_due: standardDownPayment(input.furniture_price),
+    standard_down_payment_due: standardDownPayment(price),
     remaining_furniture_balance: remaining,
     collectible_on_delivery: money(remaining + Math.max(0, delivery_fee - feePaid - overflow)),
   };

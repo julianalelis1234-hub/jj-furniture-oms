@@ -32,7 +32,7 @@ export function TaskCard({
           <Link href={`/staff/orders/${order.id}`} className="font-bold underline-offset-4 hover:underline">
             {order.order_code}
           </Link>
-          <span className="ml-2 text-xs text-muted-foreground">Slip #{order.paper_slip_number}</span>
+          <span className="ml-2 text-xs text-muted-foreground">{order.paper_slip_number ? `Slip #${order.paper_slip_number}` : "Portal request · no slip yet"}</span>
           <p className="truncate text-sm">
             {order.customer_name} · {order.item_name}
           </p>

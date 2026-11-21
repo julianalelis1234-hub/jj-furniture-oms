@@ -111,14 +111,44 @@ export const editOrderSchema = z.object({
   scheduled_delivery_date: z.union([z.literal(""), isoDate("Scheduled delivery date")]).optional().default(""),
 });
 
-/** Staff/owner revised quote: full spec + price (+ provincial fee). */
+/**
+ * Staff/owner quotation (revised_quote): full spec + price (+ provincial fee).
+ * Quoting a customer self-service request also needs the paper slip number and
+ * the estimated completion date (both optional for orders that already have them).
+ */
 export const specRevisionSchema = z
   .object({
     ...furnitureSpecShape,
     furniture_price: z.coerce.number().positive({ error: "Furniture price must be greater than ₱0." }).max(99_999_999),
     delivery_fee: pesos("Delivery fee").max(999_999).default(0),
+    paper_slip_number: z.string().trim().max(40).optional().default(""),
+    estimated_completion_date: z.union([z.literal(""), isoDate("Estimated completion date")]).optional().default(""),
   })
   .superRefine(refineSpec);
+
+/** Option 2 — customer self-service quote request (no price; the shop quotes it). */
+export const customerRequestSchema = z
+  .object({
+    customer_name: required("Your name").max(120),
+    customer_phone: z
+      .string()
+      .trim()
+      .transform((s) => s.replace(/[\s-]/g, ""))
+      .pipe(z.string().regex(PH_PHONE, { error: "Use a PH mobile number, e.g. 09XX XXX XXXX." })),
+    delivery_address: required("Delivery address").min(12, { error: "Add the purok / barangay and a landmark so the driver can find you." }).max(300),
+    municipality: z.enum(MUNICIPALITIES, { error: "Choose a municipality." }),
+    ...furnitureSpecShape,
+    special_instructions: z.string().trim().max(1000).optional().default(""),
+    reference_photo_url: z
+      .union([z.literal(""), z.url({ error: "Reference photo must be a link (https://…)." })])
+      .optional()
+      .default(""),
+    client_request_key: z.string().trim().min(8).max(100),
+    /** honeypot: real people never fill this hidden field */
+    website: z.string().max(0, { error: "Request rejected." }).optional().default(""),
+  })
+  .superRefine(refineSpec);
+export type CustomerRequestInput = z.infer<typeof customerRequestSchema>;
 
 /** Customer proposal: spec only (customers never set prices). */
 export const customerProposalSchema = furnitureSpecSchema;

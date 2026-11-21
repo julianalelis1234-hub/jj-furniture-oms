@@ -13,7 +13,37 @@ export type DomainErrorCode =
   | "PENDING_REVIEW"
   | "SPEC_LOCKED"
   | "SPEC_SNAPSHOT_MISMATCH"
+  | "QUOTE_EXPIRED"
+  | "AMOUNT_MISMATCH"
+  | "IDEMPOTENCY_CONFLICT"
+  | "DUPLICATE_REQUEST"
+  | "IMMUTABLE_RECORD"
+  | "INVALID_REVISION"
   | "BACKEND";
+
+/** HTTP-style status for API callers (409 stale, 410 expired quote, ...). */
+export const HTTP_STATUS: Partial<Record<DomainErrorCode, number>> = {
+  VALIDATION: 400,
+  AMOUNT_MISMATCH: 400,
+  FORBIDDEN: 403,
+  OWNER_ONLY: 403,
+  IMMUTABLE_RECORD: 403,
+  NOT_FOUND: 404,
+  STALE_REVISION: 409,
+  VERSION_CONFLICT: 409,
+  IDEMPOTENCY_CONFLICT: 409,
+  DUPLICATE_SLIP: 409,
+  DUPLICATE_REQUEST: 409,
+  QUOTE_EXPIRED: 410,
+  PENDING_REVIEW: 422,
+  SPECS_NOT_CONFIRMED: 422,
+  DOWN_PAYMENT_REQUIRED: 422,
+  SPEC_LOCKED: 422,
+  SPEC_SNAPSHOT_MISMATCH: 422,
+  INVALID_TRANSITION: 422,
+  INVALID_REVISION: 422,
+  RATE_LIMITED: 429,
+};
 
 export class DomainError extends Error {
   constructor(
@@ -37,10 +67,19 @@ export function fromPostgresMessage(message: string, pgCode?: string): DomainErr
     "PENDING_REVIEW",
     "SPEC_LOCKED",
     "SPEC_SNAPSHOT_MISMATCH",
+    "QUOTE_EXPIRED",
+    "AMOUNT_MISMATCH",
+    "IDEMPOTENCY_CONFLICT",
+    "IMMUTABLE_RECORD",
+    "INVALID_REVISION",
   ];
   for (const code of known) {
     if (message.includes(code)) return new DomainError(code, message.replace(`${code}: `, ""));
   }
+  if (message.includes("orders_client_request_key_uidx"))
+    return new DomainError("DUPLICATE_REQUEST", "This request was already submitted.");
+  if (message.includes("orders_quote_fields_required"))
+    return new DomainError("VALIDATION", "A quotation needs a price, a paper slip number and an estimated completion date.");
   if (message.includes("orders_paper_slip_number_key"))
     return new DomainError("DUPLICATE_SLIP", "That paper slip number is already encoded in another order.");
   if (message.includes("orders_other_wood_note")) return new DomainError("VALIDATION", "Describe the wood when \"Other\" is selected.");

@@ -1,6 +1,6 @@
 import { ArrowLeft, CheckCircle2 } from "lucide-react";
 import { headers } from "next/headers";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { DemoBar } from "@/components/demo-bar";
 import { LinkButton } from "@/components/link-button";
 import { isDemoMode } from "@/lib/config";
@@ -19,6 +19,7 @@ export default async function SlipPage({ params, searchParams }: PageProps<"/sta
   const store = await getStore();
   const o = await store.getOrder(id);
   if (!o) notFound();
+  if (o.status === "Quote Requested") redirect(`/staff/orders/${o.id}`); // no quotation, no slip yet
   const profiles = await store.listProfiles();
   const h = await headers();
   const origin = process.env.NEXT_PUBLIC_SITE_URL || `${h.get("x-forwarded-proto") ?? "http"}://${h.get("host")}`;
@@ -79,9 +80,9 @@ export default async function SlipPage({ params, searchParams }: PageProps<"/sta
         <section className="border-b border-black py-3 text-sm">
           <div className="flex justify-between"><span>Furniture price</span><b>{formatPeso(o.furniture_price)}</b></div>
           <div className="flex justify-between"><span>30% down payment (before production)</span><b>{formatPeso(down)}</b></div>
-          <div className="flex justify-between"><span>70% balance (on delivery)</span><b>{formatPeso(o.furniture_price - down)}</b></div>
+          <div className="flex justify-between"><span>70% balance (on delivery)</span><b>{formatPeso((o.furniture_price ?? 0) - down)}</b></div>
           <div className="flex justify-between"><span>Delivery fee</span><b>{o.delivery_fee === 0 ? "FREE (Valencia City)" : formatPeso(o.delivery_fee)}</b></div>
-          <div className="mt-1 flex justify-between border-t border-black pt-1 text-base"><span className="font-bold">Collect on delivery (after 30%)</span><b>{formatPeso(o.furniture_price - down + o.delivery_fee)}</b></div>
+          <div className="mt-1 flex justify-between border-t border-black pt-1 text-base"><span className="font-bold">Collect on delivery (after 30%)</span><b>{formatPeso((o.furniture_price ?? 0) - down + o.delivery_fee)}</b></div>
           {o.payment_exception_type !== "Standard 30/70" && <p className="mt-1 text-xs">Payment terms: {o.payment_exception_type}{o.payment_exception_approved ? " (approved by owner)" : " (pending owner approval)"}</p>}
         </section>
 
