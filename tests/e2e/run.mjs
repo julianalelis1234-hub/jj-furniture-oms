@@ -351,6 +351,44 @@ await step("Option 2: customer designs & requests → staff quotation → custom
   await ctx.close();
 });
 
+await step("3D turntable: exact W×H×D labels, non-blocking warning, NULL → 2D, no-WebGL → 2D, clean unmount", async () => {
+  const gl = await chromium.launch({ args: ["--use-angle=swiftshader", "--enable-unsafe-swiftshader"], ...(process.env.PW_EXECUTABLE ? { executablePath: process.env.PW_EXECUTABLE } : {}) });
+  const ctx = await gl.newContext({ viewport: { width: 1280, height: 900 }, baseURL: BASE, reducedMotion: "reduce" });
+  const page = await ctx.newPage();
+  const errors = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  await page.goto("/track/request");
+  await page.getByTestId("cat-Living Room Set").click();
+  await page.getByTestId("preview-3d").waitFor({ timeout: 20000 });
+  expect((await page.getByTestId("preview-3d").innerText()).includes("Illustrative 3D Preview — Reference Aid Only (Not a Manufacturing Drawing)"), "3D disclaimer");
+  expect((await page.getByTestId("spin-toggle").innerText()).includes("3D Spin"), "reduced motion: auto-spin starts paused");
+  for (const [id, text] of [["dim-w", "W 180 cm"], ["dim-h", "H 85 cm"], ["dim-d", "D 75 cm"], ["dim-human", "165 cm"]])
+    expect((await page.getByTestId(id).innerText()).trim() === text, `${id} label should read ${text}`);
+  await page.fill('input[name="width_cm"]', "30");
+  await page.getByTestId("feasibility-warning").first().waitFor();
+  expect((await page.inputValue('input[name="width_cm"]')) === "30", "entered width is kept exactly (no clamping)");
+  expect((await page.getByTestId("dim-w").innerText()).trim() === "W 30 cm", "3D label shows the entered width");
+  await page.screenshot({ path: `${SHOTS}/preview-3d-desktop.png`, fullPage: false });
+  await page.fill('input[name="width_cm"]', "");
+  await page.getByText("Dimensions Pending Clarification").first().waitFor();
+  expect((await page.getByTestId("preview-3d").count()) === 0, "missing W/H/D never renders a guessed 3D model");
+  expect(errors.length === 0, `no runtime errors switching 3D -> 2D: ${errors.join(" | ")}`);
+  await ctx.close();
+  await gl.close();
+
+  const noGl = await chromium.launch({ args: ["--disable-webgl", "--disable-webgl2", "--disable-3d-apis"], ...(process.env.PW_EXECUTABLE ? { executablePath: process.env.PW_EXECUTABLE } : {}) });
+  const ctx2 = await noGl.newContext({ viewport: { width: 1280, height: 900 }, baseURL: BASE });
+  const p2 = await ctx2.newPage();
+  const errors2 = [];
+  p2.on("pageerror", (e) => errors2.push(e.message));
+  await p2.goto("/track/request");
+  await p2.getByTestId("cat-Dining Table").click();
+  await p2.locator('figure[aria-label="Illustrative furniture preview"] svg').first().waitFor();
+  expect((await p2.getByTestId("preview-3d").count()) === 0 && errors2.length === 0, "WebGL off: 2D SVG preview, no crash");
+  await ctx2.close();
+  await noGl.close();
+});
+
 await step("security: craftsman cannot open office or driver pages", async () => {
   const { page, ctx } = await asPersona("Carlo");
   for (const path of ["/owner", "/staff", "/driver"]) {
