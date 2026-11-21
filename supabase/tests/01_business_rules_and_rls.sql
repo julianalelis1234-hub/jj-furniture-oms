@@ -110,19 +110,25 @@ select public.add_spec_revision('10000000-0000-0000-0000-000000000001', 'staff_d
 select pg_temp.expect_error(
   $q$update public.orders set specs_confirmed = true, status = 'Confirmed' where order_code = 'JJ-2026-0145'$q$,
   'STALE_REVISION', 'flipping specs_confirmed directly cannot unlock production (no approved revision)');
-select public.confirm_spec_revision('10000000-0000-0000-0000-000000000001', 1, 'Signed Paper Slip', 'Maria Santos', null, null);
+select tests.accept('10000000-0000-0000-0000-000000000001', 1, 'Signed Paper Slip', 'Maria Santos', null, null);
+select pg_temp.expect_error(
+  $q$update public.orders set status = 'In Production' where order_code = 'JJ-2026-0145'$q$,
+  'DOWN_PAYMENT_REQUIRED', 'Confirmed -> In Production blocked without a verified 30% down payment');
+insert into public.payments (order_id, client_transaction_id, payment_type, amount, payment_method, verified_by_owner_or_staff)
+values ('10000000-0000-0000-0000-000000000001', 'aaaaaaaa-0000-0000-0000-000000000009', 'Down Payment (30%)', 8550, 'Cash', false);
+select pg_temp.expect_error(
+  $q$update public.orders set status = 'In Production' where order_code = 'JJ-2026-0145'$q$,
+  'DOWN_PAYMENT_REQUIRED', 'an UNVERIFIED payment does not count toward the 30% gate');
+insert into public.payments (order_id, client_transaction_id, payment_type, amount, payment_method, verified_by_owner_or_staff)
+values ('10000000-0000-0000-0000-000000000001', 'aaaaaaaa-0000-0000-0000-000000000001', 'Down Payment (30%)', 8550, 'GCash / Bank Transfer', true);
 update public.orders set status = 'In Production' where order_code = 'JJ-2026-0145';
+select pg_temp.check(status = 'In Production', 'verified 30% (server-summed) unlocks production')
+from public.orders where order_code = 'JJ-2026-0145';
 update public.orders set status = 'Completed / For Inspection' where order_code = 'JJ-2026-0145';
 update public.orders set status = 'Ready for Delivery' where order_code = 'JJ-2026-0145';
 select pg_temp.check(status = 'Ready for Delivery', 'valid forward progression through stages 1-5')
 from public.orders where order_code = 'JJ-2026-0145';
 
-select pg_temp.expect_error(
-  $q$update public.orders set status = 'Out for Delivery' where order_code = 'JJ-2026-0145'$q$,
-  'DOWN_PAYMENT_REQUIRED', 'dispatch blocked without 30% down payment or owner exception');
-
-insert into public.payments (order_id, client_transaction_id, payment_type, amount, payment_method, verified_by_owner_or_staff)
-values ('10000000-0000-0000-0000-000000000001', 'aaaaaaaa-0000-0000-0000-000000000001', 'Down Payment (30%)', 8550, 'GCash / Bank Transfer', true);
 update public.orders set status = 'Out for Delivery' where order_code = 'JJ-2026-0145';
 update public.orders set status = 'Delivered' where order_code = 'JJ-2026-0145';
 select pg_temp.expect_error(

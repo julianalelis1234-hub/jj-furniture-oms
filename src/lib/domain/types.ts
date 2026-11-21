@@ -16,7 +16,8 @@ export type Municipality = (typeof MUNICIPALITIES)[number];
 export const WOOD_TYPES = ["Mahogany", "Gmelina", "Other"] as const;
 export type WoodType = (typeof WOOD_TYPES)[number];
 
-export const ORDER_STATUSES = [
+/** The Seven-Stage Workshop and Delivery Pipeline (unchanged). */
+export const WORKSHOP_STAGES = [
   "Waiting for Confirmation",
   "Confirmed",
   "In Production",
@@ -25,7 +26,16 @@ export const ORDER_STATUSES = [
   "Out for Delivery",
   "Delivered",
 ] as const;
+export type WorkshopStage = (typeof WORKSHOP_STAGES)[number];
+
+/** Pre-production intake state for Option 2 customer self-service requests (not a workshop stage). */
+export const PRE_PRODUCTION_STATUS = "Quote Requested" as const;
+
+export const ORDER_STATUSES = [PRE_PRODUCTION_STATUS, ...WORKSHOP_STAGES] as const;
 export type OrderStatus = (typeof ORDER_STATUSES)[number];
+
+export const ORDER_ORIGINS = ["staff_intake", "customer_self_service"] as const;
+export type OrderOrigin = (typeof ORDER_ORIGINS)[number];
 
 export const PRIORITY_LABELS = ["Urgent", "High", "Normal"] as const;
 export type PriorityLabel = (typeof PRIORITY_LABELS)[number];
@@ -69,7 +79,9 @@ export const NOTIFICATION_CHANNELS = ["SMS", "Messenger", "In-App"] as const;
 export type NotificationChannel = (typeof NOTIFICATION_CHANNELS)[number];
 export type NotificationStatus = "Sent" | "Failed" | "Pending";
 
-export const REVISION_TYPES = ["staff_draft", "customer_proposal", "revised_quote", "final_approved"] as const;
+export const REVISION_TYPES = ["staff_draft", "customer_request", "customer_proposal", "revised_quote", "final_approved"] as const;
+/** Revisions a customer may accept: an issued shop quotation. */
+export const QUOTE_REVISION_TYPES: readonly RevisionType[] = ["staff_draft", "revised_quote"];
 export type RevisionType = (typeof REVISION_TYPES)[number];
 
 export type FurnitureCategoryName =
@@ -101,7 +113,8 @@ export interface Profile {
 export interface Order extends StructuredSpecColumns {
   id: string;
   order_code: string;
-  paper_slip_number: string;
+  /** NULL for a customer self-service request until the shop issues the quotation */
+  paper_slip_number: string | null;
   encoded_by_id: string | null;
   customer_name: string;
   customer_phone: string;
@@ -121,28 +134,32 @@ export interface Order extends StructuredSpecColumns {
   priority_rank: number;
   priority_label: PriorityLabel;
   assigned_craftsman_id: string | null;
-  furniture_price: number;
+  /** NULL while a customer request awaits its official quotation */
+  furniture_price: number | null;
   standard_down_payment_due: number;
   remaining_furniture_balance: number;
   delivery_fee: number;
   collectible_on_delivery: number;
   payment_exception_type: PaymentExceptionType;
   payment_exception_approved: boolean;
-  estimated_completion_date: string; // YYYY-MM-DD
+  estimated_completion_date: string | null; // YYYY-MM-DD; set when the quotation is issued
   scheduled_delivery_date: string | null;
   version: number;
-  current_revision: number | null;
+  current_revision: number;
   approved_revision_number: number | null;
   /** presentation-only preview settings; never specification data */
   spec_preview_config: Record<string, unknown>;
   is_legacy_incomplete: boolean;
+  order_origin: OrderOrigin;
+  /** idempotency key of a customer self-service submission */
+  client_request_key: string | null;
   created_at: string;
   updated_at: string;
 }
 
 /** Immutable row of order_specification_revisions. */
 export interface SpecRevision extends StructuredSpecColumns {
-  id: string;
+  revision_id: string;
   order_id: string;
   revision_number: number;
   revision_type: RevisionType;
@@ -150,8 +167,11 @@ export interface SpecRevision extends StructuredSpecColumns {
   color_finish: string;
   quantity: number;
   legacy_dimensions_text: string | null;
-  quoted_furniture_price: number;
-  quoted_delivery_fee: number;
+  quoted_furniture_price: number | null;
+  quoted_delivery_fee: number | null;
+  /** quotation validity (shop quotes only) */
+  quoted_at: string | null;
+  expires_at: string | null;
   spec_preview_config: Record<string, unknown>;
   changed_fields: Record<string, { from: unknown; to: unknown }> | Record<string, unknown>;
   created_by_role: string;
@@ -174,7 +194,7 @@ export interface WorkshopOrder {
   priority_rank: number;
   priority_label: PriorityLabel;
   assigned_craftsman_id: string | null;
-  estimated_completion_date: string;
+  estimated_completion_date: string | null;
   version: number;
   updated_at: string;
   needs_revision: boolean;
@@ -193,12 +213,19 @@ export interface OrderConfirmation {
   order_id: string;
   version_number: number;
   confirmed_specs_snapshot: SpecSnapshot;
-  revision_id: string | null;
-  revision_number: number | null;
+  revision_id: string;
+  revision_number: number;
   confirmation_method: ConfirmationMethod;
   confirmed_by_name: string;
   recorded_by_staff_id: string | null;
   confirmed_at: string;
+  /** explicit, separate acceptance semantics — recorded atomically for the same revision */
+  specification_accepted_at: string;
+  quotation_accepted_at: string;
+  accepted_furniture_price: number;
+  accepted_delivery_fee: number;
+  accepted_total_amount: number;
+  client_idempotency_key: string | null;
 }
 
 export interface SpecSnapshot {
@@ -256,6 +283,8 @@ export interface OrderException {
   description: string;
   requested_by: string | null;
   status: ExceptionStatus;
+  /** while Pending, blocks confirmation and Confirmed -> In Production (always true for Spec Clarification) */
+  is_production_blocking: boolean;
   resolved_by_id: string | null;
   created_at: string;
   resolved_at: string | null;
@@ -276,7 +305,7 @@ export interface CustomerTrack {
   order_code: string;
   item_name: string;
   status: OrderStatus;
-  estimated_completion_date: string;
+  estimated_completion_date: string | null;
   scheduled_delivery_date: string | null;
   updated_at: string;
 }

@@ -18,7 +18,7 @@ export default async function CraftsmanPage() {
   const openQuestions = questions
     .filter((q) => q.category === "Spec Clarification")
     .map((q) => ({ id: q.id, order_id: q.order_id, description: q.description, status: q.status, requested_by: q.requested_by }));
-  jobs.sort((a, b) => a.priority_rank - b.priority_rank || a.estimated_completion_date.localeCompare(b.estimated_completion_date));
+  jobs.sort((a, b) => a.priority_rank - b.priority_rank || (a.estimated_completion_date ?? "").localeCompare(b.estimated_completion_date ?? ""));
 
   return (
     <AppShell portal="craftsman" actor={actor}>

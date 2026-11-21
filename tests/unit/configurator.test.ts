@@ -3,9 +3,8 @@ import { DomainError } from "@/lib/domain/errors";
 import { describeDiff, diffSpecs, formatDims } from "@/lib/domain/furniture";
 import { customerOrderView, customerProposeChanges, customerRequestRepair } from "@/lib/services/customer";
 import { decideException, requestException, reviewCustomerProposal } from "@/lib/services/exceptions";
-import { createOrder, recordConfirmation, transitionOrder } from "@/lib/services/orders";
-import { customerConfirmSpecs } from "@/lib/services/customer";
-import { actors, seededStore, validOrderInput } from "./helpers";
+import { createOrder, recordConfirmation, startProduction, transitionOrder } from "@/lib/services/orders";
+import { actors, customerAccept, payDown, seededStore, staffAccept, validOrderInput } from "./helpers";
 
 const err = async (p: Promise<unknown>) => {
   try {
@@ -46,11 +45,14 @@ describe("specification revisions & customer scenarios", () => {
     const view = await customerOrderView(store, order.id);
     expect(view.spec_state).toBe("awaiting_confirmation");
     expect(view.current?.revision_number).toBe(1);
-    const o = await customerConfirmSpecs(store, order.id, 1);
+    const o = await customerAccept(store, order.id, 1);
     expect(o.status).toBe("Confirmed");
     expect(o.approved_revision_number).toBe(1);
     const [c] = await store.listConfirmations(order.id);
-    expect(c.revision_id).toBe((await store.listRevisions(order.id))[0].id);
+    expect(c.revision_id).toBe((await store.listRevisions(order.id))[0].revision_id);
+    expect(c.specification_accepted_at).toBeTruthy();
+    expect(c.quotation_accepted_at).toBe(c.specification_accepted_at);
+    expect(c.accepted_total_amount).toBe(24000);
   });
 
   it("Scenario 2: a proposal is a new immutable revision, raises a review, and locks nothing open", async () => {
@@ -70,8 +72,8 @@ describe("specification revisions & customer scenarios", () => {
     const view = await customerOrderView(store, order.id);
     expect(view.spec_state).toBe("proposal_under_review");
     // the customer cannot confirm their own proposal, nor the stale revision 1
-    expect((await err(customerConfirmSpecs(store, order.id, 2))).code).toBe("PENDING_REVIEW");
-    expect((await err(customerConfirmSpecs(store, order.id, 1))).code).toBe("STALE_REVISION");
+    expect((await err(customerAccept(store, order.id, 2))).code).toBe("PENDING_REVIEW");
+    expect((await err(customerAccept(store, order.id, 1))).code).toBe("STALE_REVISION");
     // production stays locked
     expect((await err(transitionOrder(store, actors.owner, order.id, "Confirmed"))).code).toBe("SPECS_NOT_CONFIRMED");
   });
@@ -88,7 +90,7 @@ describe("specification revisions & customer scenarios", () => {
     expect(quoted.wood_type).toBe("Mahogany");
     expect(quoted.status).toBe("Waiting for Confirmation");
     expect((await store.listExceptions(order.id)).find((e) => e.id === ex.id)!.status).toBe("Resolved");
-    const confirmed = await customerConfirmSpecs(store, order.id, 3);
+    const confirmed = await customerAccept(store, order.id, 3);
     expect(confirmed.approved_revision_number).toBe(3);
     const revs = await store.listRevisions(order.id);
     expect(revs.map((r) => r.revision_type)).toEqual(["staff_draft", "customer_proposal", "revised_quote"]);
@@ -104,15 +106,23 @@ describe("specification revisions & customer scenarios", () => {
     expect(kept.width_cm).toBe(120);
   });
 
-  it("Scenario 3: all six conditions are required for production", async () => {
+  it("Scenario 3: every gate is required for production (30% verified, no blocking items, latest revision)", async () => {
     const { store, order } = await newOrder();
-    await recordConfirmation(store, actors.staff, { order_id: order.id, confirmation_method: "Signed Paper Slip", confirmed_by_name: "Juan", revision_number: 1 });
-    // open review item blocks In Production
+    await staffAccept(store, actors.staff, order.id);
+    // craftsmen can no longer start production themselves
+    expect((await err(transitionOrder(store, actors.craftsman, order.id, "In Production"))).code).toBe("FORBIDDEN");
+    // Confirmed is not authorization to cut wood
+    expect((await err(startProduction(store, actors.staff, order.id))).code).toBe("DOWN_PAYMENT_REQUIRED");
+    await payDown(store, order.id, 7199.99);
+    expect((await err(startProduction(store, actors.staff, order.id))).code).toBe("DOWN_PAYMENT_REQUIRED");
+    await payDown(store, order.id, 0.01);
+    // open production-blocking item blocks In Production
     await requestException(store, actors.craftsman, { order_id: order.id, category: "Spec Clarification", description: "Edge profile?" });
-    expect((await err(transitionOrder(store, actors.craftsman, order.id, "In Production"))).code).toBe("PENDING_REVIEW");
+    expect((await err(startProduction(store, actors.staff, order.id))).code).toBe("PENDING_REVIEW");
     const q = (await store.listExceptions(order.id)).find((e) => e.description === "Edge profile?")!;
+    expect(q.is_production_blocking).toBe(true);
     await decideException(store, actors.staff, q.id, "Resolved", "Rounded");
-    const started = await transitionOrder(store, actors.craftsman, order.id, "In Production");
+    const started = await startProduction(store, actors.staff, order.id);
     expect(started.status).toBe("In Production");
     // once in production, specs and quote are locked
     expect((await err(store.updateOrder(order.id, { furniture_price: 1 }))).code).toBe("SPEC_LOCKED");
@@ -125,7 +135,10 @@ describe("specification revisions & customer scenarios", () => {
 
   it("staff cannot record a 'Customer Portal PIN' confirmation; craftsmen cannot confirm at all", async () => {
     const { store, order } = await newOrder();
-    const input = { order_id: order.id, confirmation_method: "Customer Portal PIN" as const, confirmed_by_name: "x", revision_number: 1 };
+    const input = {
+      order_id: order.id, confirmation_method: "Customer Portal PIN" as const, confirmed_by_name: "x", revision_number: 1,
+      accepted_furniture_price: 24000, accepted_delivery_fee: 0, client_idempotency_key: "k-1",
+    };
     expect((await err(recordConfirmation(store, actors.staff, input))).code).toBe("FORBIDDEN");
     expect((await err(recordConfirmation(store, actors.craftsman, { ...input, confirmation_method: "Signed Paper Slip" }))).code).toBe("FORBIDDEN");
   });

@@ -16,6 +16,7 @@ run "$DB" supabase/tests/00_supabase_stub.sql
 migrate_all "$DB"
 psql "$PGURL/$DB" -v ON_ERROR_STOP=1 -f supabase/tests/01_business_rules_and_rls.sql 2>&1 | grep -E "ok -|FAILED|ERROR|PASSED"
 psql "$PGURL/$DB" -v ON_ERROR_STOP=1 -f supabase/tests/04_configurator_gate.sql 2>&1 | grep -E "ok -|FAILED|ERROR|PASSED"
+psql "$PGURL/$DB" -v ON_ERROR_STOP=1 -f supabase/tests/05_dual_option_engine.sql 2>&1 | grep -E "ok -|FAILED|ERROR|PASSED"
 
 # 1b. Concurrency: two sessions edit the same revision at once ---------------
 SPEC='{"furniture_category":"Panel Door","design_variant":"Modern 4-Panel","width_cm":90,"height_cm":210,"depth_cm":4.5,"wood_type":"Mahogany","color_finish":"Walnut Stain","quoted_furniture_price":9000,"quoted_delivery_fee":0}'
@@ -39,7 +40,7 @@ else
   echo "TEST FAILED: concurrency (second session: $B_OUT; revisions: $REVS)"; exit 1
 fi
 
-# 2. Migration 003 against a copy of the live (pre-003) data -----------------
+# 2. Migrations 003 + 004 against a copy of the live (pre-003) data -----------------
 psql "$PGURL/postgres" -qc "create database $DB2" >/dev/null
 run "$DB2" supabase/tests/00_supabase_stub.sql
 run "$DB2" supabase/migrations/001_init.sql
@@ -48,6 +49,11 @@ run "$DB2" supabase/tests/fixtures/live_snapshot_pre003.sql
 run "$DB2" supabase/migrations/003_wooden_configurator.sql
 run "$DB2" supabase/migrations/003_wooden_configurator.sql   # re-running must be harmless (idempotent)
 psql "$PGURL/$DB2" -v ON_ERROR_STOP=1 -f supabase/tests/03_migration_backfill.sql 2>&1 | grep -E "ok -|FAILED|ERROR|PASSED"
+# then migration 004 on top of that data (twice: re-running must be harmless)
+run "$DB2" supabase/migrations/004a_quote_requested_enums.sql
+run "$DB2" supabase/migrations/004b_dual_option_approval_engine.sql 2>/dev/null
+run "$DB2" supabase/migrations/004b_dual_option_approval_engine.sql 2>/dev/null
+psql "$PGURL/$DB2" -v ON_ERROR_STOP=1 -f supabase/tests/06_migration_004_backfill.sql 2>&1 | grep -E "ok -|FAILED|ERROR|PASSED"
 
 # 3. Demo seed loads into the full schema; DB balances match the TS engine ---
 psql "$PGURL/postgres" -qc "create database $DB3" >/dev/null

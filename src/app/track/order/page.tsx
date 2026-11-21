@@ -40,6 +40,11 @@ export default async function CustomerOrderPage() {
         <Card>
           <CardHeader><CardTitle>Payment summary</CardTitle></CardHeader>
           <CardContent>
+            {p.furniture_price == null ? (
+              <p className="text-sm text-muted-foreground" data-testid="payment-pending">
+                No price yet. Your official quotation (furniture price and delivery fee) will appear here once JJ Furniture reviews your design.
+              </p>
+            ) : (<>
             <dl className="grid gap-1 text-sm">
               <div className="flex justify-between"><dt>Furniture price</dt><dd className="font-semibold tabular-nums">{formatPeso(p.furniture_price)}</dd></div>
               <div className="flex justify-between"><dt>30% down payment</dt><dd className="tabular-nums">{formatPeso(p.standard_down_payment_due)}</dd></div>
@@ -49,9 +54,10 @@ export default async function CustomerOrderPage() {
               <div className="mt-1 flex justify-between border-t pt-1.5 text-base"><dt className="font-bold">To pay on delivery</dt><dd className="font-black tabular-nums">{formatPeso(p.collectible_on_delivery)}</dd></div>
             </dl>
             {p.terms !== "Standard 30/70" && <p className="mt-2 text-xs text-muted-foreground">Payment terms: {p.terms}</p>}
-            {p.furniture_paid < p.standard_down_payment_due && v.status !== "Delivered" && p.terms === "Standard 30/70" && (
-              <p className="mt-2 rounded-lg bg-warning-soft p-2 text-sm">Please settle the 30% down payment ({formatPeso(p.standard_down_payment_due - p.furniture_paid)} remaining) at the shop or by GCash so we can start building.</p>
+            {v.status === "Confirmed" && p.furniture_paid < p.standard_down_payment_due && p.terms === "Standard 30/70" && (
+              <p className="mt-2 rounded-lg bg-warning-soft p-2 text-sm">Please settle the 30% down payment ({formatPeso(p.standard_down_payment_due - p.furniture_paid)} remaining) at the shop or by GCash. Building starts once it is verified.</p>
             )}
+            </>)}
           </CardContent>
         </Card>
 

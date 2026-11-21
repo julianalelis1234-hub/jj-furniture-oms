@@ -76,10 +76,10 @@ from public.order_specification_revisions r join public.orders o on o.id = r.ord
 where o.order_code = 'DR-0501' and r.revision_number = 2;
 
 select pg_temp.expect_error(
-  $q$select public.confirm_spec_revision('20000000-0000-0000-0000-000000000001', 2, 'Customer Portal PIN', 'R. Abellana')$q$,
+  $q$select tests.accept('20000000-0000-0000-0000-000000000001', 2, 'Customer Portal PIN', 'R. Abellana')$q$,
   'PENDING_REVIEW', 'a customer proposal cannot be confirmed before the shop quotes it');
 select pg_temp.expect_error(
-  $q$select public.confirm_spec_revision('20000000-0000-0000-0000-000000000001', 1, 'Customer Portal PIN', 'R. Abellana')$q$,
+  $q$select tests.accept('20000000-0000-0000-0000-000000000001', 1, 'Customer Portal PIN', 'R. Abellana')$q$,
   'STALE_REVISION', 'confirming an outdated revision is rejected');
 select pg_temp.expect_error(
   $q$select public.add_spec_revision('20000000-0000-0000-0000-000000000001', 'revised_quote',
@@ -103,7 +103,7 @@ select public.add_spec_revision('20000000-0000-0000-0000-000000000001', 'revised
 select pg_temp.check(count(*) = 3, 'staff can read the revision history') from public.order_specification_revisions
 where order_id = '20000000-0000-0000-0000-000000000001';
 select pg_temp.expect_error(
-  $q$select public.confirm_spec_revision('20000000-0000-0000-0000-000000000001', 3, 'Customer Portal PIN', 'x')$q$,
+  $q$select tests.accept('20000000-0000-0000-0000-000000000001', 3, 'Customer Portal PIN', 'x')$q$,
   'FORBIDDEN', 'staff cannot record a "Customer Portal PIN" confirmation');
 reset role; select set_config('request.jwt.claims', '{}', false);
 select pg_temp.check(o.current_revision = 3 and o.wood_type = 'Mahogany' and o.width_cm = 220 and o.furniture_price = 31000,
@@ -111,16 +111,16 @@ select pg_temp.check(o.current_revision = 3 and o.wood_type = 'Mahogany' and o.w
 from public.orders o where order_code = 'DR-0501';
 
 select pg_temp.expect_error(
-  $q$select public.confirm_spec_revision('20000000-0000-0000-0000-000000000001', 3, 'Customer Portal PIN', 'R. Abellana')$q$,
+  $q$select tests.accept('20000000-0000-0000-0000-000000000001', 3, 'Customer Portal PIN', 'R. Abellana')$q$,
   'PENDING_REVIEW', 'open review item blocks confirmation (condition 4)');
 update public.order_exceptions_and_repairs set status = 'Resolved' where id = '30000000-0000-0000-0000-000000000001';
 
 -- ------------------------------------------- Scenario 1: confirmation ----
-select public.confirm_spec_revision('20000000-0000-0000-0000-000000000001', 3, 'Customer Portal PIN', 'R. Abellana', null, 'JJ-2026-0501');
+select tests.accept('20000000-0000-0000-0000-000000000001', 3, 'Customer Portal PIN', 'R. Abellana', null, 'JJ-2026-0501');
 select pg_temp.check(o.status = 'Confirmed' and o.specs_confirmed and o.approved_revision_number = 3 and o.order_code = 'JJ-2026-0501',
   'customer confirms the LATEST revision -> Confirmed, approved_revision_number = 3, code promoted')
 from public.orders o where o.id = '20000000-0000-0000-0000-000000000001';
-select pg_temp.check(c.revision_number = 3 and c.revision_id = r.id and (c.confirmed_specs_snapshot ->> 'quoted_furniture_price')::numeric = 31000,
+select pg_temp.check(c.revision_number = 3 and c.revision_id = r.revision_id and (c.confirmed_specs_snapshot ->> 'quoted_furniture_price')::numeric = 31000,
   'confirmation event linked to the exact revision id/number and its quote')
 from public.order_confirmations c join public.order_specification_revisions r on r.order_id = c.order_id and r.revision_number = 3
 where c.order_id = '20000000-0000-0000-0000-000000000001';
@@ -135,8 +135,12 @@ select pg_temp.expect_error(
   $q$update public.orders set status = 'In Production' where id = '20000000-0000-0000-0000-000000000001'$q$,
   'PENDING_REVIEW', 'In Production blocked while any review item is pending');
 update public.order_exceptions_and_repairs set status = 'Resolved' where id = '30000000-0000-0000-0000-000000000002';
+insert into public.order_exceptions_and_repairs (order_id, category, description, requested_by)
+values ('20000000-0000-0000-0000-000000000001', 'Special Delivery Terms', 'Deliver after 5pm', 'Staff');
+insert into public.payments (order_id, client_transaction_id, payment_type, amount, payment_method, verified_by_owner_or_staff)
+values ('20000000-0000-0000-0000-000000000001', 'bbbbbbbb-0000-0000-0000-000000000001', 'Down Payment (30%)', 9300, 'Cash', true);
 update public.orders set status = 'In Production' where id = '20000000-0000-0000-0000-000000000001';
-select pg_temp.check(status = 'In Production', 'all 6 conditions met -> In Production')
+select pg_temp.check(status = 'In Production', 'all gates met (30% verified; non-blocking item pending is fine) -> In Production')
 from public.orders where id = '20000000-0000-0000-0000-000000000001';
 select pg_temp.expect_error(
   $q$select public.add_spec_revision('20000000-0000-0000-0000-000000000001', 'customer_proposal',
@@ -152,7 +156,7 @@ values ('20000000-0000-0000-0000-000000000002', 'DR-0502', 'S-502', 'Test', '090
 select public.add_spec_revision('20000000-0000-0000-0000-000000000002', 'staff_draft',
   '{"furniture_category":"Panel Door","design_variant":"Classic 2-Panel","width_cm":80,"height_cm":210,"depth_cm":4.5,"wood_type":"Mahogany","color_finish":"Natural Varnish","quoted_furniture_price":9000,"quoted_delivery_fee":0}'::jsonb,
   null, 'staff');
-select public.confirm_spec_revision('20000000-0000-0000-0000-000000000002', 1, 'Signed Paper Slip', 'Test');
+select tests.accept('20000000-0000-0000-0000-000000000002', 1, 'Signed Paper Slip', 'Test');
 alter table public.orders disable trigger orders_before_write;          -- simulate out-of-band tampering
 update public.orders set color_finish = 'Gloss White' where id = '20000000-0000-0000-0000-000000000002';
 alter table public.orders enable trigger orders_before_write;
@@ -163,7 +167,7 @@ select pg_temp.expect_error(
 -- ------------------------------------------------ immutability & RLS ----
 select pg_temp.expect_error(
   $q$update public.order_specification_revisions set color_finish = 'Gloss White' where revision_number = 1$q$,
-  'IMMUTABLE_REVISION', 'revisions are immutable');
+  'IMMUTABLE_RECORD', 'revisions are immutable');
 select pg_temp.act_as('00000000-0000-0000-0000-000000000003');
 select pg_temp.check(count(*) = 0, 'craftsman cannot read revision rows (prices)') from public.order_specification_revisions;
 select pg_temp.expect_error(
@@ -177,7 +181,7 @@ from public.workshop_orders();
 reset role; select set_config('request.jwt.claims', '{}', false);
 select pg_temp.act_as('00000000-0000-0000-0000-000000000004');
 select pg_temp.expect_error(
-  $q$select public.confirm_spec_revision('20000000-0000-0000-0000-000000000002', 1, 'Signed Paper Slip', 'x')$q$,
+  $q$select tests.accept('20000000-0000-0000-0000-000000000002', 1, 'Signed Paper Slip', 'x')$q$,
   'FORBIDDEN', 'drivers cannot record confirmations');
 reset role; select set_config('request.jwt.claims', '{}', false);
 set role anon;

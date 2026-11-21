@@ -1,9 +1,10 @@
 import type { DataStore, OrderPatch, SpecInput } from "@/lib/data/store";
 import { formatDate } from "@/lib/domain/dates";
 import { DomainError } from "@/lib/domain/errors";
-import { formatPeso } from "@/lib/domain/finance";
+import { formatPeso, money } from "@/lib/domain/finance";
+import { quoteValidityDays } from "@/lib/domain/gate";
 import { generatePin, hashPin } from "@/lib/domain/pin";
-import { assertTransition, rolesAllowedFor } from "@/lib/domain/status";
+import { assertTransition, isValidTransition, rolesAllowedFor } from "@/lib/domain/status";
 import type {
   Actor,
   ConfirmationMethod,
@@ -34,7 +35,7 @@ export async function createOrder(store: DataStore, actor: Actor, raw: unknown) 
   const input: NewOrderInput = parsed.data;
 
   const existing = await store.listOrders();
-  if (existing.some((o) => o.paper_slip_number.toLowerCase() === input.paper_slip_number.toLowerCase())) {
+  if (existing.some((o) => o.paper_slip_number?.toLowerCase() === input.paper_slip_number.toLowerCase())) {
     throw new DomainError("DUPLICATE_SLIP", `Paper slip #${input.paper_slip_number} is already encoded.`);
   }
   const spec = normalizeSpec({
@@ -83,8 +84,9 @@ export async function createOrder(store: DataStore, actor: Actor, raw: unknown) 
     payment_exception_approved: false,
     estimated_completion_date: input.estimated_completion_date,
     scheduled_delivery_date: input.scheduled_delivery_date || null,
+    order_origin: "staff_intake",
   });
-  // revision 1: the staff draft quote the customer will confirm
+  // revision 1: the staff draft quotation (valid QUOTE_VALIDITY_DAYS) the customer will accept
   await store.addSpecRevision({
     order_id: order.id,
     type: "staff_draft",
@@ -92,6 +94,7 @@ export async function createOrder(store: DataStore, actor: Actor, raw: unknown) 
     expected_revision: null,
     created_by_role: actor.role,
     created_by_id: actor.id,
+    quote_validity_days: quoteValidityDays(),
   });
   await store.insertHistory({
     order_id: order.id,
@@ -105,56 +108,84 @@ export async function createOrder(store: DataStore, actor: Actor, raw: unknown) 
   return { order: await mustGetOrder(store, order.id), pin };
 }
 
-// ------------------------------------------------------- confirmation ------
+// --------------------------------------------------------- acceptance ------
+export interface AcceptanceInput {
+  order_id: string;
+  confirmation_method: ConfirmationMethod;
+  confirmed_by_name: string;
+  /** what the accepting person was shown */
+  revision_number: number;
+  revision_id?: string;
+  accepted_furniture_price: number;
+  accepted_delivery_fee: number;
+  client_idempotency_key: string;
+}
+
 /**
- * Records the customer's explicit confirmation of ONE exact revision. The
- * revision number is what the confirmer was shown; if the specification has
- * changed since, the confirmation is rejected (never authorizes a stale spec).
+ * Records the explicit acceptance of ONE exact revision: its specification AND
+ * its quotation, atomically (accept_order_revision). Rejects stale revisions,
+ * expired quotations and amounts that differ from the quote; replaying the same
+ * idempotency key returns the original acceptance without a duplicate.
  */
-export async function recordConfirmation(
-  store: DataStore,
-  actor: Actor | null,
-  input: { order_id: string; confirmation_method: ConfirmationMethod; confirmed_by_name: string; revision_number: number },
-) {
-  if (actor) ensureRole(actor, ["owner", "staff"], "record customer confirmations");
+export async function recordConfirmation(store: DataStore, actor: Actor | null, input: AcceptanceInput) {
+  if (actor) ensureRole(actor, ["owner", "staff"], "record customer acceptance");
   if (actor && input.confirmation_method === "Customer Portal PIN")
-    throw new DomainError("FORBIDDEN", "Only the customer can confirm through the PIN portal.");
+    throw new DomainError("FORBIDDEN", "Only the customer can accept through the PIN portal.");
   if (!actor && input.confirmation_method !== "Customer Portal PIN") throw new DomainError("FORBIDDEN", "Not allowed.");
 
   const order = await mustGetOrder(store, input.order_id);
-  if (order.status !== "Waiting for Confirmation") throw new DomainError("INVALID_TRANSITION", "Order is not waiting for confirmation.");
-  const newCode = order.order_code.startsWith("DR-")
-    ? nextOrderCode(await store.listOrders(), Number(new Date().getFullYear()), order.order_code)
-    : null;
-  await store.confirmSpecRevision({
+  // Checks run in the same order as accept_order_revision(): idempotent replay, stale revision,
+  // issued quotation, status, expiry, amounts — all inside the store's single locked operation.
+  const revisionId =
+    input.revision_id ??
+    (await store.listRevisions(order.id)).find((r) => r.revision_number === input.revision_number)?.revision_id;
+  if (!revisionId) throw new DomainError("STALE_REVISION", "That revision no longer exists. Please reload.");
+  const already = (await store.listConfirmations(order.id)).find((c) => c.client_idempotency_key === input.client_idempotency_key);
+  const newCode =
+    !already && order.status === "Waiting for Confirmation" && order.order_code.startsWith("DR-")
+      ? nextOrderCode(await store.listOrders(), Number(new Date().getFullYear()), order.order_code)
+      : null;
+  const res = await store.acceptOrderRevision({
     order_id: order.id,
-    revision_number: input.revision_number,
+    revision_id: revisionId,
+    expected_revision_number: input.revision_number,
+    accepted_furniture_price: money(input.accepted_furniture_price),
+    accepted_delivery_fee: money(input.accepted_delivery_fee),
+    accepted_total_amount: money(input.accepted_furniture_price + input.accepted_delivery_fee),
+    client_idempotency_key: input.client_idempotency_key,
     method: input.confirmation_method,
     confirmed_by_name: input.confirmed_by_name,
     recorded_by: actor?.id ?? null,
     new_order_code: newCode,
   });
   const confirmed = await mustGetOrder(store, order.id);
+  if (res.duplicate) return confirmed; // idempotent replay: nothing new happened
   await store.insertHistory({
     order_id: order.id,
     from_status: order.status,
     to_status: "Confirmed",
     changed_by_id: actor?.id ?? null,
-    notes: `Specification revision ${input.revision_number} confirmed via ${input.confirmation_method}${newCode ? `; order ID ${order.order_code} → ${newCode}` : ""}`,
+    notes: `Specification + quotation of revision ${res.revision_number} accepted via ${input.confirmation_method}${newCode ? `; order ID ${order.order_code} → ${newCode}` : ""}`,
     client_transaction_id: null,
     changed_at: new Date().toISOString(),
   });
   await notifyCustomer(
     store,
     confirmed,
-    `JJ Furniture: Specs for ${confirmed.order_code} (${confirmed.item_name}) are confirmed. 30% down payment: ${formatPeso(
+    `JJ Furniture: ${confirmed.order_code} (${confirmed.item_name}) is confirmed. Production starts after your 30% down payment of ${formatPeso(
       confirmed.standard_down_payment_due,
-    )}. Est. completion ${formatDate(confirmed.estimated_completion_date)}. Track at ${trackUrl()} using the PIN on your slip.`,
+    )} is verified. Track at ${trackUrl()} using your PIN.`,
   );
   return confirmed;
 }
 
-/** Staff/owner issue a new revised quote (spec + price). Voids any previous approval. */
+/**
+ * Staff/owner issue a quotation as a new immutable revised_quote revision (spec
+ * + price + fee, valid QUOTE_VALIDITY_DAYS). Quoting a customer self-service
+ * request (Quote Requested) also records the paper slip # and completion date
+ * and moves it to Waiting for Confirmation — all in one transaction. Any change
+ * voids a previous acceptance.
+ */
 export async function reviseSpecs(store: DataStore, actor: Actor, orderId: string, raw: unknown, expectedRevision: number | null) {
   ensureRole(actor, ["owner", "staff"], "revise specifications");
   const parsed = specRevisionSchema.safeParse(raw);
@@ -169,19 +200,32 @@ export async function reviseSpecs(store: DataStore, actor: Actor, orderId: strin
     expected_revision: expectedRevision,
     created_by_role: actor.role,
     created_by_id: actor.id,
+    quote_validity_days: quoteValidityDays(),
+    paper_slip_number: v.paper_slip_number || null,
+    estimated_completion_date: v.estimated_completion_date || null,
   });
+  const firstQuote = order.status === "Quote Requested";
   await store.insertHistory({
     order_id: orderId,
     from_status: order.status,
     to_status: "Waiting for Confirmation",
     changed_by_id: actor.id,
-    notes: `Revised quote issued as specification revision ${res.revision_number}${
-      Object.keys(res.changed_fields).length ? ` (${describeDiff(res.changed_fields as SpecDiff)})` : ""
-    } — customer must confirm again`,
+    notes: `${firstQuote ? "Official quotation issued" : "Revised quote issued"} as specification revision ${res.revision_number}${
+      !firstQuote && Object.keys(res.changed_fields).length ? ` (${describeDiff(res.changed_fields as SpecDiff)})` : ""
+    }${res.expires_at ? ` — valid until ${formatDate(res.expires_at.slice(0, 10))}` : ""}; customer must accept it`,
     client_transaction_id: null,
     changed_at: new Date().toISOString(),
   });
-  return mustGetOrder(store, orderId);
+  const updated = await mustGetOrder(store, orderId);
+  if (firstQuote)
+    await notifyCustomer(
+      store,
+      updated,
+      `JJ Furniture: Your quotation for ${updated.order_code} is ready: ${formatPeso(updated.furniture_price)} + delivery ${formatPeso(
+        updated.delivery_fee,
+      )}. Valid until ${formatDate(res.expires_at?.slice(0, 10) ?? null)}. Review and accept at ${trackUrl()} with your PIN.`,
+    );
+  return updated;
 }
 
 export async function editOrderDetails(store: DataStore, actor: Actor, orderId: string, raw: unknown) {
@@ -194,7 +238,7 @@ export async function editOrderDetails(store: DataStore, actor: Actor, orderId: 
     throw new DomainError("VALIDATION", "Enter the distance-based delivery fee for deliveries outside Valencia City.");
   const newFee = v.municipality === "Valencia City" ? 0 : v.delivery_fee;
   const feeChanged = newFee !== order.delivery_fee;
-  if (feeChanged && order.status !== "Waiting for Confirmation")
+  if (feeChanged && order.status !== "Waiting for Confirmation" && order.status !== "Quote Requested")
     throw new DomainError("SPEC_LOCKED", "The delivery fee is part of the confirmed quote. Use a change request to adjust it.");
   const res = await store.updateOrder(
     orderId,
@@ -205,14 +249,14 @@ export async function editOrderDetails(store: DataStore, actor: Actor, orderId: 
       delivery_fee: v.delivery_fee,
       special_instructions: v.special_instructions || null,
       reference_photo_url: v.reference_photo_url || null,
-      estimated_completion_date: v.estimated_completion_date,
+      estimated_completion_date: order.status === "Quote Requested" ? order.estimated_completion_date : v.estimated_completion_date,
       scheduled_delivery_date: v.scheduled_delivery_date || null,
     },
     order.version,
   );
   if (!res.ok) throw new DomainError("VERSION_CONFLICT", "This order was changed by someone else. Please refresh.");
   // A fee change is a new quote: record it as a revision the customer must confirm.
-  if (feeChanged && !res.order.is_legacy_incomplete && res.order.furniture_category) {
+  if (feeChanged && res.order.status === "Waiting for Confirmation" && !res.order.is_legacy_incomplete && res.order.furniture_category) {
     const o = res.order;
     await store.addSpecRevision({
       order_id: o.id,
@@ -225,6 +269,7 @@ export async function editOrderDetails(store: DataStore, actor: Actor, orderId: 
       expected_revision: o.current_revision,
       created_by_role: actor.role,
       created_by_id: actor.id,
+      quote_validity_days: quoteValidityDays(),
     });
     return mustGetOrder(store, o.id);
   }
@@ -263,6 +308,8 @@ export async function transitionOrder(store: DataStore, actor: Actor, orderId: s
   // Craftsmen cannot update the orders table under RLS; their workflow runs elevated after this check.
   const writer = actor.role === "craftsman" ? store.elevated() : store;
   const order = await mustGetOrder(writer, orderId);
+  if (!isValidTransition(order.status, to))
+    throw new DomainError("INVALID_TRANSITION", `Cannot move an order from "${order.status}" to "${to}".`);
   const allowed = rolesAllowedFor(order.status, to);
   if (order.status !== to && !allowed.includes(actor.role)) {
     throw new DomainError(
@@ -276,7 +323,6 @@ export async function transitionOrder(store: DataStore, actor: Actor, orderId: s
   assertTransition(order, to, await writer.listPayments(orderId));
 
   const patch: OrderPatch = { status: to };
-  if (actor.role === "craftsman" && to === "In Production" && !order.assigned_craftsman_id) patch.assigned_craftsman_id = actor.id;
   const res = await writer.updateOrder(orderId, patch, opts.expectedVersion ?? order.version);
   if (!res.ok) throw new DomainError("VERSION_CONFLICT", "This order was changed by someone else. Please refresh.", res.current);
 
@@ -292,6 +338,25 @@ export async function transitionOrder(store: DataStore, actor: Actor, orderId: s
   const msg = CUSTOMER_MESSAGES[to];
   if (msg && order.status !== to) await notifyCustomer(store, res.order, msg(res.order));
   return res.order;
+}
+
+/**
+ * Releases a Confirmed order to the workshop (Confirmed -> In Production).
+ * Owner/staff only; the server re-checks the verified 30% down payment (or an
+ * owner-approved credit/installment exception), the accepted latest revision,
+ * no price/spec drift and no production-blocking items.
+ */
+export async function startProduction(store: DataStore, actor: Actor, orderId: string, craftsmanId?: string | null) {
+  ensureRole(actor, ["owner", "staff"], "release orders to production");
+  const order = await mustGetOrder(store, orderId);
+  if (order.status !== "Confirmed") throw new DomainError("INVALID_TRANSITION", "Only Confirmed orders can be released to production.");
+  if (craftsmanId !== undefined && craftsmanId !== order.assigned_craftsman_id) {
+    const res = await store.updateOrder(orderId, { assigned_craftsman_id: craftsmanId }, order.version);
+    if (!res.ok) throw new DomainError("VERSION_CONFLICT", "This order was changed by someone else. Please refresh.");
+  }
+  return transitionOrder(store, actor, orderId, "In Production", {
+    notes: "Released to the workshop: 30% down payment verified (or owner-approved exception) — specification locked",
+  });
 }
 
 export async function passInspection(store: DataStore, actor: Actor, orderId: string, notes?: string) {
@@ -311,7 +376,7 @@ const QUEUE_STATUSES: OrderStatus[] = ["Confirmed", "In Production", "Completed 
 export function productionQueue(orders: Order[]): Order[] {
   return orders
     .filter((o) => QUEUE_STATUSES.includes(o.status))
-    .sort((a, b) => a.priority_rank - b.priority_rank || a.estimated_completion_date.localeCompare(b.estimated_completion_date));
+    .sort((a, b) => a.priority_rank - b.priority_rank || (a.estimated_completion_date ?? "").localeCompare(b.estimated_completion_date ?? ""));
 }
 
 /** Moves an order up/down the owner's queue and renumbers ranks 1..n. */

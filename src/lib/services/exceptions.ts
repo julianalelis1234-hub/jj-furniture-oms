@@ -33,6 +33,7 @@ export async function requestException(store: DataStore, actor: Actor, raw: unkn
     description: v.description,
     requested_by: actor.full_name,
     status: "Pending",
+    is_production_blocking: v.category === "Spec Clarification",
     resolved_by_id: null,
     created_at: new Date().toISOString(),
     resolved_at: null,

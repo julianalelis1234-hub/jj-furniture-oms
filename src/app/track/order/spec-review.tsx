@@ -3,19 +3,21 @@
 import { CheckCircle2, Clock, FileClock, Hammer, RotateCcw, Send, Wrench } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
-import { customerConfirmAction, customerProposeAction, customerRepairAction } from "@/app/actions";
+import { customerAcceptAction, customerProposeAction, customerRepairAction } from "@/app/actions";
 import { ActionDialog } from "@/components/action-dialog";
 import { Field, NativeSelect, TextArea, useServerAction } from "@/components/form";
 import { configFromSpec, configToSpec, FurnitureConfigurator, type ConfigValue } from "@/components/orders/FurnitureConfigurator";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatDateTime } from "@/lib/domain/dates";
+import { newUuid } from "@/lib/uuid";
 import { formatPeso } from "@/lib/domain/finance";
 import { describeDiff, diffSpecs, isConfiguratorFinish } from "@/lib/domain/furniture";
 import type { CustomerOrderView } from "@/lib/services/customer";
 
 const REV_LABEL: Record<string, string> = {
-  staff_draft: "Shop quote",
+  staff_draft: "Shop quotation",
+  customer_request: "Your design request",
   customer_proposal: "Your proposal",
   revised_quote: "Revised shop quote",
   final_approved: "Final approved",
@@ -23,9 +25,12 @@ const REV_LABEL: Record<string, string> = {
 
 /**
  * Customer specification review (CU-01):
- *  - Waiting for Confirmation: explore wood, design, size and finish live.
- *    Unchanged -> [Confirm Specifications] (confirms this exact revision).
+ *  - Quote Requested (Option 2): read-only until the shop issues the official quotation.
+ *  - Waiting for Confirmation (valid quotation): explore wood, design, size and finish live.
+ *    Unchanged -> [Accept Quote & Confirm Specifications] (this exact revision + quotation,
+ *                 with two explicit acceptances recorded atomically).
  *    Changed   -> [Submit Specification Changes for Review] (new proposal revision).
+ *  - Expired quotation: cannot be accepted until the shop issues a fresh one.
  *  - After production starts: read-only, "Locked — Confirmed for Workshop Production",
  *    and [Request Post-Confirmation Change / Repair].
  */
@@ -35,6 +40,8 @@ export function SpecReview({ view: v }: { view: CustomerOrderView }) {
   const initial = useMemo<ConfigValue | null>(() => (current ? configFromSpec(current.spec) : null), [current]);
   const [config, setConfig] = useState<ConfigValue | null>(initial);
   const { pending, run, errors } = useServerAction();
+  // one idempotency key per page view: retries and double taps can never record two acceptances
+  const [acceptKey] = useState(() => newUuid());
 
   if (!current || !config || !initial) return null;
   const editable = v.spec_state === "awaiting_confirmation";
@@ -54,6 +61,32 @@ export function SpecReview({ view: v }: { view: CustomerOrderView }) {
         </CardTitle>
       </CardHeader>
       <CardContent className="grid gap-4">
+        {v.spec_state === "quote_requested" && (
+          <p className="flex gap-2 rounded-lg border border-primary/40 bg-secondary p-3 text-sm" data-testid="quote-requested-banner">
+            <FileClock className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden />
+            <span>
+              <b>We received your design request.</b> JJ Furniture will check the size, wood and finish and send you an official
+              quotation (price and delivery fee). It will appear on this page for you to accept. Nothing is ordered or charged yet.
+            </span>
+          </p>
+        )}
+        {v.spec_state === "quote_expired" && (
+          <p className="flex gap-2 rounded-lg border border-warning/50 bg-warning-soft p-3 text-sm" data-testid="quote-expired-banner">
+            <Clock className="mt-0.5 size-4 shrink-0 text-warning" aria-hidden />
+            <span>
+              <b>This quotation expired on {formatDateTime(current.expires_at!)}.</b> Prices can change, so it can no longer be accepted.
+              Please message or call JJ Furniture for a fresh quotation.
+            </span>
+          </p>
+        )}
+        {v.spec_state === "awaiting_confirmation" && current.expires_at && (
+          <p className="flex items-center gap-2 text-sm" data-testid="quote-validity">
+            <Clock className="size-4 shrink-0 text-primary" aria-hidden />
+            <span>
+              Quotation issued {current.quoted_at ? formatDateTime(current.quoted_at) : ""} · <b>valid until {formatDateTime(current.expires_at)}</b>
+            </span>
+          </p>
+        )}
         {v.spec_state === "awaiting_confirmation" && (
           <p className="rounded-lg bg-accent-soft p-3 text-sm">
             Review the specification below. You can try other woods, designs, sizes and finishes — the preview updates as you choose.
@@ -96,10 +129,22 @@ export function SpecReview({ view: v }: { view: CustomerOrderView }) {
             onChange={setConfig}
             errors={errors}
             readOnly={!editable}
-            lockedLabel={v.spec_state === "locked" ? "Locked — Confirmed for Workshop Production" : "Read-only while the shop reviews"}
+            lockedLabel={
+              v.spec_state === "locked"
+                ? v.status === "Confirmed"
+                  ? "Confirmed — locks for workshop production once your 30% down payment is verified"
+                  : "Locked — Confirmed for Workshop Production"
+                : v.spec_state === "quote_requested"
+                  ? "Read-only while the shop prepares your quotation"
+                  : v.spec_state === "quote_expired"
+                    ? "Quotation expired — waiting for a fresh quotation"
+                    : "Read-only while the shop reviews"
+            }
             legacyDimensions={current.legacy_dimensions_text}
             previewFooter={
-              quote && (
+              !quote ? (
+                <p className="border-t px-3 py-2 text-sm text-muted-foreground">Quotation pending — the shop will add the price and delivery fee.</p>
+              ) : (
                 <div className="border-t px-3 py-2 text-sm">
                   <div className="flex justify-between"><span className="text-muted-foreground">Quoted price (rev. {quote.revision_number})</span><b className="tabular-nums">{formatPeso(quote.quoted_furniture_price)}</b></div>
                   <div className="flex justify-between"><span className="text-muted-foreground">Delivery fee</span><span className="tabular-nums">{quote.quoted_delivery_fee === 0 ? "FREE" : formatPeso(quote.quoted_delivery_fee)}</span></div>
@@ -127,25 +172,56 @@ export function SpecReview({ view: v }: { view: CustomerOrderView }) {
                 </>
               ) : (
                 <ActionDialog
-                  trigger="Confirm Specifications"
+                  trigger="Accept Quote & Confirm Specifications"
                   icon={<CheckCircle2 aria-hidden />}
                   size="xl"
                   variant="success"
-                  title={`Confirm revision ${current.revision_number}?`}
-                  description="You agree that this exact specification and quotation are correct. Production can start after your 30% down payment."
-                  submitLabel="Yes, these are correct"
+                  triggerClassName="h-auto min-h-12 w-full py-2 whitespace-normal"
+                  title={`Accept revision ${current.revision_number}?`}
+                  description="Tick both boxes to accept this exact specification and this exact quotation. Production starts after your 30% down payment is verified."
+                  submitLabel="Accept quote & confirm"
                   submitVariant="success"
-                  action={() => customerConfirmAction(current.revision_number)}
+                  action={(fd) =>
+                    customerAcceptAction({
+                      revision_id: current.revision_id,
+                      expected_revision_number: current.revision_number,
+                      accepted_furniture_price: current.quoted_furniture_price ?? 0,
+                      accepted_delivery_fee: current.quoted_delivery_fee ?? 0,
+                      client_idempotency_key: acceptKey,
+                      accept_specification: fd.get("accept_specification") === "on",
+                      accept_quotation: fd.get("accept_quotation") === "on",
+                    })
+                  }
                   onDone={() => router.refresh()}
                 >
-                  <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 rounded-lg border bg-muted p-3 text-sm">
-                    <dt className="text-muted-foreground">Design</dt><dd className="font-semibold">{current.spec.design_variant} {current.spec.furniture_category}</dd>
-                    <dt className="text-muted-foreground">Size</dt><dd className="font-semibold tabular-nums">{current.spec.width_cm} × {current.spec.height_cm} × {current.spec.depth_cm} cm</dd>
-                    <dt className="text-muted-foreground">Wood</dt><dd className="font-semibold">{current.spec.wood_type}{current.spec.custom_wood_note ? ` (${current.spec.custom_wood_note})` : ""}</dd>
-                    <dt className="text-muted-foreground">Finish</dt><dd className="font-semibold">{current.spec.color_finish}</dd>
-                    <dt className="text-muted-foreground">Price</dt><dd className="font-bold tabular-nums">{formatPeso(current.quoted_furniture_price)}</dd>
-                    <dt className="text-muted-foreground">Delivery</dt><dd className="tabular-nums">{current.quoted_delivery_fee === 0 ? "FREE" : formatPeso(current.quoted_delivery_fee)}</dd>
-                  </dl>
+                  <fieldset className="grid gap-2 rounded-lg border p-3 text-sm">
+                    <legend className="px-1 font-semibold">Specification · revision {current.revision_number}</legend>
+                    <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
+                      <dt className="text-muted-foreground">Design</dt><dd className="font-semibold">{current.spec.design_variant} {current.spec.furniture_category}</dd>
+                      <dt className="text-muted-foreground">Size</dt><dd className="font-semibold tabular-nums">{current.spec.width_cm} × {current.spec.height_cm} × {current.spec.depth_cm} cm</dd>
+                      <dt className="text-muted-foreground">Wood</dt><dd className="font-semibold">{current.spec.wood_type}{current.spec.custom_wood_note ? ` (${current.spec.custom_wood_note})` : ""}</dd>
+                      <dt className="text-muted-foreground">Finish</dt><dd className="font-semibold">{current.spec.color_finish}</dd>
+                      <dt className="text-muted-foreground">Quantity</dt><dd className="font-semibold tabular-nums">{current.spec.quantity}</dd>
+                    </dl>
+                    <label className="flex items-start gap-2 font-semibold">
+                      <input type="checkbox" name="accept_specification" required className="mt-0.5 size-5" data-testid="accept-specification" />
+                      I accept these specifications.
+                    </label>
+                  </fieldset>
+                  <fieldset className="grid gap-2 rounded-lg border p-3 text-sm">
+                    <legend className="px-1 font-semibold">Quotation</legend>
+                    <dl className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-1">
+                      <dt className="text-muted-foreground">Furniture price</dt><dd className="font-bold tabular-nums">{formatPeso(current.quoted_furniture_price)}</dd>
+                      <dt className="text-muted-foreground">Delivery fee</dt><dd className="tabular-nums">{current.quoted_delivery_fee === 0 ? "FREE" : formatPeso(current.quoted_delivery_fee)}</dd>
+                      <dt className="font-semibold">Total</dt><dd className="font-black tabular-nums">{formatPeso((current.quoted_furniture_price ?? 0) + (current.quoted_delivery_fee ?? 0))}</dd>
+                      <dt className="text-muted-foreground">30% down payment</dt><dd className="tabular-nums">{formatPeso(Math.round((current.quoted_furniture_price ?? 0) * 30) / 100)}</dd>
+                      {current.expires_at && (<><dt className="text-muted-foreground">Valid until</dt><dd className="tabular-nums">{formatDateTime(current.expires_at)}</dd></>)}
+                    </dl>
+                    <label className="flex items-start gap-2 font-semibold">
+                      <input type="checkbox" name="accept_quotation" required className="mt-0.5 size-5" data-testid="accept-quotation" />
+                      I accept this quotation.
+                    </label>
+                  </fieldset>
                 </ActionDialog>
               )}
             </div>

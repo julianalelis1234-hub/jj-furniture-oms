@@ -1,7 +1,7 @@
 import { addDays, todayISO } from "@/lib/domain/dates";
 import { hashPin } from "@/lib/domain/pin";
 import type { Municipality, Order, OrderStatus, PaymentType, Profile, SpecRevision, WoodType } from "@/lib/domain/types";
-import { ORDER_STATUSES } from "@/lib/domain/types";
+import { WORKSHOP_STAGES } from "@/lib/domain/types";
 import { dimensionsText, type FurnitureCategory } from "@/lib/domain/furniture";
 import { MemoryStore, type MemoryTables } from "./memory-store";
 
@@ -43,7 +43,8 @@ export const DEMO_PERSONA: Record<Profile["role"], string> = {
 /** Sample orders exposed as one-click buttons on the customer portal in Demo Mode. */
 export const DEMO_CUSTOMER_SAMPLES = [
   { order_code: "JJ-2026-0145", pin: "4821", label: "Dining table · In Production (locked spec)" },
-  { order_code: "DR-0148", pin: "7314", label: "Bed frame · Waiting — try the configurator" },
+  { order_code: "DR-0148", pin: "7314", label: "Bed frame · Waiting — accept the quote or try the configurator" },
+  { order_code: "DR-0147", pin: "3690", label: "Wardrobe · Quote Requested (Option 2 self-service)" },
   { order_code: "JJ-2026-0136", pin: "2468", label: "Sala set · Out for Delivery" },
   { order_code: "JJ-2026-0133", pin: "1357", label: "Wardrobe · Delivered (legacy dimensions)" },
 ];
@@ -164,7 +165,7 @@ const ORDERS: SeedOrder[] = [
     qty: 1, dims: "", wood: "Gmelina", finish: "Gloss White",
     price: 21000, fee: 0, status: "Ready for Delivery", craftsman: STAFF.carlo, terms: "Installment",
     estDays: -1, createdDaysAgo: 22, encodedBy: STAFF.gilbert,
-    payments: [{ type: "Installment / Partial", amount: 3000, daysAgo: 21 }],
+    payments: [{ type: "Down Payment (30%)", amount: 6300, daysAgo: 21 }],
   },
   {
     code: "JJ-2026-0130", slip: "0130", pin: "9090", customer: "Analyn Moreno", phone: "09000000110",
@@ -273,7 +274,7 @@ export async function buildSeedTables(): Promise<MemoryTables> {
     o.created_at = ts(s.createdDaysAgo);
 
     // status history up to the current stage
-    const target = ORDER_STATUSES.indexOf(s.status);
+    const target = WORKSHOP_STAGES.indexOf(s.status as (typeof WORKSHOP_STAGES)[number]);
     let prev: string | null = null;
     for (let i = 0; i <= target; i++) {
       const when = ts(Math.max(0, s.createdDaysAgo - i * Math.max(1, Math.floor(s.createdDaysAgo / (target + 1)))), 9 + i);
@@ -281,13 +282,13 @@ export async function buildSeedTables(): Promise<MemoryTables> {
         id: crypto.randomUUID(),
         order_id: o.id,
         from_status: prev,
-        to_status: ORDER_STATUSES[i],
+        to_status: WORKSHOP_STAGES[i],
         changed_by_id: i <= 1 ? s.encodedBy : i <= 3 ? (s.craftsman ?? null) : i === 4 ? STAFF.owner : STAFF.jesse,
         notes: i === 0 ? `Encoded from paper slip #${s.slip}` : null,
         client_transaction_id: null,
         changed_at: when,
       });
-      prev = ORDER_STATUSES[i];
+      prev = WORKSHOP_STAGES[i];
     }
     if (s.revision) {
       t.order_status_history.push(
@@ -305,12 +306,13 @@ export async function buildSeedTables(): Promise<MemoryTables> {
 
     // specification revision 1: the shop's quote (legacy orders keep their free-text dimensions)
     const rev1: SpecRevision = {
-      id: crypto.randomUUID(), order_id: o.id, revision_number: 1, revision_type: "staff_draft",
+      revision_id: crypto.randomUUID(), order_id: o.id, revision_number: 1, revision_type: "staff_draft",
       furniture_category: o.furniture_category, design_variant: o.design_variant,
       width_cm: o.width_cm, height_cm: o.height_cm, depth_cm: o.depth_cm,
       wood_type: o.wood_type, custom_wood_note: o.custom_wood_note, color_finish: o.color_finish, quantity: o.quantity,
       legacy_dimensions_text: s.legacy ? o.dimensions : null,
       quoted_furniture_price: o.furniture_price, quoted_delivery_fee: o.delivery_fee,
+      quoted_at: ts(s.createdDaysAgo), expires_at: new Date(Date.parse(ts(s.createdDaysAgo)) + 7 * 86_400_000).toISOString(),
       spec_preview_config: {}, changed_fields: s.legacy ? { backfill: "created from existing order by migration 003" } : {},
       created_by_role: s.legacy ? "system (migration 003 backfill)" : "staff", created_by_id: s.encodedBy,
       created_at: ts(s.createdDaysAgo),
@@ -324,10 +326,10 @@ export async function buildSeedTables(): Promise<MemoryTables> {
         order_id: o.id,
         version_number: 1,
         revision_number: 1,
-        revision_id: rev1.id,
+        revision_id: rev1.revision_id,
         confirmed_specs_snapshot: {
           item_name: o.item_name, dimensions: o.dimensions, wood_type: o.wood_type, color_finish: o.color_finish,
-          quantity: o.quantity, furniture_price: o.furniture_price, furniture_category: o.furniture_category,
+          quantity: o.quantity, furniture_price: o.furniture_price!, furniture_category: o.furniture_category,
           design_variant: o.design_variant, width_cm: o.width_cm, height_cm: o.height_cm, depth_cm: o.depth_cm,
           quoted_furniture_price: o.furniture_price, quoted_delivery_fee: o.delivery_fee,
         },
@@ -335,6 +337,12 @@ export async function buildSeedTables(): Promise<MemoryTables> {
         confirmed_by_name: s.customer,
         recorded_by_staff_id: s.encodedBy,
         confirmed_at: ts(s.createdDaysAgo - 1),
+        specification_accepted_at: ts(s.createdDaysAgo - 1),
+        quotation_accepted_at: ts(s.createdDaysAgo - 1),
+        accepted_furniture_price: o.furniture_price!,
+        accepted_delivery_fee: o.delivery_fee,
+        accepted_total_amount: o.furniture_price! + o.delivery_fee,
+        client_idempotency_key: null,
       });
     }
 
@@ -385,6 +393,7 @@ export async function buildSeedTables(): Promise<MemoryTables> {
     requested_by: string, status: "Pending" | "Approved" | "Resolved" = "Pending", daysAgo = 0) => {
     t.order_exceptions_and_repairs.push({
       id: crypto.randomUUID(), order_id: byCode(code).id, category, description, requested_by, status,
+      is_production_blocking: category === "Spec Clarification",
       resolved_by_id: status === "Pending" ? null : STAFF.owner, created_at: ts(daysAgo, 11),
       resolved_at: status === "Pending" ? null : ts(daysAgo, 15),
     });
@@ -395,6 +404,36 @@ export async function buildSeedTables(): Promise<MemoryTables> {
   ex("JJ-2026-0143", "Spec Clarification", "Tabletop thickness 3cm or 4.5cm? Slip only says \"thick top\".", "Nolito Remulta", "Pending", 0);
   ex("JJ-2026-0134", "On-Site Scratch Touch-Up / Repair", "Scratch on left door (approx. 8cm) from rough road. Painter touch-up with Cherry Stain before re-delivery.", "Jesse Decena", "Pending", 1);
   ex("JJ-2026-0137", "Special Delivery Terms", "Customer asks to deliver after 4 PM because nobody is home earlier. Halapitan road is unlit after 6 PM.", "Liza", "Pending", 0);
+
+  // ---- Option 2: a customer self-service request waiting for its official quotation
+  const req = await store.insertOrder({
+    order_code: "DR-0147", paper_slip_number: null, encoded_by_id: null,
+    customer_name: "Josefina Lagura", customer_phone: "09000000147",
+    delivery_address: "Purok 5, Brgy. Bangcud, beside the barangay hall", municipality: "Lantapan",
+    pin_code_hash: hashPin("3690", 6), pin_code_display: "3690",
+    item_name: "Wardrobe / Aparador Custom Piece", quantity: 1,
+    dimensions: dimensionsText({ width_cm: 150, height_cm: 190, depth_cm: 60 }),
+    wood_type: "Mahogany", color_finish: "Dark Espresso",
+    furniture_category: "Custom Piece", design_variant: "Wardrobe / Aparador", width_cm: 150, height_cm: 190, depth_cm: 60,
+    custom_wood_note: null, special_instructions: "Two hanging sections and three drawers at the bottom, please.",
+    reference_photo_url: null, specs_confirmed: false, status: "Quote Requested", priority_rank: 99, priority_label: "Normal",
+    assigned_craftsman_id: null, furniture_price: null, delivery_fee: 0, payment_exception_type: "Standard 30/70",
+    payment_exception_approved: false, estimated_completion_date: null, scheduled_delivery_date: null,
+    order_origin: "customer_self_service", client_request_key: "seed-request-0147",
+  });
+  await store.addSpecRevision({
+    order_id: req.id, type: "customer_request", expected_revision: null, created_by_role: "customer", created_by_id: null,
+    spec: { furniture_category: "Custom Piece", design_variant: "Wardrobe / Aparador", width_cm: 150, height_cm: 190, depth_cm: 60,
+      wood_type: "Mahogany", custom_wood_note: null, color_finish: "Dark Espresso", quantity: 1 },
+  });
+  const reqRow = byCode("DR-0147");
+  reqRow.created_at = ts(0, 8);
+  reqRow.version = 1;
+  t.order_specification_revisions.filter((r) => r.order_id === req.id).forEach((r) => (r.created_at = ts(0, 8)));
+  t.order_status_history.push({
+    id: crypto.randomUUID(), order_id: req.id, from_status: null, to_status: "Quote Requested", changed_by_id: null,
+    notes: "Customer self-service request (Option 2) · specification revision 1", client_transaction_id: null, changed_at: ts(0, 8),
+  });
 
   // ---- notifications
   const nt = (code: string, body: string, status: "Sent" | "Failed" | "Pending", daysAgo: number, channel: "SMS" | "Messenger" = "SMS") => {

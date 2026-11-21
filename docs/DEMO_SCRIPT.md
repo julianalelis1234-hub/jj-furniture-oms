@@ -31,6 +31,7 @@ data and real application features. Nothing is faked except where it says
 | **JJ-2026-0149** *(you create it in step 2)* | Rosalinda Abellana | Every portal, full 7-stage lifecycle |
 | JJ-2026-0145 (PIN 4821) | Maria Santos | Urgent dining table, In Production |
 | DR-0148 (PIN 7314) | Ramon dela Cruz | Waiting for Confirmation |
+| DR-0147 (PIN 3690) | Josefina Lagura | Quote Requested — Option 2 self-service request awaiting the shop's quotation |
 | JJ-2026-0136 (PIN 2468) | Pedro & Ana Bautista | Out for Delivery (driver Jesse) |
 | JJ-2026-0133 (PIN 1357) | Lourdes Ybañez | Delivered, unpaid balance (approved credit) |
 
@@ -89,15 +90,24 @@ Scroll to **What we found in the Discover phase**, then **One record, five porta
 2. Type the **PIN** from the slip and click **Open with PIN**. Show the configurator with the shop's quote (revision 1) and the **Payment summary**.
 3. Tap **Gmelina**. A line appears: *"Your changes: Wood: Mahogany -> Gmelina"* with **Submit Specification Changes for Review**.
    **Say:** "While the order is waiting, the customer can explore. Submitting would create a new proposal revision for the shop to re-quote. Nothing is approved until the customer confirms a shop quote." Click **Undo my changes**.
-4. Click **Confirm Specifications** → **Yes, these are correct**.
-   **Say:** "The customer confirmed this exact revision. This clears the production gate. The draft becomes JJ-2026-0149, stage 2 of 7, and the spec is now locked for the workshop."
+4. Click **Accept Quote & Confirm Specifications**. Tick **I accept these specifications** and **I accept this quotation** (note *Valid until*, 7 days) → **Accept quote & confirm**.
+   **Say:** "Two explicit acceptances, recorded together for this exact revision. The draft becomes JJ-2026-0149, stage 2 of 7 — confirmed, but no wood is cut until the 30% down payment is verified."
+
+**Staff: verified 30% → release to the workshop (about 20 seconds)**
+5. Top bar → **Staff** → **Log 30% down payment** → JJ-2026-0149 → **Log payment** (₱7,200 pre-filled) → **Save payment**.
+6. **Release to workshop (30% verified)** → JJ-2026-0149 → **Release to workshop** → the dialog shows *30% verified ✓* → **Start production**.
+   **Say:** "The server re-checks the verified 30%, the accepted latest revision, price drift and open spec questions before the specification locks."
+
+**Optional — Option 2 self-service (about 40 seconds)**
+* Top bar → **Customer** → **Design & Request Custom Furniture**. Pick a design, size, wood and finish, fill name / mobile / address → **Send request for quotation**. The Order ID and PIN appear once → **View my request** shows *Quote Requested*, no price yet.
+* Or use the prepared request **DR-0147 · PIN 3690**. In **Staff → Customer quote requests (Option 2)** click **Issue quotation**, enter price, delivery fee and the paper slip # → **Send quotation**. The customer can now accept it.
 
 ## 4. Craftsmen Portal (C-01) and Owner Dashboard (O-01) — 2:00
 
 **Craftsmen**
 1. Top bar → **Craftsmen** (Nolito Remulta). **Say:** "Large cards sorted by the owner's priority. No prices or customer phone numbers are ever sent to this screen."
-2. On **JJ-2026-0149** (To Do tab): **Start Work** → **Yes, start now**.
-3. **In Progress** tab → **Ask Spec Question** → type *"Should the table edge be rounded or square?"* → **Send question**. The job moves to **For Revision** because a question is open.
+2. **Up Next** tab: confirmed jobs show *"do not cut wood yet"*. **Say:** "Craftsmen cannot start production themselves; the office releases jobs after the 30% is verified."
+3. **In Progress** tab (JJ-2026-0149) → **Ask Spec Question** → type *"Should the table edge be rounded or square?"* → **Send question**. The job moves to **For Revision** because a question is open.
 4. **For Revision** tab → **Mark Ready for Owner Inspection** → tick the 4 checklist boxes → **Send to owner**.
 
 **Owner**
@@ -110,10 +120,9 @@ Scroll to **What we found in the Discover phase**, then **One record, five porta
 
 **Staff hand-off (about 20 seconds, needed before the driver can leave)**
 9. Top bar → **Staff**:
-   - **Log 30% down payment** → JJ-2026-0149 → **Log payment** (₱7,200 is pre-filled) → **Save payment**.
    - **Schedule driver & vehicle** → JJ-2026-0149 → **Schedule delivery** → Driver **Jesse Decena**, Vehicle **Multicab**, Date **today**, Time **1:00 PM - 3:00 PM** → **Schedule delivery**.
 
-   **Say:** "Dispatch is blocked until the 30% down payment is recorded or the owner approves an exception."
+   **Say:** "The 30% was verified before production, so dispatch is allowed."
 
 ## 5. Delivery Driver Portal (D-01) — 1:30
 

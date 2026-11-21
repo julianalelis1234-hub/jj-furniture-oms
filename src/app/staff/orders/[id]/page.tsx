@@ -14,6 +14,7 @@ import {
   RetrySmsDialog,
   ReviseSpecsDialog,
   ScheduleDeliveryDialog,
+  StartProductionDialog,
   VerifyHandoverButton,
 } from "@/components/office/actions";
 import { TransitionButton } from "@/components/office/transition-button";
@@ -28,10 +29,12 @@ import { ReviewProposalControls } from "@/components/office/spec-dialogs";
 import { PreviewPanel } from "@/components/orders/preview-panel";
 import { describeDiff, formatDims, type FurnitureSpec, type SpecDiff } from "@/lib/domain/furniture";
 import { isCustomerProposal } from "@/lib/services/exceptions";
+import { blockingItems, isQuoteExpired, quoteValidityDays } from "@/lib/domain/gate";
 import type { SpecRevision } from "@/lib/domain/types";
 
 const REVISION_LABEL: Record<SpecRevision["revision_type"], string> = {
-  staff_draft: "Shop quote (draft)",
+  staff_draft: "Shop quotation",
+  customer_request: "Customer design request",
   customer_proposal: "Customer proposal",
   revised_quote: "Revised quote",
   final_approved: "Final approved",
@@ -57,6 +60,7 @@ export default async function OrderDetailPage({ params }: PageProps<"/staff/orde
   const drivers = profiles.filter((p) => p.role === "driver" && p.is_active);
   const liveDelivery = deliveries.find((d) => d.dispatch_status !== "Failed / Reschedule");
   const isOwner = actor.role === "owner";
+  const validityDays = quoteValidityDays();
   const simulated = smsMode() === "simulated";
 
   return (
@@ -70,7 +74,7 @@ export default async function OrderDetailPage({ params }: PageProps<"/staff/orde
         <h1 className="text-2xl font-bold sm:text-3xl">{o.order_code}</h1>
         <StatusBadge status={o.status} />
         <PriorityBadge label={o.priority_label} rank={o.priority_rank} />
-        <span className="text-sm text-muted-foreground">Paper slip #{o.paper_slip_number} · encoded by {nameOf(profiles, o.encoded_by_id)}</span>
+        <span className="text-sm text-muted-foreground">{o.paper_slip_number ? <>Paper slip #{o.paper_slip_number} · encoded by {nameOf(profiles, o.encoded_by_id)}</> : <>Customer portal request (Option 2) · no paper slip until the quotation</>}</span>
       </div>
 
       <Card className="mb-4"><CardContent className="pt-4"><StageTracker status={o.status} /></CardContent></Card>
@@ -79,18 +83,36 @@ export default async function OrderDetailPage({ params }: PageProps<"/staff/orde
       <Card className="mb-4 border-accent/60 bg-accent-soft">
         <CardHeader><CardTitle>Next step</CardTitle></CardHeader>
         <CardContent className="flex flex-wrap gap-2">
+          {o.status === "Quote Requested" && (<>
+            <p className="w-full text-sm">
+              <b>Customer design request (Option 2).</b> Check the size, wood and finish for feasibility, then issue the official quotation
+              with the price, delivery fee and paper slip number. Craftsmen do not see this order yet.
+            </p>
+            <ReviseSpecsDialog order={o} validityDays={validityDays} />
+            <EditDetailsDialog order={o} />
+          </>)}
           {o.status === "Waiting for Confirmation" && (() => {
             const latest = revisions.at(-1);
             const proposal = exceptions.find((e) => e.status === "Pending" && isCustomerProposal(e));
-            const pendingOther = exceptions.some((e) => e.status === "Pending" && !isCustomerProposal(e));
+            const blockingOther = blockingItems(o.id, exceptions).some((e) => !isCustomerProposal(e));
             if (proposal) return <><p className="w-full text-sm font-semibold text-warning">The customer proposed changes (revision {latest?.revision_number}). Review them below and send a revised quote.</p><ReviewProposalControls ex={proposal} order={o} proposal={latest?.revision_type === "customer_proposal" ? specOf(latest) : null} /></>;
-            if (o.is_legacy_incomplete) return <><p className="w-full text-sm font-semibold text-warning">Legacy order: issue a revised quote with exact W × H × D before the customer can confirm.</p><ReviseSpecsDialog order={o} /></>;
-            if (pendingOther) return <><p className="w-full text-sm font-semibold text-warning">Resolve the open review item(s) below before recording the confirmation.</p><ReviseSpecsDialog order={o} /></>;
-            return <><ConfirmSpecsDialog order={o} /><ReviseSpecsDialog order={o} /></>;
+            if (o.is_legacy_incomplete) return <><p className="w-full text-sm font-semibold text-warning">Legacy order: issue a revised quote with exact W × H × D before the customer can accept.</p><ReviseSpecsDialog order={o} validityDays={validityDays} /></>;
+            if (latest && isQuoteExpired(latest)) return <><p className="w-full text-sm font-semibold text-warning">Quotation (revision {latest.revision_number}) expired on {formatDateTime(latest.expires_at!)}. Issue a fresh quotation before the customer can accept.</p><ReviseSpecsDialog order={o} validityDays={validityDays} label="Issue fresh quotation" /></>;
+            if (blockingOther) return <><p className="w-full text-sm font-semibold text-warning">Resolve the open production-blocking item(s) below before recording the acceptance.</p><ReviseSpecsDialog order={o} validityDays={validityDays} /></>;
+            return <>
+              {latest?.expires_at && <p className="w-full text-sm">Quotation valid until <b>{formatDateTime(latest.expires_at)}</b>. Waiting for the customer to accept the specification and the quotation.</p>}
+              <ConfirmSpecsDialog order={o} /><ReviseSpecsDialog order={o} validityDays={validityDays} />
+            </>;
           })()}
           {o.status === "Confirmed" && (<>
-            <TransitionButton orderId={o.id} to="In Production" version={o.version}><Hammer aria-hidden /> Start production</TransitionButton>
-            <ReviseSpecsDialog order={o} />
+            <p className="w-full text-sm">
+              Purchase confirmed — <b>not yet authorized to cut wood.</b> Release to the workshop after the 30% down payment
+              ({formatPeso(o.standard_down_payment_due)}) is verified: {formatPeso(furniturePaidFrom(payments))} verified so far.
+            </p>
+            <StartProductionDialog order={o} verifiedPaid={furniturePaidFrom(payments)} blocking={blockingItems(o.id, exceptions).length}
+              craftsmen={profiles.filter((p) => p.role === "craftsman" && p.is_active)} />
+            <LogPaymentDialog order={o} defaultAmount={Math.max(0, o.standard_down_payment_due - furniturePaidFrom(payments)) || undefined} />
+            <ReviseSpecsDialog order={o} validityDays={validityDays} />
           </>)}
           {o.status === "In Production" && (
             <TransitionButton orderId={o.id} to="Completed / For Inspection" version={o.version}><PackageCheck aria-hidden /> Mark ready for inspection</TransitionButton>
@@ -142,9 +164,11 @@ export default async function OrderDetailPage({ params }: PageProps<"/staff/orde
                 <summary className="cursor-pointer font-semibold">Specification revisions ({revisions.length})</summary>
                 <ol className="mt-2 grid gap-2">
                   {revisions.map((r) => (
-                    <li key={r.id} className="tabular-nums">
-                      <b>Rev. {r.revision_number}</b> · {REVISION_LABEL[r.revision_type]} · {formatPeso(r.quoted_furniture_price)}
-                      {r.quoted_delivery_fee > 0 && ` + ${formatPeso(r.quoted_delivery_fee)} delivery`}
+                    <li key={r.revision_id} className="tabular-nums">
+                      <b>Rev. {r.revision_number}</b> · {REVISION_LABEL[r.revision_type]}
+                      {r.quoted_furniture_price != null && <> · {formatPeso(r.quoted_furniture_price)}</>}
+                      {(r.quoted_delivery_fee ?? 0) > 0 && ` + ${formatPeso(r.quoted_delivery_fee)} delivery`}
+                      {r.expires_at && <span className="block text-xs text-muted-foreground">Quoted {formatDateTime(r.quoted_at!)} · valid until {formatDateTime(r.expires_at)}{isQuoteExpired(r) ? " (expired)" : ""}</span>}
                       <span className="block text-xs text-muted-foreground">{formatDateTime(r.created_at)} · {r.created_by_id ? nameOf(profiles, r.created_by_id) : r.created_by_role}</span>
                       {"backfill" in r.changed_fields ? <span className="block text-xs text-muted-foreground">Created from the original order record</span>
                         : r.revision_number > 1 && <span className="block text-xs">{describeDiff(r.changed_fields as SpecDiff) || "No changes"}</span>}
@@ -205,7 +229,7 @@ export default async function OrderDetailPage({ params }: PageProps<"/staff/orde
                 </li>
               ))}
             </ul>
-            {o.status !== "Delivered" || o.collectible_on_delivery > 0 ? <div><LogPaymentDialog order={o} defaultType={o.remaining_furniture_balance < o.furniture_price ? "Installment / Partial" : "Down Payment (30%)"} /></div> : null}
+            {o.status !== "Delivered" || o.collectible_on_delivery > 0 ? <div><LogPaymentDialog order={o} defaultType={o.remaining_furniture_balance < (o.furniture_price ?? 0) ? "Installment / Partial" : "Down Payment (30%)"} /></div> : null}
           </CardContent>
         </Card>
 

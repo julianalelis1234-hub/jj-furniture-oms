@@ -1,6 +1,6 @@
 "use client";
 
-import { CircleHelp, Hammer, PackageCheck, Ruler } from "lucide-react";
+import { CircleHelp, Hourglass, PackageCheck, Ruler } from "lucide-react";
 import { useState } from "react";
 import { requestExceptionAction, transitionAction } from "@/app/actions";
 import { ActionDialog } from "@/components/action-dialog";
@@ -17,7 +17,7 @@ type Tab = "todo" | "progress" | "revision" | "done";
 type Question = { id: string; order_id: string; description: string; status: string; requested_by: string | null };
 
 const TABS: { id: Tab; label: string }[] = [
-  { id: "todo", label: "To Do" },
+  { id: "todo", label: "Up Next" },
   { id: "progress", label: "In Progress" },
   { id: "revision", label: "For Revision" },
   { id: "done", label: "Done" },
@@ -53,12 +53,12 @@ export function WorkshopBoard({ jobs, names, me, questions }: { jobs: WorkshopOr
 
       {shown.length === 0 ? (
         <EmptyState title={tab === "revision" ? "No jobs sent back. Good work!" : "No jobs here"}>
-          {tab === "todo" ? "New jobs appear when the customer confirms and the office releases them." : undefined}
+          {tab === "todo" ? "Confirmed jobs appear here. The office releases them to production once the 30% down payment is verified." : undefined}
         </EmptyState>
       ) : (
         <ul className="grid gap-3 md:grid-cols-2">
           {shown.map((j) => {
-            const due = daysBetween(today, j.estimated_completion_date);
+            const due = j.estimated_completion_date ? daysBetween(today, j.estimated_completion_date) : 99;
             const myQs = questions.filter((q) => q.order_id === j.id);
             return (
               <li key={j.id} className={cn("rounded-2xl border-2 bg-card p-4", j.priority_label === "Urgent" && "border-destructive", j.needs_revision && "border-warning")}>
@@ -100,12 +100,10 @@ export function WorkshopBoard({ jobs, names, me, questions }: { jobs: WorkshopOr
 
                 <div className="mt-3 grid gap-2 sm:grid-cols-2">
                   {j.status === "Confirmed" && (
-                    <ActionDialog trigger="Start Work" icon={<Hammer aria-hidden />} size="xl" title={`Start ${j.order_code}?`}
-                      description={`${j.quantity} × ${j.item_name} · ${j.dimensions} · ${j.wood_type} · ${j.color_finish}`}
-                      submitLabel="Yes, start now" submitVariant="success"
-                      action={() => transitionAction(j.id, "In Production", j.version, "Work started")}>
-                      <p className="text-sm">Check the size, wood and finish above match the slip before cutting.</p>
-                    </ActionDialog>
+                    <p className="flex items-start gap-2 rounded-lg border border-dashed p-2 text-sm text-muted-foreground" data-testid="awaiting-release">
+                      <Hourglass className="mt-0.5 size-4 shrink-0" aria-hidden />
+                      Up next — do not cut wood yet. The office releases this job after the 30% down payment is verified.
+                    </p>
                   )}
                   {j.status === "In Production" && (
                     <ActionDialog trigger="Mark Ready for Owner Inspection" icon={<PackageCheck aria-hidden />} size="xl" variant="success"

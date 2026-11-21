@@ -181,16 +181,38 @@ try {
   await caption("Changing anything would be sent for review — here the customer keeps the quote");
   await page.getByRole("button", { name: "Undo my changes" }).click();
   await pause(1200);
-  await caption("Customer clicks Confirm Specifications — confirms this exact revision and clears the production gate");
-  await page.getByRole("button", { name: "Confirm Specifications" }).click();
-  await pause(1200);
-  await page.getByRole("button", { name: "Yes, these are correct" }).click();
-  await toast("Thank you! Your specifications are confirmed.");
+  await caption("Accept Quote & Confirm Specifications — two explicit acceptances: the spec AND the quotation (valid 7 days)");
+  await page.getByRole("button", { name: "Accept Quote & Confirm Specifications" }).click();
+  await pause(1500);
+  await page.getByTestId("accept-specification").check();
+  await pause(600);
+  await page.getByTestId("accept-quotation").check();
+  await pause(1000);
+  await page.getByRole("dialog").getByRole("button", { name: "Accept quote & confirm" }).click();
+  await toast("You accepted the specifications and the quotation");
   await page.waitForLoadState("networkidle");
   newCode = newCode.replace(/^DR-(\d{4})$/, `JJ-${new Date().getFullYear()}-$1`);
-  await caption(`Confirmed — the draft becomes ${newCode} and moves to stage 2/7`);
+  await caption(`Confirmed — ${newCode} is at stage 2/7, but wood is not cut until the 30% is verified`);
   await page.evaluate(() => window.scrollTo(0, 0));
   await pause(3500);
+
+  // ------------------------- staff: verified 30% -> release to the workshop
+  await role("Staff");
+  await caption("Staff logs the 30% down payment, then releases the job to the workshop");
+  const dp = page.locator("li", { hasText: newCode }).filter({ hasText: "Still needed" }).first();
+  await scrollTo(dp);
+  await dp.getByRole("button", { name: "Log payment" }).click();
+  await pause(1000);
+  await page.getByRole("button", { name: "Save payment" }).click();
+  await toast("Payment recorded.");
+  const rel = page.locator("li", { hasText: newCode }).filter({ has: page.getByRole("button", { name: "Release to workshop" }) }).first();
+  await scrollTo(rel);
+  await rel.getByRole("button", { name: "Release to workshop" }).click();
+  await caption("The server re-checks: verified 30%, accepted latest revision, no price drift, no blocking items");
+  await pause(2500);
+  await page.getByRole("dialog").getByRole("button", { name: "Start production" }).click();
+  await toast("Released to the workshop.");
+  await pause(1500);
 
   // ------------------------------------------- 4a. Craftsmen portal (2:00 total)
   await role("Craftsmen");
@@ -202,13 +224,10 @@ try {
   }
   await checkLayout("craftsman");
   const job = () => page.locator("li", { hasText: newCode }).first();
-  await scrollTo(job());
+  await caption("Up Next jobs wait for the office's release — craftsmen cannot start production themselves");
   await pause(2500);
-  await job().getByRole("button", { name: "Start Work" }).click();
-  await page.getByRole("button", { name: "Yes, start now" }).click();
-  await toast("Moved to “In Production”");
   await page.getByRole("tab", { name: /In Progress/ }).click();
-  await caption("Start Work → In Production. Unsure about a detail? Ask Spec Question");
+  await caption("The released job is In Production. Unsure about a detail? Ask Spec Question");
   await scrollTo(job());
   await job().getByRole("button", { name: "Ask Spec Question" }).click();
   await page.getByRole("textbox", { name: /Your question/ }).fill("Should the table edge be rounded or square?");
@@ -263,13 +282,7 @@ try {
 
   // ---------------------- staff hand-off: 30% down payment + driver schedule
   await role("Staff");
-  await caption("Staff logs the 30% down payment and schedules Jesse's Multicab for today");
-  const dp = page.locator("li", { hasText: newCode }).filter({ hasText: "Still needed" }).first();
-  await scrollTo(dp);
-  await dp.getByRole("button", { name: "Log payment" }).click();
-  await pause(1000);
-  await page.getByRole("button", { name: "Save payment" }).click();
-  await toast("Payment recorded.");
+  await caption("Staff schedules Jesse's Multicab for today");
   const sch = page.locator("li", { hasText: newCode }).filter({ has: page.getByRole("button", { name: "Schedule delivery" }) }).first();
   await scrollTo(sch);
   await sch.getByRole("button", { name: "Schedule delivery" }).click();

@@ -1,9 +1,10 @@
 import { Check } from "lucide-react";
 import { STATUS_SHORT, stageIndex } from "@/lib/domain/status";
-import { ORDER_STATUSES, type OrderStatus, type PriorityLabel } from "@/lib/domain/types";
+import { WORKSHOP_STAGES, type OrderStatus, type PriorityLabel } from "@/lib/domain/types";
 import { cn } from "@/lib/utils";
 
 const TONE: Record<OrderStatus, string> = {
+  "Quote Requested": "bg-secondary text-foreground border-dashed border-primary/50",
   "Waiting for Confirmation": "bg-warning-soft text-warning border-warning/40",
   Confirmed: "bg-info-soft text-info border-info/40",
   "In Production": "bg-accent-soft text-primary border-accent/60",
@@ -22,7 +23,12 @@ export function StatusBadge({ status, className }: { status: OrderStatus; classN
         className,
       )}
     >
-      <span className="tabular-nums opacity-70">{stageIndex(status) + 1}/7</span> {STATUS_SHORT[status]}
+      {status === "Quote Requested" ? (
+        <span className="opacity-70">Intake ·</span>
+      ) : (
+        <span className="tabular-nums opacity-70">{stageIndex(status)}/7</span>
+      )}{" "}
+      {STATUS_SHORT[status]}
     </span>
   );
 }
@@ -42,12 +48,16 @@ export function PriorityBadge({ label, rank }: { label: PriorityLabel; rank?: nu
   );
 }
 
-/** The 7 standardized stages as a vertical (mobile) / horizontal (desktop) tracker. */
+/**
+ * The 7 standardized workshop & delivery stages as a vertical (mobile) /
+ * horizontal (desktop) tracker. "Quote Requested" is pre-production intake:
+ * no stage is active yet.
+ */
 export function StageTracker({ status, compact = false }: { status: OrderStatus; compact?: boolean }) {
-  const current = stageIndex(status);
+  const current = stageIndex(status) - 1; // 0-based position in WORKSHOP_STAGES; -1 for Quote Requested
   return (
     <ol className={cn("grid gap-2", compact ? "grid-cols-7" : "sm:grid-cols-7")} aria-label="Order progress">
-      {ORDER_STATUSES.map((s, i) => {
+      {WORKSHOP_STAGES.map((s, i) => {
         const done = i < current || status === "Delivered";
         const active = i === current && status !== "Delivered";
         return (

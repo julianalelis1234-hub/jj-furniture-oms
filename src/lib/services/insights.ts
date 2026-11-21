@@ -16,6 +16,7 @@ export type Risk = "delayed" | "at_risk" | "on_track";
 /** Delayed = past the estimated completion date and not built yet; at risk = due within 2 days. */
 export function riskOf(o: Order, today: string): Risk {
   if (stageIndex(o.status) >= stageIndex("Completed / For Inspection")) return "on_track";
+  if (!o.estimated_completion_date) return "on_track"; // a quote request has no date until it is quoted
   const d = daysBetween(today, o.estimated_completion_date);
   if (d < 0) return "delayed";
   if (d <= 2) return "at_risk";
@@ -60,6 +61,10 @@ export function ownerKpis(
 }
 
 export interface StaffTasks {
+  /** Option 2 customer self-service requests waiting for the official quotation */
+  quoteRequests: Order[];
+  /** Confirmed + 30% verified (or owner exception) + no blocking items: ready to release to the workshop */
+  readyForProduction: Order[];
   needsConfirmation: Order[];
   specProposals: OrderException[];
   needsDownPayment: { order: Order; shortfall: number }[];
@@ -91,7 +96,15 @@ export function staffTasks(
   const byId = new Map(orders.map((o) => [o.id, o]));
   const live = (orderId: string) => deliveries.some((d) => d.order_id === orderId && d.dispatch_status !== "Failed / Reschedule");
   const proposals = exceptions.filter((e) => e.status === "Pending" && isCustomerProposal(e));
+  const blocked = (orderId: string) => exceptions.some((e) => e.order_id === orderId && e.status === "Pending" && e.is_production_blocking);
   return {
+    quoteRequests: orders.filter((o) => o.status === "Quote Requested").sort((a, b) => a.created_at.localeCompare(b.created_at)),
+    readyForProduction: orders.filter(
+      (o) =>
+        o.status === "Confirmed" &&
+        !blocked(o.id) &&
+        (o.payment_exception_approved || downPaymentShortfall(o, payments) === 0),
+    ),
     needsConfirmation: orders.filter((o) => o.status === "Waiting for Confirmation" && !proposals.some((p) => p.order_id === o.id)),
     specProposals: proposals,
     needsDownPayment: orders

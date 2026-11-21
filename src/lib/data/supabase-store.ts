@@ -18,7 +18,8 @@ import type {
 import type {
   AddRevisionInput,
   AddRevisionResult,
-  ConfirmRevisionInput,
+  AcceptRevisionInput,
+  AcceptRevisionResult,
   DataStore,
   Insert,
   NewOrderRow,
@@ -47,8 +48,14 @@ const normRevision = (r: SpecRevision): SpecRevision => ({
   width_cm: numOrNull(r.width_cm),
   height_cm: numOrNull(r.height_cm),
   depth_cm: numOrNull(r.depth_cm),
-  quoted_furniture_price: Number(r.quoted_furniture_price),
-  quoted_delivery_fee: Number(r.quoted_delivery_fee),
+  quoted_furniture_price: numOrNull(r.quoted_furniture_price),
+  quoted_delivery_fee: numOrNull(r.quoted_delivery_fee),
+});
+const normConfirmation = (c: OrderConfirmation): OrderConfirmation => ({
+  ...c,
+  accepted_furniture_price: Number(c.accepted_furniture_price),
+  accepted_delivery_fee: Number(c.accepted_delivery_fee),
+  accepted_total_amount: Number(c.accepted_total_amount),
 });
 const normPayment = (p: Payment): Payment => ({ ...p, amount: Number(p.amount) });
 const normDelivery = (d: DeliveryAssignment): DeliveryAssignment => ({
@@ -148,21 +155,30 @@ export class SupabaseStore implements DataStore {
       p_created_by_role: input.created_by_role,
       p_created_by_id: input.created_by_id,
       p_preview_config: input.preview_config ?? {},
+      p_quote_validity_days: input.quote_validity_days ?? 7,
+      p_paper_slip_number: input.paper_slip_number ?? null,
+      p_estimated_completion_date: input.estimated_completion_date ?? null,
     });
     if (error) fail(error);
     return data as AddRevisionResult;
   }
-  async confirmSpecRevision(input: ConfirmRevisionInput) {
-    const { data, error } = await this.db.rpc("confirm_spec_revision", {
+  /** public.accept_order_revision(): row-locked, stale/expiry/amount-checked, idempotent acceptance. */
+  async acceptOrderRevision(input: AcceptRevisionInput): Promise<AcceptRevisionResult> {
+    const { data, error } = await this.db.rpc("accept_order_revision", {
       p_order_id: input.order_id,
-      p_revision_number: input.revision_number,
+      p_revision_id: input.revision_id,
+      p_expected_revision_number: input.expected_revision_number,
+      p_accepted_furniture_price: input.accepted_furniture_price,
+      p_accepted_delivery_fee: input.accepted_delivery_fee,
+      p_accepted_total_amount: input.accepted_total_amount,
+      p_client_idempotency_key: input.client_idempotency_key,
       p_method: input.method,
       p_confirmed_by_name: input.confirmed_by_name,
       p_recorded_by: input.recorded_by,
       p_new_order_code: input.new_order_code,
     });
     if (error) fail(error);
-    return data as { confirmation_id: string; revision_id: string; revision_number: number };
+    return data as AcceptRevisionResult;
   }
 
   async listConfirmations(orderId?: string) {
@@ -170,12 +186,7 @@ export class SupabaseStore implements DataStore {
     if (orderId) q = q.eq("order_id", orderId);
     const { data, error } = await q;
     if (error) fail(error);
-    return data as OrderConfirmation[];
-  }
-  async insertConfirmation(row: Insert<OrderConfirmation>) {
-    const { data, error } = await this.db.from("order_confirmations").insert(row).select("*").single();
-    if (error) fail(error);
-    return data as OrderConfirmation;
+    return (data as OrderConfirmation[]).map(normConfirmation);
   }
 
   async listPayments(orderId?: string) {

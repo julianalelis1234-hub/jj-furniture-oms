@@ -1,6 +1,7 @@
 "use client";
 
-import { Loader2, PencilRuler, Undo2 } from "lucide-react";
+import { FileSignature, Loader2, PencilRuler, Undo2 } from "lucide-react";
+import { addDays, todayISO } from "@/lib/domain/dates";
 import { useState } from "react";
 import { reviewProposalAction, reviseSpecsAction } from "@/app/actions";
 import { ActionButton } from "@/components/action-dialog";
@@ -28,10 +29,10 @@ function startConfig(spec: FurnitureSpec): ConfigValue {
 
 /** Configurator + price/fee in a dialog: issues a new revised-quote revision. */
 function QuoteEditor({
-  open, onOpenChange, title, description, order, spec, submitLabel, onSubmit, extra,
+  open, onOpenChange, title, description, order, spec, submitLabel, onSubmit, extra, validityDays,
 }: {
   open: boolean; onOpenChange: (o: boolean) => void; title: string; description: string; order: ClientOrder; spec: FurnitureSpec;
-  submitLabel: string; onSubmit: (fd: FormData) => ReturnType<typeof reviseSpecsAction>; extra?: React.ReactNode;
+  submitLabel: string; onSubmit: (fd: FormData) => ReturnType<typeof reviseSpecsAction>; extra?: React.ReactNode; validityDays: number;
 }) {
   const [config, setConfig] = useState<ConfigValue>(() => startConfig(spec));
   const { pending, run, errors } = useServerAction();
@@ -54,13 +55,26 @@ function QuoteEditor({
           <FurnitureConfigurator value={config} onChange={setConfig} errors={errors} showQuantity inDialog />
           <div className="grid gap-3 sm:grid-cols-3">
             <Field label="Furniture price (₱)" htmlFor="q-price" required error={errors.furniture_price}>
-              <TextInput id="q-price" name="furniture_price" type="number" min="1" step="0.01" defaultValue={order.furniture_price} required className="tabular-nums" />
+              <TextInput id="q-price" name="furniture_price" type="number" min="1" step="0.01" defaultValue={order.furniture_price ?? ""} required className="tabular-nums" />
             </Field>
             <Field label="Delivery fee (₱)" htmlFor="q-fee" error={errors.delivery_fee} hint={valencia ? "Valencia City: always FREE." : `${order.municipality}: distance fee.`}>
               <TextInput id="q-fee" name="delivery_fee" type="number" min="0" step="1" defaultValue={valencia ? 0 : order.delivery_fee} readOnly={valencia} className="tabular-nums" />
             </Field>
+            {!order.paper_slip_number && (
+              <Field label="Paper Slip #" htmlFor="q-slip" required error={errors.paper_slip_number} hint="Write the official slip for this request, then enter its number.">
+                <TextInput id="q-slip" name="paper_slip_number" inputMode="numeric" required />
+              </Field>
+            )}
+            {!order.estimated_completion_date && (
+              <Field label="Estimated completion" htmlFor="q-est" required error={errors.estimated_completion_date}>
+                <TextInput id="q-est" name="estimated_completion_date" type="date" min={todayISO()} defaultValue={addDays(todayISO(), 14)} required />
+              </Field>
+            )}
             {extra}
           </div>
+          <p className="text-xs text-muted-foreground">
+            The quotation is valid for {validityDays} days. The customer must accept the exact specification and amounts before it expires.
+          </p>
           {errors._form && <p className="text-sm text-destructive">{errors._form}</p>}
           <DialogFooter>
             <Button type="button" variant="outline" size="touch" onClick={() => onOpenChange(false)} disabled={pending}>Cancel</Button>
@@ -74,18 +88,29 @@ function QuoteEditor({
   );
 }
 
-/** Staff/owner: change spec or price before production (new revised quote). */
-export function ReviseSpecsDialog({ order }: { order: ClientOrder }) {
+/**
+ * Staff/owner: issue a quotation as a new immutable revision. For an Option 2
+ * request (Quote Requested) this is the official quotation; otherwise a revised
+ * quote that voids any previous acceptance.
+ */
+export function ReviseSpecsDialog({ order, validityDays = 7, label }: { order: ClientOrder; validityDays?: number; label?: string }) {
   const [open, setOpen] = useState(false);
+  const first = order.status === "Quote Requested";
   return (
     <>
-      <Button variant="outline" size="touch" onClick={() => setOpen(true)}><PencilRuler aria-hidden /> Revise specs / quote</Button>
+      <Button variant={first ? "default" : "outline"} size="touch" onClick={() => setOpen(true)}>
+        {first ? <FileSignature aria-hidden /> : <PencilRuler aria-hidden />} {label ?? (first ? "Issue quotation" : "Revise specs / quote")}
+      </Button>
       {open && (
         <QuoteEditor
-          open={open} onOpenChange={setOpen} order={order} spec={orderSpec(order)}
-          title={`Revised quote · ${order.order_code}`}
-          description={`Saved as revision ${(order.current_revision ?? 0) + 1}. Any change voids the customer's confirmation; they must confirm the new revision before production.`}
-          submitLabel="Save revised quote"
+          open={open} onOpenChange={setOpen} order={order} spec={orderSpec(order)} validityDays={validityDays}
+          title={first ? `Official quotation · ${order.order_code}` : `Revised quote · ${order.order_code}`}
+          description={
+            first
+              ? `The customer designed this in the portal. Check feasibility (size, wood, finish), adjust if needed, set the price and delivery fee. Saved as revision ${order.current_revision + 1}; the order moves to Waiting for Confirmation.`
+              : `Saved as revision ${order.current_revision + 1}. Any change voids the customer's acceptance; they must accept the new revision before production.`
+          }
+          submitLabel={first ? "Send quotation" : "Save revised quote"}
           onSubmit={(fd) => reviseSpecsAction(order.id, order.current_revision, fd)}
         />
       )}
@@ -113,6 +138,7 @@ export function ReviewProposalControls({ ex, order, proposal }: { ex: OrderExcep
       {open && proposal && (
         <QuoteEditor
           open={open} onOpenChange={setOpen} order={order} spec={proposal}
+          validityDays={7}
           title={`Customer proposal · ${order.order_code}`}
           description={`Pre-filled with the customer's proposal. Adjust anything that is not feasible, set the new price (current ${formatPeso(order.furniture_price)}), then send. The customer must confirm this revised quote before production.`}
           submitLabel="Send revised quote"
