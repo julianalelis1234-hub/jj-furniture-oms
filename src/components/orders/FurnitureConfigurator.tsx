@@ -13,7 +13,8 @@ import {
 } from "@/lib/domain/furniture";
 import { WOOD_TYPES, type WoodType } from "@/lib/domain/types";
 import { cn } from "@/lib/utils";
-import { FurniturePreview, finishLook, type PreviewSpec } from "./FurniturePreview";
+import { finishLook, type PreviewSpec } from "./FurniturePreview";
+import { FeasibilityWarning, FurniturePreviewSlot, useMinWidth } from "./preview-slot";
 
 /** Form state (inputs keep strings so people can type freely). */
 export interface ConfigValue {
@@ -216,8 +217,10 @@ export function FurnitureConfigurator({
     num(value.width_cm) === p.width_cm && num(value.height_cm) === p.height_cm && num(value.depth_cm) === p.depth_cm;
   const isCustomSize = !cat?.presets.some(presetActive);
 
+  // one preview instance at a time (one WebGL context): desktop sticky card OR the mobile expandable panel
+  const isDesktop = useMinWidth(1024);
   const previewCard = (
-    <FurniturePreview spec={preview} legacyDimensions={legacyDimensions} footer={previewFooter} />
+    <FurniturePreviewSlot spec={preview} legacyDimensions={legacyDimensions} footer={previewFooter} />
   );
 
   return (
@@ -247,7 +250,7 @@ export function FurnitureConfigurator({
           </button>
         </div>
         {/* expanded preview sits in the page flow (never over inputs) */}
-        {open && <div className="mt-3">{previewCard}</div>}
+        {open && !isDesktop && <div className="mt-3">{previewCard}</div>}
       </div>
 
       {/* --------------------------------------------------------- controls */}
@@ -327,6 +330,12 @@ export function FurnitureConfigurator({
           </div>
         </Group>
 
+        {!isDesktop && (
+          <div className="overflow-hidden rounded-lg border empty:hidden">
+            <FeasibilityWarning spec={preview} />
+          </div>
+        )}
+
         <Group legend="Wood" step={4} error={errors.wood_type || errors.custom_wood_note}>
           <div className="grid grid-cols-3 gap-2">
             {WOOD_TYPES.map((w) => (
@@ -394,7 +403,7 @@ export function FurnitureConfigurator({
       </div>
 
       {/* ------------------------------------------- desktop sticky preview */}
-      <div className={cn("hidden lg:sticky lg:block", inDialog ? "lg:top-0" : "lg:top-24")}>{previewCard}</div>
+      <div className={cn("hidden lg:sticky lg:block", inDialog ? "lg:top-0" : "lg:top-24")}>{isDesktop && previewCard}</div>
     </div>
   );
 }
