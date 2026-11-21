@@ -77,6 +77,8 @@ export const getActor = cache(async (): Promise<Actor | null> => {
     .eq("id", auth.user.id)
     .maybeSingle();
   if (!profile || !profile.is_active) return null;
+  // customer logins are never staff actors (they use the customer session: customer-auth.ts)
+  if (profile.role === "customer") return null;
   return { id: profile.id, role: profile.role as Role, full_name: profile.full_name, source: "auth" };
 });
 

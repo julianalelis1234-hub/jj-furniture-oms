@@ -9,11 +9,12 @@ cleanup() { for d in "$DB" "$DB2" "$DB3"; do psql "$PGURL/postgres" -qc "drop da
 trap cleanup EXIT
 run() { psql "$PGURL/$1" -q -v ON_ERROR_STOP=1 -f "$2"; }
 migrate_all() { for m in supabase/migrations/*.sql; do run "$1" "$m"; done; }
+migrate_before_005() { for m in supabase/migrations/00[1-4]*.sql; do run "$1" "$m"; done; }
 
 # 1. Business rules, RLS and the configurator gate on a fresh database ------
 psql "$PGURL/postgres" -qc "create database $DB" >/dev/null
 run "$DB" supabase/tests/00_supabase_stub.sql
-migrate_all "$DB"
+migrate_before_005 "$DB"   # 01/04/05 exercise the pre-005 schema; 005 is applied on top of their data below
 psql "$PGURL/$DB" -v ON_ERROR_STOP=1 -f supabase/tests/01_business_rules_and_rls.sql 2>&1 | grep -E "ok -|FAILED|ERROR|PASSED"
 psql "$PGURL/$DB" -v ON_ERROR_STOP=1 -f supabase/tests/04_configurator_gate.sql 2>&1 | grep -E "ok -|FAILED|ERROR|PASSED"
 psql "$PGURL/$DB" -v ON_ERROR_STOP=1 -f supabase/tests/05_dual_option_engine.sql 2>&1 | grep -E "ok -|FAILED|ERROR|PASSED"
@@ -40,6 +41,34 @@ else
   echo "TEST FAILED: concurrency (second session: $B_OUT; revisions: $REVS)"; exit 1
 fi
 
+# 1c. Migration 005 on top of that data, then the customer email auth tests -----
+run "$DB" supabase/migrations/005a_customer_role_enums.sql
+run "$DB" supabase/migrations/005b_customer_email_auth.sql 2>/dev/null
+psql "$PGURL/$DB" -v ON_ERROR_STOP=1 -f supabase/tests/07_customer_email_auth.sql 2>&1 | grep -E "ok -|FAILED|ERROR|PASSED"
+
+# 1d. Race: two sessions open the same review link at the same moment ---------
+RORDER=$(psql "$PGURL/$DB" -Atc "insert into public.orders (order_code, paper_slip_number, customer_name, customer_phone, delivery_address, municipality, item_name, quantity, dimensions, wood_type, color_finish, furniture_price, estimated_completion_date, furniture_category, design_variant, width_cm, height_cm, depth_cm, customer_email) values ('DR-0710','S-710','C','09000000710','Purok 1, Poblacion','Valencia City','Door',1,'-','Mahogany','Natural Varnish',9000,current_date,'Panel Door','Classic 2-Panel',80,210,4.5,'race@example.com') returning id" | head -1)
+psql "$PGURL/$DB" -qAtc "select public.add_spec_revision('$RORDER','staff_draft','$SPEC'::jsonb,null,'staff')" >/dev/null
+HASH=$(printf 'race-token' | sha256sum | cut -d' ' -f1)
+psql "$PGURL/$DB" -qAtc "select public.issue_quote_review_token('$RORDER', (select revision_id from public.order_specification_revisions where order_id = '$RORDER' and revision_number = 1), '$HASH')" >/dev/null
+( psql "$PGURL/$DB" -qAt -v ON_ERROR_STOP=1 > /tmp/jj_race_a.$$ <<SQL
+begin;
+select public.consume_quote_review_token('$HASH') ->> 'ok';
+select pg_sleep(1.5);
+commit;
+SQL
+) &
+RA=$!
+sleep 0.5
+RB=$(psql "$PGURL/$DB" -qAtc "select coalesce(public.consume_quote_review_token('$HASH') ->> 'ok', 'false') || ':' || coalesce(public.consume_quote_review_token('$HASH') ->> 'reason', '')" 2>&1)
+wait $RA
+RAOUT=$(grep -E '^(true|false)$' /tmp/jj_race_a.$$ | head -1); rm -f /tmp/jj_race_a.$$
+if [[ "$RAOUT" == "true" && "$RB" == false:used ]]; then
+  echo "NOTICE:  ok - concurrent consumption of one review link: exactly one session succeeds, the other waits and sees 'used'"
+else
+  echo "TEST FAILED: review-token race (session A: $RAOUT; session B: $RB)"; exit 1
+fi
+
 # 2. Migrations 003 + 004 against a copy of the live (pre-003) data -----------------
 psql "$PGURL/postgres" -qc "create database $DB2" >/dev/null
 run "$DB2" supabase/tests/00_supabase_stub.sql
@@ -54,6 +83,11 @@ run "$DB2" supabase/migrations/004a_quote_requested_enums.sql
 run "$DB2" supabase/migrations/004b_dual_option_approval_engine.sql 2>/dev/null
 run "$DB2" supabase/migrations/004b_dual_option_approval_engine.sql 2>/dev/null
 psql "$PGURL/$DB2" -v ON_ERROR_STOP=1 -f supabase/tests/06_migration_004_backfill.sql 2>&1 | grep -E "ok -|FAILED|ERROR|PASSED"
+# then migration 005 (twice) on the same live data
+run "$DB2" supabase/migrations/005a_customer_role_enums.sql
+run "$DB2" supabase/migrations/005b_customer_email_auth.sql 2>/dev/null
+run "$DB2" supabase/migrations/005b_customer_email_auth.sql 2>/dev/null
+psql "$PGURL/$DB2" -v ON_ERROR_STOP=1 -f supabase/tests/08_migration_005_legacy.sql 2>&1 | grep -E "ok -|FAILED|ERROR|PASSED"
 
 # 3. Demo seed loads into the full schema; DB balances match the TS engine ---
 psql "$PGURL/postgres" -qc "create database $DB3" >/dev/null

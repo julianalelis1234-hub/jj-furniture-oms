@@ -22,6 +22,7 @@ const request = (overrides: Record<string, unknown> = {}) => ({
   customer_phone: "0900 000 0601",
   delivery_address: "Purok 5, Brgy. Bangcud, near the chapel",
   municipality: "Lantapan",
+  customer_email: " Josefina@Example.com",
   furniture_category: "Panel Door",
   design_variant: "Classic 2-Panel",
   width_cm: "80",
@@ -56,10 +57,13 @@ const quote = (overrides: Record<string, unknown> = {}) => ({
 });
 
 describe("Option 2 — customer self-service quote request", () => {
-  it("creates a Quote Requested order with no price / slip / date, revision 1 = customer_request, and an Order ID + PIN", async () => {
+  it("creates a Quote Requested order with no price / slip / date, revision 1 = customer_request, no PIN, unverified email", async () => {
     const store = await seededStore();
-    const { order, pin } = await createCustomerRequest(store, request());
-    expect(pin).toMatch(/^\d{4}$/);
+    const { order } = await createCustomerRequest(store, request());
+    expect(order.pin_code_hash).toBeNull();
+    expect(order.customer_email).toBe("josefina@example.com");
+    expect(order.email_verified_at).toBeNull();
+    expect(order.customer_user_id).toBeNull();
     expect(order.order_code).toMatch(/^DR-\d{4}$/);
     expect(order.status).toBe("Quote Requested");
     expect(order.order_origin).toBe("customer_self_service");

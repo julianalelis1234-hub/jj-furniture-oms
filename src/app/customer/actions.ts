@@ -1,0 +1,97 @@
+"use server";
+
+import { redirect } from "next/navigation";
+import { ZodError } from "zod";
+import type { ActionResult } from "@/lib/action-result";
+import { DomainError } from "@/lib/domain/errors";
+import { customerLoginSchema, emailField, firstErrors } from "@/lib/domain/validation";
+import { getPublicStore } from "@/lib/server/context";
+import {
+  customerRequestReset,
+  customerSetPassword,
+  customerSignIn,
+  customerSignOut,
+  getCustomerAuth,
+  getReviewSession,
+  setReviewSession,
+} from "@/lib/server/customer-auth";
+import { acceptFromReview, openReviewLink, type ProvisionResult } from "@/lib/services/customer-portal";
+
+function fail(e: unknown): { ok: false; message: string; code?: string; fieldErrors?: Record<string, string> } {
+  if (e instanceof DomainError) {
+    return { ok: false, message: e.message, code: e.code, fieldErrors: e.details instanceof ZodError ? firstErrors(e.details) : undefined };
+  }
+  console.error("[customer action]", e);
+  return { ok: false, message: "Something went wrong on the server. Please try again." };
+}
+
+/**
+ * Consumes the single-use review link (POST from /customer/review, so email
+ * scanners that merely fetch the link cannot use it up) and opens a review
+ * session limited to ONE order + ONE quotation revision.
+ */
+export async function openReviewAction(token: string): Promise<ActionResult> {
+  try {
+    const scope = await openReviewLink(await getPublicStore(), token);
+    await setReviewSession(scope);
+  } catch (e) {
+    return fail(e);
+  }
+  redirect("/customer/review/quote");
+}
+
+/** [Accept Quote & Confirm Specifications] within the review session; provisioning follows and can never undo it. */
+export async function reviewAcceptAction(input: {
+  accepted_furniture_price: number;
+  accepted_delivery_fee: number;
+  client_idempotency_key: string;
+  accept_specification: boolean;
+  accept_quotation: boolean;
+}): Promise<ActionResult<ProvisionResult>> {
+  const scope = await getReviewSession();
+  if (!scope) return { ok: false, message: "Your review session ended. Open the link from your email again, or ask the shop for a new one." };
+  try {
+    const { provisioning } = await acceptFromReview(await getPublicStore(), await getCustomerAuth(), scope, input);
+    return { ok: true, data: provisioning, message: "Thank you! You accepted the specifications and the quotation." };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+export async function customerLoginAction(_: unknown, fd: FormData): Promise<ActionResult> {
+  const parsed = customerLoginSchema.safeParse({ email: fd.get("email"), password: fd.get("password") });
+  if (!parsed.success) return { ok: false, message: "Enter your email and password.", fieldErrors: firstErrors(parsed.error) };
+  try {
+    await customerSignIn(parsed.data.email, parsed.data.password);
+  } catch (e) {
+    return fail(e);
+  }
+  redirect("/customer/orders");
+}
+
+export async function customerForgotAction(_: unknown, fd: FormData): Promise<ActionResult> {
+  const parsed = emailField().safeParse(fd.get("email") ?? "");
+  if (!parsed.success) return { ok: false, message: "Enter a valid email address.", fieldErrors: { email: "Enter a valid email address." } };
+  try {
+    await customerRequestReset(parsed.data);
+  } catch (e) {
+    console.warn("[reset] ", e instanceof Error ? e.message : e); // same answer either way (no account enumeration)
+  }
+  return { ok: true, message: "If that email has a JJ Furniture account, a reset link is on its way. It works once and expires in 24 hours." };
+}
+
+export async function customerSetPasswordAction(token: string | null, _: unknown, fd: FormData): Promise<ActionResult> {
+  const password = String(fd.get("password") ?? "");
+  if (password !== String(fd.get("confirm") ?? "")) return { ok: false, message: "The two passwords do not match.", fieldErrors: { confirm: "The two passwords do not match." } };
+  try {
+    await customerSetPassword(token, password);
+  } catch (e) {
+    return fail(e);
+  }
+  redirect("/customer/orders?welcome=1");
+}
+
+export async function customerLogoutAction() {
+  await customerSignOut();
+  redirect("/customer/login");
+}

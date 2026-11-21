@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCircle2, KeyRound, Loader2, Send } from "lucide-react";
+import { CheckCircle2, Loader2, MailCheck, Search, Send } from "lucide-react";
 import { useState } from "react";
 import { customerRequestAction } from "@/app/actions";
 import { Field, NativeSelect, TextArea, TextInput, useServerAction } from "@/components/form";
@@ -16,7 +16,7 @@ export function RequestForm() {
   const [config, setConfig] = useState<ConfigValue>(emptyConfig);
   // one idempotency key per form: a double tap or a retry never creates two requests
   const [requestKey] = useState(() => newUuid());
-  const [done, setDone] = useState<{ order_code: string; pin: string } | null>(null);
+  const [done, setDone] = useState<{ order_code: string; email: string } | null>(null);
   const err = (k: string) => errors[k];
 
   if (done) {
@@ -25,19 +25,19 @@ export function RequestForm() {
         <CardContent className="grid gap-3 pt-4 text-center">
           <CheckCircle2 className="mx-auto size-10 text-success" aria-hidden />
           <p className="text-lg font-bold">Request sent to JJ Furniture</p>
-          <p className="text-sm text-muted-foreground">Write these down or take a screenshot. You need both to see your quotation.</p>
-          <div className="grid grid-cols-2 gap-2">
-            <div className="rounded-xl border bg-secondary p-3">
-              <p className="text-xs uppercase text-muted-foreground">Order ID</p>
-              <p className="font-mono text-xl font-black" data-testid="request-code">{done.order_code}</p>
-            </div>
-            <div className="rounded-xl border bg-secondary p-3">
-              <p className="text-xs uppercase text-muted-foreground">PIN</p>
-              <p className="font-mono text-xl font-black tracking-[0.3em]" data-testid="request-pin">{done.pin}</p>
-            </div>
+          <div className="rounded-xl border bg-secondary p-3">
+            <p className="text-xs uppercase text-muted-foreground">Order ID</p>
+            <p className="font-mono text-xl font-black" data-testid="request-code">{done.order_code}</p>
           </div>
-          <p className="text-sm">The shop will check your design and send an official quotation. You will accept it on the order page.</p>
-          <LinkButton href="/track/order" variant="default" size="xl"><KeyRound aria-hidden /> View my request</LinkButton>
+          <p className="flex items-start gap-2 text-left text-sm">
+            <MailCheck className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden />
+            <span>
+              The shop will check your design and email the official quotation to <b data-testid="request-email">{done.email}</b> with a secure link to review and
+              accept it. Opening that link confirms the email is yours; after you accept, you can create your password and log in.
+            </span>
+          </p>
+          <p className="text-xs text-muted-foreground">You can check the status anytime on the Customer portal with your Order ID.</p>
+          <LinkButton href={`/track?code=${encodeURIComponent(done.order_code)}`} variant="outline"><Search aria-hidden /> Track status</LinkButton>
         </CardContent>
       </Card>
     );
@@ -83,7 +83,10 @@ export function RequestForm() {
           <Field label="Your name" htmlFor="customer_name" required error={err("customer_name")}>
             <TextInput id="customer_name" name="customer_name" autoComplete="name" invalid={!!err("customer_name")} />
           </Field>
-          <Field label="Mobile number" htmlFor="customer_phone" required error={err("customer_phone")} hint="09XX XXX XXXX — for your quotation updates">
+          <Field label="Email" htmlFor="customer_email" required error={err("customer_email")} hint="Your quotation and a secure review link are sent here.">
+            <TextInput id="customer_email" name="customer_email" type="email" inputMode="email" autoComplete="email" placeholder="name@example.com" invalid={!!err("customer_email")} />
+          </Field>
+          <Field label="Mobile number" htmlFor="customer_phone" required error={err("customer_phone")} hint="09XX XXX XXXX">
             <TextInput id="customer_phone" name="customer_phone" inputMode="tel" autoComplete="tel" placeholder="09XX XXX XXXX" invalid={!!err("customer_phone")} />
           </Field>
           <Field label="Municipality" htmlFor="municipality" required error={err("municipality")} hint="Delivery inside Valencia City is free.">

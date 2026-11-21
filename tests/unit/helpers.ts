@@ -22,6 +22,8 @@ export function validOrderInput(overrides: Record<string, unknown> = {}) {
     encoded_by_id: STAFF.gilbert,
     customer_name: "Juan Dela Cruz",
     customer_phone: "0900 000 0201",
+    customer_email: "Juan.DelaCruz@Example.com ", // normalized on save
+    has_no_email: "",
     delivery_address: "Purok 3, Brgy. Poblacion, near the church",
     municipality: "Valencia City",
     item_name: "",

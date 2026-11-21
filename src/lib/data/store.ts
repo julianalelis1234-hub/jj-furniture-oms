@@ -1,5 +1,7 @@
 import type { FurnitureSpec } from "@/lib/domain/furniture";
 import type {
+  ConsumeReviewResult,
+  CustomerAccount,
   ConfirmationMethod,
   CustomerTrack,
   DeliveryAssignment,
@@ -29,10 +31,15 @@ export type ComputedOrderFields =
   | "spec_preview_config"
   | "is_legacy_incomplete";
 
-export type NewOrderRow = Omit<Order, ComputedOrderFields | "order_origin" | "client_request_key"> & {
+/** Account linking and verification are never set at insert (migration 005). */
+type ServerOnlyOrderFields = "customer_user_id" | "email_verified_at" | "provisioning_status" | "legacy_contact_unknown";
+
+export type NewOrderRow = Omit<Order, ComputedOrderFields | ServerOnlyOrderFields | "order_origin" | "client_request_key" | "customer_email" | "has_no_email"> & {
   is_legacy_incomplete?: boolean;
   order_origin?: Order["order_origin"];
   client_request_key?: string | null;
+  customer_email?: string | null;
+  has_no_email?: boolean;
 };
 
 /** A proposed specification (+ quote for shop revisions). */
@@ -141,6 +148,22 @@ export interface DataStore {
 
   customerTrack(orderCode: string): Promise<CustomerTrack | null>;
   customerVerifyPin(orderCode: string, pin: string, clientKey: string): Promise<PinResult>;
+
+  // ---------------------------------------------- customer email auth (005)
+  /** issue_quote_review_token(): stores only the hash; invalidates older open links for the order. */
+  issueReviewToken(input: { order_id: string; revision_id: string; token_hash: string; ttl_hours: number }): Promise<{ token_id: string; expires_at: string; sent_to_email: string }>;
+  /** consume_quote_review_token(): atomic, single use; verifies the inbox for that order on success. */
+  consumeReviewToken(tokenHash: string): Promise<ConsumeReviewResult>;
+  /** link_customer_account(): idempotent; requires verified email that equals the account email. */
+  linkCustomerAccount(orderId: string, userId: string): Promise<{ linked: boolean; already: boolean }>;
+  /** Orders linked to a verified customer account. */
+  listCustomerOrders(userId: string): Promise<Order[]>;
+  /** Customer profiles (role 'customer'). Created only by server code. */
+  findCustomerAccountByEmail(email: string): Promise<CustomerAccount | null>;
+  getCustomerAccount(id: string): Promise<CustomerAccount | null>;
+  /** Any profile (staff included) already using this email — staff emails are never turned into customer logins. */
+  emailBelongsToStaff(email: string): Promise<boolean>;
+  insertCustomerProfile(row: { id: string; email: string; full_name: string }): Promise<CustomerAccount>;
 
   /** A store with elevated privileges for narrowly-scoped server operations. */
   elevated(): DataStore;

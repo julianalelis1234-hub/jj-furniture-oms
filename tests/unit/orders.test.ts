@@ -68,15 +68,16 @@ describe("1. form & input validation", () => {
     const e = await err(createOrder(store, actors.staff, validOrderInput({ paper_slip_number: "0145" })));
     expect(e.code).toBe("DUPLICATE_SLIP");
   });
-  it("creates a draft order with a DR code, hashed PIN and history", async () => {
+  it("creates a draft order with a DR code, normalized unverified email (no PIN) and history", async () => {
     const store = await seededStore();
-    const { order, pin } = await createOrder(store, actors.staff, validOrderInput());
+    const { order } = await createOrder(store, actors.staff, validOrderInput());
     expect(order.order_code).toMatch(/^DR-\d{4}$/);
     expect(order.current_revision).toBe(1);
     expect(order.dimensions).toBe("120.0 × 76.0 × 80.0 cm (W × H × D)");
     expect(order.item_name).toBe("4-Seater Rectangular Dining Table");
-    expect(pin).toMatch(/^\d{4}$/);
-    expect(order.pin_code_hash).not.toContain(pin);
+    expect(order.pin_code_hash).toBeNull();
+    expect(order.customer_email).toBe("juan.delacruz@example.com");
+    expect(order.email_verified_at).toBeNull();
     expect(order.status).toBe("Waiting for Confirmation");
     expect((await store.listHistory(order.id))[0].notes).toContain("paper slip");
   });

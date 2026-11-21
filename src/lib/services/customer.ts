@@ -2,7 +2,6 @@ import type { DataStore } from "@/lib/data/store";
 import { DomainError } from "@/lib/domain/errors";
 import { effectiveDeliveryFee, furniturePaidFrom, feePaidFrom } from "@/lib/domain/finance";
 import { blockingItems, isQuoteExpired } from "@/lib/domain/gate";
-import { generatePin, hashPin } from "@/lib/domain/pin";
 import { QUOTE_REVISION_TYPES, type CustomerTrack, type Order, type OrderStatus, type SpecRevision } from "@/lib/domain/types";
 import { recordConfirmation } from "./orders";
 import { nextDraftCode } from "./codes";
@@ -221,8 +220,9 @@ const MAX_OPEN_REQUESTS_PER_PHONE = 3;
 /**
  * Option 2 — Design & Request Custom Furniture. The customer designs the piece
  * in the configurator and submits a quote request: status Quote Requested,
- * no price, no paper slip, revision 1 = customer_request. Returns the new
- * Order ID and the 4-digit PIN (shown once). Idempotent on client_request_key.
+ * no price, no paper slip, revision 1 = customer_request. The email is stored
+ * UNVERIFIED; the review link sent with the quotation verifies it. No PIN is
+ * created. Idempotent on client_request_key.
  */
 export async function createCustomerRequest(publicStore: DataStore, raw: unknown) {
   const parsed = customerRequestSchema.safeParse(raw);
@@ -250,7 +250,6 @@ export async function createCustomerRequest(publicStore: DataStore, raw: unknown
     color_finish: v.color_finish,
     quantity: v.quantity,
   });
-  const pin = generatePin();
   const order = await store.insertOrder({
     order_code: nextDraftCode(existing),
     paper_slip_number: null,
@@ -259,8 +258,10 @@ export async function createCustomerRequest(publicStore: DataStore, raw: unknown
     customer_phone: v.customer_phone,
     delivery_address: v.delivery_address,
     municipality: v.municipality,
-    pin_code_hash: hashPin(pin),
-    pin_code_display: pin,
+    pin_code_hash: null,
+    pin_code_display: null,
+    customer_email: v.customer_email,
+    has_no_email: false,
     item_name: itemNameFor(spec),
     quantity: spec.quantity,
     dimensions: dimensionsText(spec as Dims),
@@ -313,7 +314,7 @@ export async function createCustomerRequest(publicStore: DataStore, raw: unknown
     delivery_status: "Sent",
     created_at: new Date().toISOString(),
   });
-  return { order: (await store.getOrder(order.id))!, pin };
+  return { order: (await store.getOrder(order.id))! };
 }
 
 export const CUSTOMER_PROPOSAL_PREFIX = "Customer proposed specification changes";

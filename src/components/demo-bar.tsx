@@ -1,6 +1,6 @@
 "use client";
 
-import { FlaskConical, Info, Lightbulb, RotateCcw } from "lucide-react";
+import { FlaskConical, Info, Lightbulb, Mail, RotateCcw } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useTransition } from "react";
 import { toast } from "sonner";
@@ -56,6 +56,14 @@ export function DemoBar({ current }: { current: Role | "customer" | null }) {
           ))}
         </nav>
         <div className="ml-auto flex gap-1">
+          <button
+            type="button"
+            onClick={() => router.push("/demo/inbox")}
+            className="flex h-9 items-center gap-1.5 rounded-md px-3 text-sm hover:bg-white/15"
+            data-testid="demo-inbox"
+          >
+            <Mail className="size-4" aria-hidden /> Demo Inbox
+          </button>
           <button
             type="button"
             onClick={() => router.push("/about")}

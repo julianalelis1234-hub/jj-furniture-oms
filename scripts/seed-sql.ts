@@ -21,9 +21,15 @@ buildSeedTables().then((t) => {
          on conflict (id) do nothing;`
       : `insert into auth.users (id) select (x->>'id')::uuid from jsonb_array_elements(${q(t.profiles)}) x;`,
     `insert into public.profiles (id, full_name, role, phone, is_active) select id, full_name, role, phone, is_active from jsonb_populate_recordset(null::public.profiles, ${q(t.profiles)});`,
+    // demo customer logins: auth user + 'customer' profile (no password is loaded into the database)
+    `insert into auth.users (id) select (x->>'id')::uuid from jsonb_array_elements(${q(t.customer_accounts.map((a) => ({ id: a.id })))}) x on conflict do nothing;`,
+    `insert into public.profiles (id, full_name, role, email, is_active) select (x->>'id')::uuid, x->>'full_name', 'customer', x->>'email', true from jsonb_array_elements(${q(t.customer_accounts.map((a) => ({ id: a.id, full_name: a.full_name, email: a.email })))}) x;`,
+    // the seed reproduces historical legacy rows, which the insert guard (correctly) refuses to create for new orders
+    `alter table public.orders disable trigger orders_email_guard;`,
     `insert into public.orders (${Object.keys(orders[0]).join(",")}) select ${Object.keys(orders[0]).join(",")} from jsonb_populate_recordset(null::public.orders, ${q(orders)});`,
+    `alter table public.orders enable trigger orders_email_guard;`,
     `delete from public.order_exceptions_and_repairs where requested_by = 'System (payment terms)';`,
-    ...(["order_specification_revisions", "order_confirmations", "payments", "order_status_history", "delivery_assignments", "order_exceptions_and_repairs", "notifications"] as const).map(
+    ...(["order_specification_revisions", "order_confirmations", "payments", "order_status_history", "delivery_assignments", "order_exceptions_and_repairs", "notifications", "quote_review_tokens"] as const).map(
       (tbl) => `insert into public.${tbl} select * from jsonb_populate_recordset(null::public.${tbl}, ${q(t[tbl])});`,
     ),
     `create temp table expected as select * from jsonb_to_recordset(${q(t.orders.map((o) => ({ code: o.order_code, collectible: o.collectible_on_delivery, remaining: o.remaining_furniture_balance, down: o.standard_down_payment_due, fee: o.delivery_fee })))}) as x(code text, collectible numeric, remaining numeric, down numeric, fee numeric);`,
