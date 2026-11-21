@@ -45,14 +45,14 @@ end $$;
 -- -------------------------------------------------- financial engine -------
 insert into public.orders (id, order_code, paper_slip_number, customer_name, customer_phone, delivery_address,
   municipality, pin_code_hash, item_name, quantity, dimensions, wood_type, color_finish, furniture_price,
-  delivery_fee, estimated_completion_date)
+  delivery_fee, estimated_completion_date, is_legacy_incomplete)
 values
   ('10000000-0000-0000-0000-000000000001', 'JJ-2026-0145', 'SLIP-1001', 'Maria Santos', '09000000101',
    'Purok 3, Poblacion', 'Valencia City', extensions.crypt('4821', extensions.gen_salt('bf')),
-   'Dining Table', 1, '210cm x 90cm x 4.5cm', 'Mahogany', 'Dark Walnut Gloss', 28500, 500, current_date + 10),
+   'Dining Table', 1, '210cm x 90cm x 4.5cm', 'Mahogany', 'Dark Walnut Gloss', 28500, 500, current_date + 10, true),
   ('10000000-0000-0000-0000-000000000002', 'JJ-2026-0136', 'SLIP-1002', 'Pedro Bautista', '09000000103',
    'Sitio Kibalabag', 'Lantapan', extensions.crypt('1111', extensions.gen_salt('bf')),
-   'Sala Set', 1, '3-seater 200cm', 'Gmelina', 'Natural Matte', 45000, 1200, current_date + 5);
+   'Sala Set', 1, '3-seater 200cm', 'Gmelina', 'Natural Matte', 45000, 1200, current_date + 5, true);
 
 select pg_temp.check(delivery_fee = 0 and standard_down_payment_due = 8550 and remaining_furniture_balance = 28500
                      and collectible_on_delivery = 28500,
@@ -84,15 +84,15 @@ select pg_temp.expect_error(
 select pg_temp.expect_error(
   $q$insert into public.orders (order_code, paper_slip_number, customer_name, customer_phone, delivery_address,
        municipality, pin_code_hash, item_name, quantity, dimensions, wood_type, color_finish, furniture_price,
-       estimated_completion_date)
-     values ('JJ-2026-0999', 'SLIP-1001', 'X', '0917', 'Y', 'Valencia City', 'h', 'Chair', 1, '1x1', 'Other', 'Red', 100, current_date)$q$,
+       estimated_completion_date, is_legacy_incomplete, custom_wood_note)
+     values ('JJ-2026-0999', 'SLIP-1001', 'X', '0917', 'Y', 'Valencia City', 'h', 'Chair', 1, '1x1', 'Other', 'Red', 100, current_date, true, 'narra')$q$,
   'orders_paper_slip_number_key', 'duplicate paper slip numbers are rejected');
 
 select pg_temp.expect_error(
   $q$insert into public.orders (order_code, paper_slip_number, customer_name, customer_phone, delivery_address,
        municipality, pin_code_hash, item_name, quantity, dimensions, wood_type, color_finish, furniture_price,
-       estimated_completion_date)
-     values ('JJ-2026-0998', 'SLIP-X', 'X', '0917', 'Y', 'Valencia City', 'h', 'Chair', 1, '1x1', 'Other', 'Red', -100, current_date)$q$,
+       estimated_completion_date, is_legacy_incomplete, custom_wood_note)
+     values ('JJ-2026-0998', 'SLIP-X', 'X', '0917', 'Y', 'Valencia City', 'h', 'Chair', 1, '1x1', 'Other', 'Red', -100, current_date, true, 'narra')$q$,
   'orders_furniture_price_check', 'negative furniture price is rejected');
 
 -- ------------------------------------------------------ state machine ------
@@ -103,7 +103,14 @@ select pg_temp.expect_error(
   $q$update public.orders set status = 'In Production', specs_confirmed = false where order_code = 'JJ-2026-0145'$q$,
   'INVALID_TRANSITION', 'cannot skip from Waiting straight to In Production');
 
-update public.orders set specs_confirmed = true, status = 'Confirmed' where order_code = 'JJ-2026-0145';
+-- specification revision 1 (staff quote), then the customer's explicit confirmation of it
+select public.add_spec_revision('10000000-0000-0000-0000-000000000001', 'staff_draft',
+  '{"furniture_category":"Dining Table","design_variant":"6-Seater Classic","width_cm":180,"height_cm":76,"depth_cm":90,"wood_type":"Mahogany","color_finish":"Walnut Stain","quoted_furniture_price":28500,"quoted_delivery_fee":0}'::jsonb,
+  null, 'staff', null);
+select pg_temp.expect_error(
+  $q$update public.orders set specs_confirmed = true, status = 'Confirmed' where order_code = 'JJ-2026-0145'$q$,
+  'STALE_REVISION', 'flipping specs_confirmed directly cannot unlock production (no approved revision)');
+select public.confirm_spec_revision('10000000-0000-0000-0000-000000000001', 1, 'Signed Paper Slip', 'Maria Santos', null, null);
 update public.orders set status = 'In Production' where order_code = 'JJ-2026-0145';
 update public.orders set status = 'Completed / For Inspection' where order_code = 'JJ-2026-0145';
 update public.orders set status = 'Ready for Delivery' where order_code = 'JJ-2026-0145';

@@ -11,10 +11,20 @@ import type {
   Payment,
   PinResult,
   Profile,
+  SpecRevision,
   StatusHistory,
   WorkshopOrder,
 } from "@/lib/domain/types";
-import type { DataStore, Insert, NewOrderRow, OrderPatch, UpdateResult } from "./store";
+import type {
+  AddRevisionInput,
+  AddRevisionResult,
+  ConfirmRevisionInput,
+  DataStore,
+  Insert,
+  NewOrderRow,
+  OrderPatch,
+  UpdateResult,
+} from "./store";
 
 const NUMERIC_ORDER_FIELDS = [
   "furniture_price",
@@ -22,12 +32,24 @@ const NUMERIC_ORDER_FIELDS = [
   "remaining_furniture_balance",
   "delivery_fee",
   "collectible_on_delivery",
+  "width_cm",
+  "height_cm",
+  "depth_cm",
 ] as const;
 
 function normOrder<T extends Partial<Order>>(o: T): T {
   for (const f of NUMERIC_ORDER_FIELDS) if (o[f] !== undefined && o[f] !== null) (o as Record<string, unknown>)[f] = Number(o[f]);
   return o;
 }
+const numOrNull = (v: unknown) => (v === null || v === undefined ? null : Number(v));
+const normRevision = (r: SpecRevision): SpecRevision => ({
+  ...r,
+  width_cm: numOrNull(r.width_cm),
+  height_cm: numOrNull(r.height_cm),
+  depth_cm: numOrNull(r.depth_cm),
+  quoted_furniture_price: Number(r.quoted_furniture_price),
+  quoted_delivery_fee: Number(r.quoted_delivery_fee),
+});
 const normPayment = (p: Payment): Payment => ({ ...p, amount: Number(p.amount) });
 const normDelivery = (d: DeliveryAssignment): DeliveryAssignment => ({
   ...d,
@@ -99,7 +121,48 @@ export class SupabaseStore implements DataStore {
   async listWorkshopOrders() {
     const { data, error } = await this.db.rpc("workshop_orders");
     if (error) fail(error);
-    return data as WorkshopOrder[];
+    return (data as WorkshopOrder[]).map((w) => ({
+      ...w,
+      width_cm: numOrNull(w.width_cm),
+      height_cm: numOrNull(w.height_cm),
+      depth_cm: numOrNull(w.depth_cm),
+    }));
+  }
+
+  async listRevisions(orderId: string) {
+    const { data, error } = await this.db
+      .from("order_specification_revisions")
+      .select("*")
+      .eq("order_id", orderId)
+      .order("revision_number");
+    if (error) fail(error);
+    return (data as SpecRevision[]).map(normRevision);
+  }
+  /** public.add_spec_revision(): locks the order row (SELECT ... FOR UPDATE) and numbers revisions atomically. */
+  async addSpecRevision(input: AddRevisionInput): Promise<AddRevisionResult> {
+    const { data, error } = await this.db.rpc("add_spec_revision", {
+      p_order_id: input.order_id,
+      p_type: input.type,
+      p_spec: input.spec,
+      p_expected_revision: input.expected_revision,
+      p_created_by_role: input.created_by_role,
+      p_created_by_id: input.created_by_id,
+      p_preview_config: input.preview_config ?? {},
+    });
+    if (error) fail(error);
+    return data as AddRevisionResult;
+  }
+  async confirmSpecRevision(input: ConfirmRevisionInput) {
+    const { data, error } = await this.db.rpc("confirm_spec_revision", {
+      p_order_id: input.order_id,
+      p_revision_number: input.revision_number,
+      p_method: input.method,
+      p_confirmed_by_name: input.confirmed_by_name,
+      p_recorded_by: input.recorded_by,
+      p_new_order_code: input.new_order_code,
+    });
+    if (error) fail(error);
+    return data as { confirmation_id: string; revision_id: string; revision_number: number };
   }
 
   async listConfirmations(orderId?: string) {

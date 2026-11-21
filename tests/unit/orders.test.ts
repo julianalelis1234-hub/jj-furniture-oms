@@ -35,10 +35,20 @@ describe("1. form & input validation", () => {
     expect(r.success).toBe(false);
     expect(r.error!.issues[0].path).toEqual(["paper_slip_number"]);
   });
-  it("rejects missing dimensions", () => {
-    const r = newOrderSchema.safeParse(validOrderInput({ dimensions: "" }));
+  it("rejects missing or out-of-range dimensions", () => {
+    const r = newOrderSchema.safeParse(validOrderInput({ width_cm: "" }));
     expect(r.success).toBe(false);
-    expect(r.error!.issues.map((i) => i.path[0])).toContain("dimensions");
+    expect(r.error!.issues.map((i) => i.path[0])).toContain("width_cm");
+    expect(newOrderSchema.safeParse(validOrderInput({ height_cm: "0" })).success).toBe(false);
+    expect(newOrderSchema.safeParse(validOrderInput({ depth_cm: "1200" })).success).toBe(false);
+  });
+  it('requires a custom wood note when wood is "Other" and a design that fits the category', () => {
+    const r = newOrderSchema.safeParse(validOrderInput({ wood_type: "Other", custom_wood_note: " " }));
+    expect(r.success).toBe(false);
+    expect(r.error!.issues.map((i) => i.path[0])).toContain("custom_wood_note");
+    expect(newOrderSchema.safeParse(validOrderInput({ wood_type: "Other", custom_wood_note: "Narra" })).success).toBe(true);
+    expect(newOrderSchema.safeParse(validOrderInput({ design_variant: "Classic 2-Panel" })).success).toBe(false);
+    expect(newOrderSchema.safeParse(validOrderInput({ color_finish: "Navy Blue" })).success).toBe(false);
   });
   it("rejects negative or zero prices", () => {
     expect(newOrderSchema.safeParse(validOrderInput({ furniture_price: "-500" })).success).toBe(false);
@@ -62,6 +72,9 @@ describe("1. form & input validation", () => {
     const store = await seededStore();
     const { order, pin } = await createOrder(store, actors.staff, validOrderInput());
     expect(order.order_code).toMatch(/^DR-\d{4}$/);
+    expect(order.current_revision).toBe(1);
+    expect(order.dimensions).toBe("120.0 × 76.0 × 80.0 cm (W × H × D)");
+    expect(order.item_name).toBe("4-Seater Rectangular Dining Table");
     expect(pin).toMatch(/^\d{4}$/);
     expect(order.pin_code_hash).not.toContain(pin);
     expect(order.status).toBe("Waiting for Confirmation");
@@ -94,8 +107,9 @@ describe("2. the 7-stage status machine", () => {
     const store = await seededStore();
     const { order } = await createOrder(store, actors.staff, validOrderInput());
     let o = await recordConfirmation(store, actors.staff, {
-      order_id: order.id, confirmation_method: "Signed Paper Slip", confirmed_by_name: "Juan Dela Cruz",
+      order_id: order.id, confirmation_method: "Signed Paper Slip", confirmed_by_name: "Juan Dela Cruz", revision_number: 1,
     });
+    expect(o.approved_revision_number).toBe(1);
     expect(o.status).toBe("Confirmed");
     expect(o.order_code).toMatch(/^JJ-\d{4}-\d{4}$/);
     o = await transitionOrder(store, actors.craftsman, o.id, "In Production");
@@ -125,6 +139,8 @@ describe("2. the 7-stage status machine", () => {
     expect(e2.code).toBe("SPECS_NOT_CONFIRMED");
     const e3 = await err(store.updateOrder(order.id, { status: "In Production" }));
     expect(e3.code).toBe("INVALID_TRANSITION");
+    const e4 = await err(store.updateOrder(order.id, { specs_confirmed: true, status: "Confirmed" }));
+    expect(e4.code).toBe("STALE_REVISION"); // flipping the flag alone never unlocks production
   });
 
   it("failed inspection sends the job back as For Revision", async () => {

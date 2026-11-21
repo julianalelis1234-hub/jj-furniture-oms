@@ -1,4 +1,4 @@
-import type { DataStore, OrderPatch } from "@/lib/data/store";
+import type { DataStore, OrderPatch, SpecInput } from "@/lib/data/store";
 import { formatDate } from "@/lib/domain/dates";
 import { DomainError } from "@/lib/domain/errors";
 import { formatPeso } from "@/lib/domain/finance";
@@ -11,9 +11,9 @@ import type {
   OrderStatus,
   PaymentExceptionType,
   PriorityLabel,
-  SpecSnapshot,
 } from "@/lib/domain/types";
 import { editOrderSchema, newOrderSchema, specRevisionSchema, type NewOrderInput } from "@/lib/domain/validation";
+import { describeDiff, dimensionsText, itemNameFor, normalizeSpec, type Dims, type SpecDiff } from "@/lib/domain/furniture";
 import { nextDraftCode, nextOrderCode } from "./codes";
 import { ensureRole } from "./guard";
 import { notifyCustomer } from "./notify";
@@ -37,6 +37,17 @@ export async function createOrder(store: DataStore, actor: Actor, raw: unknown) 
   if (existing.some((o) => o.paper_slip_number.toLowerCase() === input.paper_slip_number.toLowerCase())) {
     throw new DomainError("DUPLICATE_SLIP", `Paper slip #${input.paper_slip_number} is already encoded.`);
   }
+  const spec = normalizeSpec({
+    furniture_category: input.furniture_category,
+    design_variant: input.design_variant,
+    width_cm: input.width_cm,
+    height_cm: input.height_cm,
+    depth_cm: input.depth_cm,
+    wood_type: input.wood_type,
+    custom_wood_note: input.custom_wood_note || null,
+    color_finish: input.color_finish,
+    quantity: input.quantity,
+  });
   const pin = generatePin();
   const order = await store.insertOrder({
     order_code: nextDraftCode(existing),
@@ -48,11 +59,17 @@ export async function createOrder(store: DataStore, actor: Actor, raw: unknown) 
     municipality: input.municipality,
     pin_code_hash: hashPin(pin),
     pin_code_display: pin,
-    item_name: input.item_name,
-    quantity: input.quantity,
-    dimensions: input.dimensions,
-    wood_type: input.wood_type,
-    color_finish: input.color_finish,
+    item_name: input.item_name || itemNameFor(spec),
+    quantity: spec.quantity,
+    dimensions: dimensionsText(spec as Dims),
+    wood_type: spec.wood_type,
+    color_finish: spec.color_finish,
+    furniture_category: spec.furniture_category,
+    design_variant: spec.design_variant,
+    width_cm: spec.width_cm,
+    height_cm: spec.height_cm,
+    depth_cm: spec.depth_cm,
+    custom_wood_note: spec.custom_wood_note,
     special_instructions: input.special_instructions || null,
     reference_photo_url: input.reference_photo_url || null,
     specs_confirmed: false,
@@ -67,99 +84,104 @@ export async function createOrder(store: DataStore, actor: Actor, raw: unknown) 
     estimated_completion_date: input.estimated_completion_date,
     scheduled_delivery_date: input.scheduled_delivery_date || null,
   });
+  // revision 1: the staff draft quote the customer will confirm
+  await store.addSpecRevision({
+    order_id: order.id,
+    type: "staff_draft",
+    spec: { ...spec, quoted_furniture_price: input.furniture_price, quoted_delivery_fee: input.delivery_fee },
+    expected_revision: null,
+    created_by_role: actor.role,
+    created_by_id: actor.id,
+  });
   await store.insertHistory({
     order_id: order.id,
     from_status: null,
     to_status: order.status,
     changed_by_id: actor.id,
-    notes: `Encoded from paper slip #${order.paper_slip_number}`,
+    notes: `Encoded from paper slip #${order.paper_slip_number} · specification revision 1`,
     client_transaction_id: null,
     changed_at: new Date().toISOString(),
   });
-  return { order, pin };
+  return { order: await mustGetOrder(store, order.id), pin };
 }
 
 // ------------------------------------------------------- confirmation ------
+/**
+ * Records the customer's explicit confirmation of ONE exact revision. The
+ * revision number is what the confirmer was shown; if the specification has
+ * changed since, the confirmation is rejected (never authorizes a stale spec).
+ */
 export async function recordConfirmation(
   store: DataStore,
   actor: Actor | null,
-  input: { order_id: string; confirmation_method: ConfirmationMethod; confirmed_by_name: string },
+  input: { order_id: string; confirmation_method: ConfirmationMethod; confirmed_by_name: string; revision_number: number },
 ) {
   if (actor) ensureRole(actor, ["owner", "staff"], "record customer confirmations");
-  else if (input.confirmation_method !== "Customer Portal PIN") throw new DomainError("FORBIDDEN", "Not allowed.");
+  if (actor && input.confirmation_method === "Customer Portal PIN")
+    throw new DomainError("FORBIDDEN", "Only the customer can confirm through the PIN portal.");
+  if (!actor && input.confirmation_method !== "Customer Portal PIN") throw new DomainError("FORBIDDEN", "Not allowed.");
 
   const order = await mustGetOrder(store, input.order_id);
-  if (order.specs_confirmed) throw new DomainError("VALIDATION", "Specifications are already confirmed for this order.");
   if (order.status !== "Waiting for Confirmation") throw new DomainError("INVALID_TRANSITION", "Order is not waiting for confirmation.");
-
-  const previous = await store.listConfirmations(order.id);
-  const snapshot: SpecSnapshot = {
-    item_name: order.item_name,
-    dimensions: order.dimensions,
-    wood_type: order.wood_type,
-    color_finish: order.color_finish,
-    quantity: order.quantity,
-    furniture_price: order.furniture_price,
-  };
-  await store.insertConfirmation({
+  const newCode = order.order_code.startsWith("DR-")
+    ? nextOrderCode(await store.listOrders(), Number(new Date().getFullYear()), order.order_code)
+    : null;
+  await store.confirmSpecRevision({
     order_id: order.id,
-    version_number: previous.reduce((m, c) => Math.max(m, c.version_number), 0) + 1,
-    confirmed_specs_snapshot: snapshot,
-    confirmation_method: input.confirmation_method,
-    confirmed_by_name: input.confirmed_by_name.trim() || order.customer_name,
-    recorded_by_staff_id: actor?.id ?? null,
-    confirmed_at: new Date().toISOString(),
+    revision_number: input.revision_number,
+    method: input.confirmation_method,
+    confirmed_by_name: input.confirmed_by_name,
+    recorded_by: actor?.id ?? null,
+    new_order_code: newCode,
   });
-
-  const patch: OrderPatch = { specs_confirmed: true, status: "Confirmed" };
-  if (order.order_code.startsWith("DR-")) {
-    patch.order_code = nextOrderCode(await store.listOrders(), Number(new Date().getFullYear()), order.order_code);
-  }
-  const res = await store.updateOrder(order.id, patch, order.version);
-  if (!res.ok) throw new DomainError("VERSION_CONFLICT", "This order was changed by someone else. Please refresh.");
+  const confirmed = await mustGetOrder(store, order.id);
   await store.insertHistory({
     order_id: order.id,
     from_status: order.status,
     to_status: "Confirmed",
     changed_by_id: actor?.id ?? null,
-    notes: `Specs confirmed via ${input.confirmation_method}${patch.order_code ? `; order ID ${order.order_code} → ${patch.order_code}` : ""}`,
+    notes: `Specification revision ${input.revision_number} confirmed via ${input.confirmation_method}${newCode ? `; order ID ${order.order_code} → ${newCode}` : ""}`,
     client_transaction_id: null,
     changed_at: new Date().toISOString(),
   });
   await notifyCustomer(
     store,
-    res.order,
-    `JJ Furniture: Specs for ${res.order.order_code} (${res.order.item_name}) are confirmed. 30% down payment: ${formatPeso(
-      res.order.standard_down_payment_due,
-    )}. Est. completion ${formatDate(res.order.estimated_completion_date)}. Track at ${trackUrl()} using the PIN on your slip.`,
+    confirmed,
+    `JJ Furniture: Specs for ${confirmed.order_code} (${confirmed.item_name}) are confirmed. 30% down payment: ${formatPeso(
+      confirmed.standard_down_payment_due,
+    )}. Est. completion ${formatDate(confirmed.estimated_completion_date)}. Track at ${trackUrl()} using the PIN on your slip.`,
   );
-  return res.order;
+  return confirmed;
 }
 
-/** Changing agreed specs voids the previous confirmation and re-opens the gate. */
-export async function reviseSpecs(store: DataStore, actor: Actor, orderId: string, raw: unknown) {
+/** Staff/owner issue a new revised quote (spec + price). Voids any previous approval. */
+export async function reviseSpecs(store: DataStore, actor: Actor, orderId: string, raw: unknown, expectedRevision: number | null) {
   ensureRole(actor, ["owner", "staff"], "revise specifications");
   const parsed = specRevisionSchema.safeParse(raw);
   if (!parsed.success) throw new DomainError("VALIDATION", "Please fix the highlighted fields.", parsed.error);
   const order = await mustGetOrder(store, orderId);
-  if (!["Waiting for Confirmation", "Confirmed"].includes(order.status))
-    throw new DomainError("INVALID_TRANSITION", "Specs can only be revised before production starts.");
-  const res = await store.updateOrder(
-    orderId,
-    { ...parsed.data, specs_confirmed: false, status: "Waiting for Confirmation" },
-    order.version,
-  );
-  if (!res.ok) throw new DomainError("VERSION_CONFLICT", "This order was changed by someone else. Please refresh.");
+  const v = parsed.data;
+  const spec = normalizeSpec({ ...v, custom_wood_note: v.custom_wood_note || null });
+  const res = await store.addSpecRevision({
+    order_id: orderId,
+    type: "revised_quote",
+    spec: { ...spec, quoted_furniture_price: v.furniture_price, quoted_delivery_fee: v.delivery_fee },
+    expected_revision: expectedRevision,
+    created_by_role: actor.role,
+    created_by_id: actor.id,
+  });
   await store.insertHistory({
     order_id: orderId,
     from_status: order.status,
     to_status: "Waiting for Confirmation",
     changed_by_id: actor.id,
-    notes: "Specifications revised — customer must re-confirm",
+    notes: `Revised quote issued as specification revision ${res.revision_number}${
+      Object.keys(res.changed_fields).length ? ` (${describeDiff(res.changed_fields as SpecDiff)})` : ""
+    } — customer must confirm again`,
     client_transaction_id: null,
     changed_at: new Date().toISOString(),
   });
-  return res.order;
+  return mustGetOrder(store, orderId);
 }
 
 export async function editOrderDetails(store: DataStore, actor: Actor, orderId: string, raw: unknown) {
@@ -170,6 +192,10 @@ export async function editOrderDetails(store: DataStore, actor: Actor, orderId: 
   const v = parsed.data;
   if (v.municipality !== "Valencia City" && v.delivery_fee <= 0)
     throw new DomainError("VALIDATION", "Enter the distance-based delivery fee for deliveries outside Valencia City.");
+  const newFee = v.municipality === "Valencia City" ? 0 : v.delivery_fee;
+  const feeChanged = newFee !== order.delivery_fee;
+  if (feeChanged && order.status !== "Waiting for Confirmation")
+    throw new DomainError("SPEC_LOCKED", "The delivery fee is part of the confirmed quote. Use a change request to adjust it.");
   const res = await store.updateOrder(
     orderId,
     {
@@ -185,6 +211,23 @@ export async function editOrderDetails(store: DataStore, actor: Actor, orderId: 
     order.version,
   );
   if (!res.ok) throw new DomainError("VERSION_CONFLICT", "This order was changed by someone else. Please refresh.");
+  // A fee change is a new quote: record it as a revision the customer must confirm.
+  if (feeChanged && !res.order.is_legacy_incomplete && res.order.furniture_category) {
+    const o = res.order;
+    await store.addSpecRevision({
+      order_id: o.id,
+      type: "revised_quote",
+      spec: {
+        furniture_category: o.furniture_category, design_variant: o.design_variant, width_cm: o.width_cm, height_cm: o.height_cm,
+        depth_cm: o.depth_cm, wood_type: o.wood_type, custom_wood_note: o.custom_wood_note, color_finish: o.color_finish,
+        quantity: o.quantity, quoted_furniture_price: o.furniture_price, quoted_delivery_fee: o.delivery_fee,
+      } as SpecInput,
+      expected_revision: o.current_revision,
+      created_by_role: actor.role,
+      created_by_id: actor.id,
+    });
+    return mustGetOrder(store, o.id);
+  }
   return res.order;
 }
 

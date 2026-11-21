@@ -1,4 +1,6 @@
+import type { FurnitureSpec } from "@/lib/domain/furniture";
 import type {
+  ConfirmationMethod,
   CustomerTrack,
   DeliveryAssignment,
   NotificationLog,
@@ -8,6 +10,8 @@ import type {
   Payment,
   PinResult,
   Profile,
+  RevisionType,
+  SpecRevision,
   StatusHistory,
   WorkshopOrder,
 } from "@/lib/domain/types";
@@ -19,9 +23,45 @@ export type ComputedOrderFields =
   | "collectible_on_delivery"
   | "version"
   | "created_at"
-  | "updated_at";
+  | "updated_at"
+  | "current_revision"
+  | "approved_revision_number"
+  | "spec_preview_config"
+  | "is_legacy_incomplete";
 
-export type NewOrderRow = Omit<Order, ComputedOrderFields>;
+export type NewOrderRow = Omit<Order, ComputedOrderFields> & { is_legacy_incomplete?: boolean };
+
+/** A proposed specification (+ quote for shop revisions). */
+export interface SpecInput extends FurnitureSpec {
+  quoted_furniture_price?: number;
+  quoted_delivery_fee?: number;
+}
+
+export interface AddRevisionInput {
+  order_id: string;
+  type: Exclude<RevisionType, "final_approved">;
+  spec: SpecInput;
+  /** the revision the editor was looking at (optimistic check) */
+  expected_revision: number | null;
+  created_by_role: string;
+  created_by_id: string | null;
+  preview_config?: Record<string, unknown>;
+}
+export interface AddRevisionResult {
+  id: string;
+  revision_number: number;
+  revision_type: RevisionType;
+  changed_fields: Record<string, { from: unknown; to: unknown }>;
+}
+
+export interface ConfirmRevisionInput {
+  order_id: string;
+  revision_number: number;
+  method: ConfirmationMethod;
+  confirmed_by_name: string;
+  recorded_by: string | null;
+  new_order_code: string | null;
+}
 export type OrderPatch = Partial<Omit<Order, ComputedOrderFields | "id">>;
 
 export type UpdateResult = { ok: true; order: Order } | { ok: false; reason: "conflict"; current: Order };
@@ -45,6 +85,12 @@ export interface DataStore {
   /** Optimistic concurrency: when expectedVersion is given and stale, returns a conflict. */
   updateOrder(id: string, patch: OrderPatch, expectedVersion?: number): Promise<UpdateResult>;
   listWorkshopOrders(): Promise<WorkshopOrder[]>;
+
+  /** Specification revisions — immutable; created only through addSpecRevision (row-locked in Postgres). */
+  listRevisions(orderId: string): Promise<SpecRevision[]>;
+  addSpecRevision(input: AddRevisionInput): Promise<AddRevisionResult>;
+  /** Customer confirmation of one exact revision; moves the order to Confirmed atomically. */
+  confirmSpecRevision(input: ConfirmRevisionInput): Promise<{ confirmation_id: string; revision_id: string; revision_number: number }>;
 
   listConfirmations(orderId?: string): Promise<OrderConfirmation[]>;
   insertConfirmation(row: Insert<OrderConfirmation>): Promise<OrderConfirmation>;

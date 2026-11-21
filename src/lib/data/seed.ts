@@ -1,7 +1,8 @@
 import { addDays, todayISO } from "@/lib/domain/dates";
 import { hashPin } from "@/lib/domain/pin";
-import type { Municipality, Order, OrderStatus, PaymentType, Profile, WoodType } from "@/lib/domain/types";
+import type { Municipality, Order, OrderStatus, PaymentType, Profile, SpecRevision, WoodType } from "@/lib/domain/types";
 import { ORDER_STATUSES } from "@/lib/domain/types";
+import { dimensionsText, type FurnitureCategory } from "@/lib/domain/furniture";
 import { MemoryStore, type MemoryTables } from "./memory-store";
 
 /** Fixed staff IDs so demo sessions and Supabase seeding line up. */
@@ -41,10 +42,10 @@ export const DEMO_PERSONA: Record<Profile["role"], string> = {
 
 /** Sample orders exposed as one-click buttons on the customer portal in Demo Mode. */
 export const DEMO_CUSTOMER_SAMPLES = [
-  { order_code: "JJ-2026-0145", pin: "4821", label: "Dining table · In Production" },
-  { order_code: "DR-0148", pin: "7314", label: "Bed frame · Waiting for Confirmation" },
+  { order_code: "JJ-2026-0145", pin: "4821", label: "Dining table · In Production (locked spec)" },
+  { order_code: "DR-0148", pin: "7314", label: "Bed frame · Waiting — try the configurator" },
   { order_code: "JJ-2026-0136", pin: "2468", label: "Sala set · Out for Delivery" },
-  { order_code: "JJ-2026-0133", pin: "1357", label: "Wardrobe · Delivered" },
+  { order_code: "JJ-2026-0133", pin: "1357", label: "Wardrobe · Delivered (legacy dimensions)" },
 ];
 
 interface SeedOrder {
@@ -56,6 +57,13 @@ interface SeedOrder {
   address: string;
   municipality: Municipality;
   item: string;
+  cat?: FurnitureCategory;
+  variant?: string;
+  w?: number;
+  h?: number;
+  d?: number;
+  /** pre-configurator order: free-text dimensions only */
+  legacy?: boolean;
   qty: number;
   dims: string;
   wood: WoodType;
@@ -81,8 +89,9 @@ interface SeedOrder {
 const ORDERS: SeedOrder[] = [
   {
     code: "JJ-2026-0145", slip: "0145", pin: "4821", customer: "Maria Santos", phone: "09000000101",
-    address: "Purok 5, Zone 2, Poblacion", municipality: "Valencia City", item: "6-Seater Dining Table",
-    qty: 1, dims: "210cm x 90cm x 4.5cm top", wood: "Mahogany", finish: "Dark Walnut Gloss",
+    address: "Purok 5, Zone 2, Poblacion", municipality: "Valencia City", item: "6-Seater Classic Dining Table",
+    cat: "Dining Table", variant: "6-Seater Classic", w: 210, h: 76, d: 90,
+    qty: 1, dims: "", wood: "Mahogany", finish: "Walnut Stain",
     notes: "Rounded corners. Customer will pick up chairs separately.", price: 28500, fee: 0,
     status: "In Production", rank: 1, label: "Urgent", craftsman: STAFF.nolito, estDays: 3, deliveryDays: 5,
     createdDaysAgo: 12, encodedBy: STAFF.gilbert,
@@ -90,14 +99,16 @@ const ORDERS: SeedOrder[] = [
   },
   {
     code: "DR-0148", slip: "0148", pin: "7314", customer: "Ramon dela Cruz", phone: "09000000102",
-    address: "Brgy. Kaatuan, near chapel", municipality: "Lantapan", item: "Queen Bed Frame with Headboard",
-    qty: 1, dims: "160cm x 200cm, headboard 110cm", wood: "Gmelina", finish: "Natural Matte",
+    address: "Brgy. Kaatuan, near chapel", municipality: "Lantapan", item: "Queen Bed Frame",
+    cat: "Custom Piece", variant: "Bed Frame", w: 160, h: 110, d: 200,
+    qty: 1, dims: "", wood: "Gmelina", finish: "Natural Varnish",
     price: 18000, fee: 800, status: "Waiting for Confirmation", estDays: 14, createdDaysAgo: 1, encodedBy: STAFF.liza,
   },
   {
     code: "JJ-2026-0136", slip: "0136", pin: "2468", customer: "Pedro & Ana Bautista", phone: "09000000103",
-    address: "Purok 2, Brgy. Poblacion", municipality: "Cabanglasan", item: "Sala Set (3-2-1 seater)",
-    qty: 1, dims: "3-seater 200cm, 2-seater 140cm, single 80cm", wood: "Mahogany", finish: "Honey Oak Satin",
+    address: "Purok 2, Brgy. Poblacion", municipality: "Cabanglasan", item: "3-1-1 Slatted Wooden Sala Set",
+    cat: "Living Room Set", variant: "3-1-1 Slatted Wooden Set", w: 180, h: 85, d: 75,
+    qty: 1, dims: "", wood: "Mahogany", finish: "Natural Varnish",
     price: 45000, fee: 1500, status: "Out for Delivery", rank: 4, craftsman: STAFF.carlo, estDays: -2, deliveryDays: 0,
     createdDaysAgo: 25, encodedBy: STAFF.gilbert,
     payments: [{ type: "Down Payment (30%)", amount: 13500, daysAgo: 24 }],
@@ -105,6 +116,7 @@ const ORDERS: SeedOrder[] = [
   {
     code: "JJ-2026-0133", slip: "0133", pin: "1357", customer: "Lourdes Ybañez", phone: "09000000104",
     address: "Sitio Lumbayao, Brgy. Lumbo", municipality: "Valencia City", item: "2-Door Wardrobe",
+    legacy: true,
     qty: 1, dims: "180cm x 120cm x 60cm", wood: "Gmelina", finish: "White Paint",
     price: 16500, fee: 0, status: "Delivered", craftsman: STAFF.dodong, terms: "Credit / Pay Later", termsApproved: true,
     estDays: -6, deliveryDays: -3, createdDaysAgo: 30, encodedBy: STAFF.gilbert,
@@ -112,39 +124,44 @@ const ORDERS: SeedOrder[] = [
   },
   {
     code: "JJ-2026-0139", slip: "0139", pin: "5050", customer: "Jun Pacaña", phone: "09000000105",
-    address: "Hagkol, near the public market", municipality: "Valencia City", item: "Office Desk with 3 Drawers",
-    qty: 1, dims: "150cm x 75cm x 76cm", wood: "Mahogany", finish: "Clear Varnish",
+    address: "Hagkol, near the public market", municipality: "Valencia City", item: "3-Door Base Counter Cabinet",
+    cat: "Kitchen / Wall Cabinet", variant: "3-Door Base Counter", w: 150, h: 85, d: 55,
+    qty: 1, dims: "", wood: "Mahogany", finish: "Natural Varnish",
     price: 12000, fee: 0, status: "Completed / For Inspection", rank: 3, label: "High", craftsman: STAFF.carlo,
     estDays: 0, deliveryDays: 2, createdDaysAgo: 15, encodedBy: STAFF.liza,
     payments: [{ type: "Down Payment (30%)", amount: 3600, daysAgo: 14 }],
   },
   {
     code: "JJ-2026-0141", slip: "0141", pin: "8080", customer: "Grace Lumayag", phone: "09000000999",
-    address: "Brgy. Poblacion, beside Rural Health Unit", municipality: "Pangantucan", item: "Kitchen Cabinet Set (upper + lower)",
-    qty: 1, dims: "Upper 240cm x 60cm x 35cm; Lower 240cm x 85cm x 55cm", wood: "Gmelina", finish: "Light Oak Satin",
+    address: "Brgy. Poblacion, beside Rural Health Unit", municipality: "Pangantucan", item: "2-Door Overhead Kitchen Cabinet",
+    cat: "Kitchen / Wall Cabinet", variant: "2-Door Overhead", w: 120, h: 70, d: 35,
+    qty: 1, dims: "", wood: "Gmelina", finish: "Natural Varnish",
     price: 32000, fee: 2000, status: "Confirmed", estDays: 18, createdDaysAgo: 5, encodedBy: STAFF.gilbert,
   },
   {
     code: "JJ-2026-0142", slip: "0142", pin: "3141", customer: "Rodel Aguilar", phone: "09000000107",
-    address: "Purok 9, Brgy. Bagontaas", municipality: "Valencia City", item: "Rocking Chair",
-    qty: 2, dims: "65cm x 95cm x 105cm", wood: "Mahogany", finish: "Dark Mahogany Stain",
-    notes: "Owner inspection: armrest joint loose on chair #2 — re-glue and clamp.", price: 9000, fee: 0,
+    address: "Purok 9, Brgy. Bagontaas", municipality: "Valencia City", item: "Classic 2-Panel Door",
+    cat: "Panel Door", variant: "Classic 2-Panel", w: 80, h: 210, d: 4.5,
+    qty: 2, dims: "", wood: "Mahogany", finish: "Dark Espresso",
+    notes: "Owner inspection: lower panel joint on door #2 has a gap — re-glue and clamp.", price: 9000, fee: 0,
     status: "In Production", rank: 2, label: "High", craftsman: STAFF.dodong, estDays: 1, deliveryDays: 4,
     createdDaysAgo: 18, encodedBy: STAFF.gilbert, revision: true,
     payments: [{ type: "Down Payment (30%)", amount: 2700, daysAgo: 17 }],
   },
   {
     code: "JJ-2026-0137", slip: "0137", pin: "2718", customer: "Teresita Cabahug", phone: "09000000108",
-    address: "Brgy. Halapitan, purok 1", municipality: "San Fernando", item: "Altar Table",
-    qty: 1, dims: "120cm x 45cm x 90cm", wood: "Mahogany", finish: "Antique Brown",
+    address: "Brgy. Halapitan, purok 1", municipality: "San Fernando", item: "Bookshelf / Room Divider",
+    cat: "Custom Piece", variant: "Bookshelf / Divider", w: 120, h: 180, d: 35,
+    qty: 1, dims: "", wood: "Mahogany", finish: "Dark Espresso",
     price: 14500, fee: 2500, status: "Ready for Delivery", craftsman: STAFF.nolito, estDays: -1, deliveryDays: 1,
     createdDaysAgo: 20, encodedBy: STAFF.liza,
     payments: [{ type: "Down Payment (30%)", amount: 4350, daysAgo: 19 }],
   },
   {
     code: "JJ-2026-0140", slip: "0140", pin: "6060", customer: "Benjie Saldivar", phone: "09000000109",
-    address: "Purok 4, Brgy. Batangan", municipality: "Valencia City", item: "Bunk Bed with Ladder",
-    qty: 1, dims: "90cm x 190cm, 160cm high", wood: "Gmelina", finish: "Navy Blue Paint",
+    address: "Purok 4, Brgy. Batangan", municipality: "Valencia City", item: "Bunk Bed Frame with Ladder",
+    cat: "Custom Piece", variant: "Bed Frame", w: 90, h: 160, d: 190,
+    qty: 1, dims: "", wood: "Gmelina", finish: "Gloss White",
     price: 21000, fee: 0, status: "Ready for Delivery", craftsman: STAFF.carlo, terms: "Installment",
     estDays: -1, createdDaysAgo: 22, encodedBy: STAFF.gilbert,
     payments: [{ type: "Installment / Partial", amount: 3000, daysAgo: 21 }],
@@ -152,6 +169,7 @@ const ORDERS: SeedOrder[] = [
   {
     code: "JJ-2026-0130", slip: "0130", pin: "9090", customer: "Analyn Moreno", phone: "09000000110",
     address: "Brgy. Lumbo, near barangay hall", municipality: "Valencia City", item: "Coffee Table",
+    legacy: true,
     qty: 1, dims: "100cm x 60cm x 45cm", wood: "Mahogany", finish: "Clear Gloss",
     price: 7500, fee: 0, status: "Delivered", craftsman: STAFF.nolito, estDays: -4, deliveryDays: -1,
     createdDaysAgo: 28, encodedBy: STAFF.liza,
@@ -162,30 +180,34 @@ const ORDERS: SeedOrder[] = [
   },
   {
     code: "JJ-2026-0143", slip: "0143", pin: "4242", customer: "Edgar Villanueva", phone: "09000000111",
-    address: "Brgy. Songco", municipality: "Lantapan", item: "Dining Chairs",
-    qty: 6, dims: "45cm x 50cm x 95cm each", wood: "Mahogany", finish: "Dark Walnut Gloss",
-    notes: "Match the JJ-2026-0145 table finish.", price: 19800, fee: 800,
+    address: "Brgy. Songco", municipality: "Lantapan", item: "4-Seater Rectangular Dining Table",
+    cat: "Dining Table", variant: "4-Seater Rectangular", w: 120, h: 76, d: 80,
+    qty: 6, dims: "", wood: "Mahogany", finish: "Walnut Stain",
+    notes: "Match the JJ-2026-0145 table stain.", price: 19800, fee: 800,
     status: "Confirmed", rank: 5, craftsman: STAFF.nolito, estDays: 9, createdDaysAgo: 6, encodedBy: STAFF.gilbert,
     payments: [{ type: "Down Payment (30%)", amount: 5940, method: "GCash / Bank Transfer", daysAgo: 5 }],
   },
   {
     code: "JJ-2026-0144", slip: "0144", pin: "1212", customer: "Jocelyn Tan", phone: "09000000112",
-    address: "Purok 1", municipality: "Valencia City", item: "TV Rack with Glass Doors",
-    qty: 1, dims: "180cm x 40cm x 50cm", wood: "Gmelina", finish: "Walnut Stain",
+    address: "Purok 1", municipality: "Valencia City", item: "Glass-Front Display Hutch",
+    cat: "Kitchen / Wall Cabinet", variant: "Glass-Front Display Hutch", w: 150, h: 85, d: 40,
+    qty: 1, dims: "", wood: "Gmelina", finish: "Walnut Stain",
     price: 11000, fee: 0, status: "Waiting for Confirmation", estDays: 12, createdDaysAgo: 2, encodedBy: STAFF.gilbert,
   },
   {
     code: "JJ-2026-0134", slip: "0134", pin: "5678", customer: "Nestor Galarrita", phone: "09000000113",
-    address: "Brgy. Mendis, past the river crossing", municipality: "Pangantucan", item: "Display Cabinet",
-    qty: 1, dims: "100cm x 40cm x 180cm", wood: "Mahogany", finish: "Cherry Stain",
+    address: "Brgy. Mendis, past the river crossing", municipality: "Pangantucan", item: "Glass-Front Display Cabinet",
+    cat: "Kitchen / Wall Cabinet", variant: "Glass-Front Display Hutch", w: 100, h: 180, d: 40,
+    qty: 1, dims: "", wood: "Mahogany", finish: "Walnut Stain",
     price: 17500, fee: 2000, status: "Ready for Delivery", craftsman: STAFF.dodong, estDays: -4, createdDaysAgo: 26,
     encodedBy: STAFF.liza,
     payments: [{ type: "Down Payment (30%)", amount: 5250, daysAgo: 25 }],
   },
   {
     code: "JJ-2026-0138", slip: "0138", pin: "1122", customer: "Mila Reyes", phone: "09000000114",
-    address: "Purok 7, Brgy. Poblacion", municipality: "Valencia City", item: "Study Table with Hutch",
-    qty: 1, dims: "120cm x 60cm x 150cm", wood: "Gmelina", finish: "Light Walnut",
+    address: "Purok 7, Brgy. Poblacion", municipality: "Valencia City", item: "Study Shelf / Divider",
+    cat: "Custom Piece", variant: "Bookshelf / Divider", w: 120, h: 150, d: 60,
+    qty: 1, dims: "", wood: "Gmelina", finish: "Natural Varnish",
     price: 8000, fee: 0, status: "Ready for Delivery", craftsman: STAFF.carlo, estDays: -2, deliveryDays: 0,
     createdDaysAgo: 19, encodedBy: STAFF.gilbert,
     payments: [{ type: "Down Payment (30%)", amount: 2400, daysAgo: 18 }],
@@ -223,9 +245,16 @@ export async function buildSeedTables(): Promise<MemoryTables> {
       pin_code_display: s.pin,
       item_name: s.item,
       quantity: s.qty,
-      dimensions: s.dims,
+      dimensions: s.legacy ? s.dims : dimensionsText({ width_cm: s.w!, height_cm: s.h!, depth_cm: s.d! }),
       wood_type: s.wood,
       color_finish: s.finish,
+      furniture_category: s.legacy ? null : s.cat!,
+      design_variant: s.legacy ? null : s.variant!,
+      width_cm: s.legacy ? null : s.w!,
+      height_cm: s.legacy ? null : s.h!,
+      depth_cm: s.legacy ? null : s.d!,
+      custom_wood_note: null,
+      is_legacy_incomplete: !!s.legacy,
       special_instructions: s.notes ?? null,
       reference_photo_url: s.photo ?? null,
       specs_confirmed: confirmed,
@@ -268,19 +297,39 @@ export async function buildSeedTables(): Promise<MemoryTables> {
         },
         {
           id: crypto.randomUUID(), order_id: o.id, from_status: "Completed / For Inspection", to_status: "In Production",
-          changed_by_id: STAFF.owner, notes: "Inspection failed: armrest joint loose on chair #2.", client_transaction_id: null,
+          changed_by_id: STAFF.owner, notes: "Inspection failed: lower panel joint on door #2 has a gap.", client_transaction_id: null,
           changed_at: ts(1, 15),
         },
       );
     }
 
+    // specification revision 1: the shop's quote (legacy orders keep their free-text dimensions)
+    const rev1: SpecRevision = {
+      id: crypto.randomUUID(), order_id: o.id, revision_number: 1, revision_type: "staff_draft",
+      furniture_category: o.furniture_category, design_variant: o.design_variant,
+      width_cm: o.width_cm, height_cm: o.height_cm, depth_cm: o.depth_cm,
+      wood_type: o.wood_type, custom_wood_note: o.custom_wood_note, color_finish: o.color_finish, quantity: o.quantity,
+      legacy_dimensions_text: s.legacy ? o.dimensions : null,
+      quoted_furniture_price: o.furniture_price, quoted_delivery_fee: o.delivery_fee,
+      spec_preview_config: {}, changed_fields: s.legacy ? { backfill: "created from existing order by migration 003" } : {},
+      created_by_role: s.legacy ? "system (migration 003 backfill)" : "staff", created_by_id: s.encodedBy,
+      created_at: ts(s.createdDaysAgo),
+    };
+    t.order_specification_revisions.push(rev1);
+    o.current_revision = 1;
     if (confirmed) {
+      o.approved_revision_number = 1;
       t.order_confirmations.push({
         id: crypto.randomUUID(),
         order_id: o.id,
         version_number: 1,
+        revision_number: 1,
+        revision_id: rev1.id,
         confirmed_specs_snapshot: {
-          item_name: s.item, dimensions: s.dims, wood_type: s.wood, color_finish: s.finish, quantity: s.qty, furniture_price: s.price,
+          item_name: o.item_name, dimensions: o.dimensions, wood_type: o.wood_type, color_finish: o.color_finish,
+          quantity: o.quantity, furniture_price: o.furniture_price, furniture_category: o.furniture_category,
+          design_variant: o.design_variant, width_cm: o.width_cm, height_cm: o.height_cm, depth_cm: o.depth_cm,
+          quoted_furniture_price: o.furniture_price, quoted_delivery_fee: o.delivery_fee,
         },
         confirmation_method: s.createdDaysAgo % 2 ? "Signed Paper Slip" : "Messenger Reply",
         confirmed_by_name: s.customer,
@@ -343,7 +392,7 @@ export async function buildSeedTables(): Promise<MemoryTables> {
   // 0140 installment approval was auto-created by the exception gate; 0133's credit is already approved:
   const credit = t.order_exceptions_and_repairs.find((e) => e.order_id === byCode("JJ-2026-0133").id);
   if (credit) Object.assign(credit, { status: "Approved", resolved_by_id: STAFF.owner, resolved_at: ts(28, 15) });
-  ex("JJ-2026-0143", "Spec Clarification", "Armrests on all 6 chairs, or only on the 2 head chairs? Slip only says \"with armrest\".", "Nolito Remulta", "Pending", 0);
+  ex("JJ-2026-0143", "Spec Clarification", "Tabletop thickness 3cm or 4.5cm? Slip only says \"thick top\".", "Nolito Remulta", "Pending", 0);
   ex("JJ-2026-0134", "On-Site Scratch Touch-Up / Repair", "Scratch on left door (approx. 8cm) from rough road. Painter touch-up with Cherry Stain before re-delivery.", "Jesse Decena", "Pending", 1);
   ex("JJ-2026-0137", "Special Delivery Terms", "Customer asks to deliver after 4 PM because nobody is home earlier. Halapitan road is unlit after 6 PM.", "Liza", "Pending", 0);
 
