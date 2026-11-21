@@ -19,7 +19,8 @@ async function step(name, fn) {
     results.push(`ok   - ${name}`);
   } catch (e) {
     failures++;
-    results.push(`FAIL - ${name}\n       ${String(e?.message ?? e).split("\n")[0]}`);
+    const at = String(e?.stack ?? "").split("\n").find((l) => l.includes("run.mjs:"))?.trim() ?? "";
+    results.push(`FAIL - ${name}\n       ${String(e?.message ?? e).split("\n")[0]} ${at}`);
   }
 }
 const expect = (cond, msg) => { if (!cond) throw new Error(msg); };
@@ -27,6 +28,16 @@ const expect = (cond, msg) => { if (!cond) throw new Error(msg); };
 async function noHorizontalScroll(page, label) {
   const { sw, iw } = await page.evaluate(() => ({ sw: document.documentElement.scrollWidth, iw: window.innerWidth }));
   expect(sw <= iw + 1, `${label}: page is ${sw}px wide on a ${iw}px screen (horizontal scroll)`);
+  // also catch content that is clipped by an overflow-hidden card instead of scrolling the page
+  const clipped = await page.evaluate(() => {
+    const iw = window.innerWidth;
+    const scrolls = (el) => { for (let a = el.parentElement; a; a = a.parentElement) { const o = getComputedStyle(a).overflowX; if (o === "auto" || o === "scroll") return true; } return false; };
+    return [...document.querySelectorAll("body *")].filter((el) => {
+      const r = el.getBoundingClientRect();
+      return r.width > 0 && r.height > 0 && r.right > iw + 1 && getComputedStyle(el).visibility !== "hidden" && !el.closest(".sr-only") && !scrolls(el);
+    }).slice(0, 3).map((el) => `${el.tagName.toLowerCase()}.${String(el.className).slice(0, 40)}`);
+  });
+  expect(clipped.length === 0, `${label}: content wider than the ${iw}px screen: ${clipped.join(" | ")}`);
 }
 
 const browser = await chromium.launch(process.env.PW_EXECUTABLE ? { executablePath: process.env.PW_EXECUTABLE } : {});
@@ -65,13 +76,21 @@ await step("staff: new order form validates then saves a DR draft with PIN slip"
   await page.selectOption("#municipality", "Lantapan");
   await page.fill("#delivery_fee", "800");
   await page.fill("#delivery_address", "Purok 2, Brgy. Alanib, near the school");
-  await page.fill("#item_name", "Narra-look Bench");
-  await page.fill("#dimensions", "150cm x 40cm x 45cm");
-  await page.fill("#color_finish", "Honey Oak");
+  // configurator: Custom Piece → Bookshelf / Divider, custom W×H×D, Other wood needs a note
+  await page.getByTestId("cat-Custom Piece").click();
+  await page.getByRole("radio", { name: "Bookshelf / Divider" }).check({ force: true });
+  await page.fill('input[name="width_cm"]', "150");
+  await page.fill('input[name="height_cm"]', "40");
+  await page.fill('input[name="depth_cm"]', "45");
+  await page.getByTestId("wood-Other").click();
+  await page.getByTestId("finish-Walnut Stain").click();
   await page.fill("#furniture_price", "6000");
   expect((await page.locator("dl[aria-live]").innerText()).includes("₱1,800"), "30% preview should be ₱1,800");
   await noHorizontalScroll(page, "staff-new-order-mobile");
   await page.screenshot({ path: `${SHOTS}/staff-new-order-mobile.png`, fullPage: true });
+  await page.getByRole("button", { name: "Save order" }).click();
+  await page.getByText('Describe the wood when "Other" is selected.').first().waitFor();
+  await page.fill('input[name="custom_wood_note"]', "Narra offcuts supplied by the customer");
   await page.getByRole("button", { name: "Save order" }).click();
   await page.getByText("Paper slip #0145 is already encoded.").first().waitFor();
   await page.fill("#paper_slip_number", "0149");
@@ -88,7 +107,7 @@ await step("staff: new order form validates then saves a DR draft with PIN slip"
   await page.getByRole("link", { name: "Back to order" }).click();
   await page.getByRole("button", { name: "Record confirmation" }).click();
   await page.getByRole("button", { name: "Confirm specifications" }).click();
-  await page.getByText("Specifications confirmed").waitFor();
+  await page.getByText(/Specification revision \d+ confirmed/).first().waitFor();
   await page.waitForLoadState("networkidle");
   const title = await page.locator("h1").innerText();
   expect(/^JJ-\d{4}-0149$/.test(title.trim()), `promoted code expected, got ${title}`);
@@ -205,6 +224,52 @@ await step("customer: Order ID only hides money; PIN unlocks full view and confi
   await ctx.close();
 });
 
+await step("customer: propose spec changes → staff revised quote → customer confirms new revision", async () => {
+  const ctx = await browser.newContext({ ...mobile, baseURL: BASE });
+  const page = await ctx.newPage();
+  await page.goto("/track");
+  await page.fill("#order_code", "JJ-2026-0144");
+  await page.fill("#pin", "1212");
+  await page.getByRole("button", { name: "Open with PIN" }).click();
+  await page.waitForURL(/\/track\/order/);
+  // mobile preview bar must not cover the inputs it describes
+  await page.getByTestId("wood-Mahogany").scrollIntoViewIfNeeded();
+  const bar = await page.getByTestId("configurator-bar").boundingBox();
+  const chip = await page.getByTestId("wood-Mahogany").boundingBox();
+  expect(bar && chip && chip.y >= bar.y + bar.height - 1, "mobile preview bar covers the wood chips");
+  await page.getByTestId("wood-Mahogany").click();
+  await page.fill('input[name="width_cm"]', "180");
+  const diff = await page.getByText("Your changes:").locator("..").innerText();
+  expect(diff.includes("Wood: Gmelina -> Mahogany") && diff.includes("Width: 150cm -> 180cm"), `diff text: ${diff}`);
+  await noHorizontalScroll(page, "customer-proposal-mobile");
+  await page.screenshot({ path: `${SHOTS}/customer-proposal-mobile.png`, fullPage: false });
+  await page.getByRole("button", { name: "Submit Specification Changes for Review" }).click();
+  await page.getByText(/sent to JJ Furniture for review/).first().waitFor();
+  expect(!(await page.getByRole("button", { name: "Confirm Specifications" }).isVisible()), "cannot self-confirm own proposal");
+
+  // staff sees the proposal with the exact diff and sends a revised quote
+  const staff = await asPersona("Gilbert Decena", desktop);
+  await staff.page.getByRole("heading", { name: "Customer proposed specification changes" }).waitFor();
+  const card = staff.page.locator("li", { hasText: "JJ-2026-0144" }).first();
+  expect((await card.innerText()).includes("Wood: Gmelina -> Mahogany"), "staff card shows exact diff");
+  await card.getByRole("button", { name: /Review & send revised quote/ }).click();
+  await staff.page.fill("#q-price", "14500");
+  await staff.page.fill("#q-note", "+₱3,500 for Mahogany and the wider hutch");
+  await staff.page.getByRole("button", { name: "Send revised quote" }).click();
+  await staff.page.getByText("Revised quote sent.").first().waitFor();
+  await staff.page.screenshot({ path: `${SHOTS}/staff-after-proposal-desktop.png`, fullPage: false });
+  await staff.ctx.close();
+
+  // customer confirms the new revision (3)
+  await page.reload();
+  await page.getByRole("button", { name: "Confirm Specifications" }).click();
+  await page.getByText("Confirm revision 3?").waitFor();
+  expect((await page.getByRole("dialog").innerText()).includes("₱14,500"), "dialog shows revised price");
+  await page.getByRole("button", { name: "Yes, these are correct" }).click();
+  await page.getByText("Thank you! Your specifications are confirmed.").waitFor();
+  await ctx.close();
+});
+
 await step("security: craftsman cannot open office or driver pages", async () => {
   const { page, ctx } = await asPersona("Carlo");
   for (const path of ["/owner", "/staff", "/driver"]) {
@@ -220,7 +285,7 @@ await step("theme: dark mode renders with prototype palette", async () => {
   const { page, ctx } = await asPersona("Mr. Vincris Lelis");
   await page.getByRole("button", { name: "Switch to Dark mode" }).click();
   const bg = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
-  expect(bg === "rgb(11, 11, 12)", `dark background expected #0B0B0C, got ${bg}`);
+  expect(bg === "rgb(20, 16, 13)", `dark background expected #14100D, got ${bg}`);
   await page.screenshot({ path: `${SHOTS}/owner-dark-mobile.png`, fullPage: false });
   await ctx.close();
 });

@@ -9,6 +9,7 @@ import type {
   Payment,
 } from "@/lib/domain/types";
 import { PH_PHONE } from "@/lib/domain/validation";
+import { isCustomerProposal } from "./exceptions";
 
 export type Risk = "delayed" | "at_risk" | "on_track";
 
@@ -60,6 +61,7 @@ export function ownerKpis(
 
 export interface StaffTasks {
   needsConfirmation: Order[];
+  specProposals: OrderException[];
   needsDownPayment: { order: Order; shortfall: number }[];
   missingFields: { order: Order; missing: string[] }[];
   specQuestions: OrderException[];
@@ -88,8 +90,10 @@ export function staffTasks(
 ): StaffTasks {
   const byId = new Map(orders.map((o) => [o.id, o]));
   const live = (orderId: string) => deliveries.some((d) => d.order_id === orderId && d.dispatch_status !== "Failed / Reschedule");
+  const proposals = exceptions.filter((e) => e.status === "Pending" && isCustomerProposal(e));
   return {
-    needsConfirmation: orders.filter((o) => o.status === "Waiting for Confirmation"),
+    needsConfirmation: orders.filter((o) => o.status === "Waiting for Confirmation" && !proposals.some((p) => p.order_id === o.id)),
+    specProposals: proposals,
     needsDownPayment: orders
       .filter((o) => o.status !== "Delivered" && o.specs_confirmed && !o.payment_exception_approved)
       .map((order) => ({ order, shortfall: downPaymentShortfall(order, payments) }))
@@ -98,7 +102,7 @@ export function staffTasks(
       .filter((o) => o.status !== "Delivered")
       .map((order) => ({ order, missing: missingFieldsOf(order) }))
       .filter((x) => x.missing.length > 0),
-    specQuestions: exceptions.filter((e) => e.category === "Spec Clarification" && e.status === "Pending"),
+    specQuestions: exceptions.filter((e) => e.category === "Spec Clarification" && e.status === "Pending" && !isCustomerProposal(e)),
     toSchedule: orders.filter((o) => o.status === "Ready for Delivery" && !live(o.id)),
     failedDeliveries: deliveries
       .filter((d) => d.dispatch_status === "Failed / Reschedule" && !live(d.order_id) && byId.get(d.order_id)?.status !== "Delivered")

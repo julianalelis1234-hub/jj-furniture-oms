@@ -24,6 +24,22 @@ import { formatDate, formatDateTime } from "@/lib/domain/dates";
 import { feePaidFrom, formatPeso, furniturePaidFrom } from "@/lib/domain/finance";
 import { getStore, requireActor } from "@/lib/server/context";
 import { nameOf } from "@/lib/server/office-data";
+import { ReviewProposalControls } from "@/components/office/spec-dialogs";
+import { PreviewPanel } from "@/components/orders/preview-panel";
+import { describeDiff, formatDims, type FurnitureSpec, type SpecDiff } from "@/lib/domain/furniture";
+import { isCustomerProposal } from "@/lib/services/exceptions";
+import type { SpecRevision } from "@/lib/domain/types";
+
+const REVISION_LABEL: Record<SpecRevision["revision_type"], string> = {
+  staff_draft: "Shop quote (draft)",
+  customer_proposal: "Customer proposal",
+  revised_quote: "Revised quote",
+  final_approved: "Final approved",
+};
+const specOf = (r: Pick<SpecRevision, "furniture_category" | "design_variant" | "width_cm" | "height_cm" | "depth_cm" | "wood_type" | "custom_wood_note" | "color_finish" | "quantity">): FurnitureSpec => ({
+  furniture_category: r.furniture_category, design_variant: r.design_variant, width_cm: r.width_cm, height_cm: r.height_cm,
+  depth_cm: r.depth_cm, wood_type: r.wood_type, custom_wood_note: r.custom_wood_note, color_finish: r.color_finish, quantity: r.quantity,
+});
 import { SMS_SIMULATED_NOTE, smsMode } from "@/lib/services/notify";
 
 export default async function OrderDetailPage({ params }: PageProps<"/staff/orders/[id]">) {
@@ -32,7 +48,8 @@ export default async function OrderDetailPage({ params }: PageProps<"/staff/orde
   const store = await getStore();
   const order = await store.getOrder(id);
   if (!order) notFound();
-  const [profiles, payments, history, deliveries, exceptions, notifications, confirmations] = await Promise.all([
+  const [revisions, profiles, payments, history, deliveries, exceptions, notifications, confirmations] = await Promise.all([
+    store.listRevisions(id),
     store.listProfiles(), store.listPayments(id), store.listHistory(id), store.listDeliveries({ orderId: id }),
     store.listExceptions(id), store.listNotifications(id), store.listConfirmations(id),
   ]);
@@ -59,10 +76,18 @@ export default async function OrderDetailPage({ params }: PageProps<"/staff/orde
       <Card className="mb-4"><CardContent className="pt-4"><StageTracker status={o.status} /></CardContent></Card>
 
       {/* Next step — exactly the action the current stage needs */}
-      <Card className="mb-4 border-primary/50 bg-accent/40">
+      <Card className="mb-4 border-accent/60 bg-accent-soft">
         <CardHeader><CardTitle>Next step</CardTitle></CardHeader>
         <CardContent className="flex flex-wrap gap-2">
-          {o.status === "Waiting for Confirmation" && (<><ConfirmSpecsDialog order={o} /><ReviseSpecsDialog order={o} /></>)}
+          {o.status === "Waiting for Confirmation" && (() => {
+            const latest = revisions.at(-1);
+            const proposal = exceptions.find((e) => e.status === "Pending" && isCustomerProposal(e));
+            const pendingOther = exceptions.some((e) => e.status === "Pending" && !isCustomerProposal(e));
+            if (proposal) return <><p className="w-full text-sm font-semibold text-warning">The customer proposed changes (revision {latest?.revision_number}). Review them below and send a revised quote.</p><ReviewProposalControls ex={proposal} order={o} proposal={latest?.revision_type === "customer_proposal" ? specOf(latest) : null} /></>;
+            if (o.is_legacy_incomplete) return <><p className="w-full text-sm font-semibold text-warning">Legacy order: issue a revised quote with exact W × H × D before the customer can confirm.</p><ReviseSpecsDialog order={o} /></>;
+            if (pendingOther) return <><p className="w-full text-sm font-semibold text-warning">Resolve the open review item(s) below before recording the confirmation.</p><ReviseSpecsDialog order={o} /></>;
+            return <><ConfirmSpecsDialog order={o} /><ReviseSpecsDialog order={o} /></>;
+          })()}
           {o.status === "Confirmed" && (<>
             <TransitionButton orderId={o.id} to="In Production" version={o.version}><Hammer aria-hidden /> Start production</TransitionButton>
             <ReviseSpecsDialog order={o} />
@@ -85,26 +110,50 @@ export default async function OrderDetailPage({ params }: PageProps<"/staff/orde
       </Card>
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <Card>
-          <CardHeader className="flex-row items-center"><CardTitle>Specifications</CardTitle></CardHeader>
-          <CardContent>
-            <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-sm">
-              <dt className="text-muted-foreground">Item</dt><dd className="font-semibold">{o.quantity} × {o.item_name}</dd>
-              <dt className="text-muted-foreground">Dimensions</dt><dd className="font-semibold">{o.dimensions}</dd>
-              <dt className="text-muted-foreground">Wood</dt><dd>{o.wood_type}</dd>
-              <dt className="text-muted-foreground">Color / finish</dt><dd>{o.color_finish}</dd>
-              <dt className="text-muted-foreground">Instructions</dt><dd className="whitespace-pre-line">{o.special_instructions || "—"}</dd>
-              <dt className="text-muted-foreground">Reference</dt>
-              <dd>{o.reference_photo_url ? <a href={o.reference_photo_url} target="_blank" rel="noreferrer noopener" className="text-primary underline">Open photo</a> : "—"}</dd>
-              <dt className="text-muted-foreground">Craftsman</dt><dd>{nameOf(profiles, o.assigned_craftsman_id)}</dd>
-              <dt className="text-muted-foreground">Est. completion</dt><dd className="font-semibold">{formatDate(o.estimated_completion_date)}</dd>
-              <dt className="text-muted-foreground">Delivery date</dt><dd className="font-semibold">{formatDate(o.scheduled_delivery_date)}</dd>
-            </dl>
-            <p className="mt-3 text-sm">
-              {o.specs_confirmed
-                ? <>✅ Confirmed by customer{confirmations.at(-1) && <> · {confirmations.at(-1)!.confirmation_method} · {formatDateTime(confirmations.at(-1)!.confirmed_at)}</>}</>
-                : <span className="font-semibold text-warning">⚠ Not yet confirmed — production is blocked.</span>}
-            </p>
+        <Card className="lg:col-span-2">
+          <CardHeader className="flex-row flex-wrap items-center gap-2">
+            <CardTitle>Specifications</CardTitle>
+            <span className="rounded-full border px-2 py-0.5 text-xs font-semibold text-muted-foreground tabular-nums">
+              Revision {o.current_revision ?? "—"}{o.approved_revision_number ? ` · confirmed rev. ${o.approved_revision_number}` : ""}
+            </span>
+            {o.is_legacy_incomplete && <span className="rounded-full border border-warning/50 bg-warning-soft px-2 py-0.5 text-xs font-semibold text-warning">Legacy record — dimensions pending clarification</span>}
+          </CardHeader>
+          <CardContent className="grid gap-4 md:grid-cols-[minmax(0,1fr)_minmax(260px,340px)]">
+            <div>
+              <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-sm">
+                <dt className="text-muted-foreground">Item</dt><dd className="font-semibold">{o.quantity} × {o.item_name}</dd>
+                <dt className="text-muted-foreground">Category</dt><dd>{o.furniture_category ?? "—"}{o.design_variant ? ` · ${o.design_variant}` : ""}</dd>
+                <dt className="text-muted-foreground">W × H × D</dt><dd className="font-semibold tabular-nums">{formatDims(o) ?? <span className="text-warning">Dimensions Pending Clarification ({o.dimensions})</span>}</dd>
+                <dt className="text-muted-foreground">Wood</dt><dd>{o.wood_type}{o.custom_wood_note ? ` — ${o.custom_wood_note}` : ""}</dd>
+                <dt className="text-muted-foreground">Color / finish</dt><dd>{o.color_finish}</dd>
+                <dt className="text-muted-foreground">Instructions</dt><dd className="whitespace-pre-line">{o.special_instructions || "—"}</dd>
+                <dt className="text-muted-foreground">Reference</dt>
+                <dd>{o.reference_photo_url ? <a href={o.reference_photo_url} target="_blank" rel="noreferrer noopener" className="text-primary underline">Open photo</a> : "—"}</dd>
+                <dt className="text-muted-foreground">Craftsman</dt><dd>{nameOf(profiles, o.assigned_craftsman_id)}</dd>
+                <dt className="text-muted-foreground">Est. completion</dt><dd className="font-semibold">{formatDate(o.estimated_completion_date)}</dd>
+                <dt className="text-muted-foreground">Delivery date</dt><dd className="font-semibold">{formatDate(o.scheduled_delivery_date)}</dd>
+              </dl>
+              <p className="mt-3 text-sm">
+                {o.specs_confirmed
+                  ? <>✅ Revision {o.approved_revision_number} confirmed by customer{confirmations.at(-1) && <> · {confirmations.at(-1)!.confirmation_method} · {formatDateTime(confirmations.at(-1)!.confirmed_at)}</>}</>
+                  : <span className="font-semibold text-warning">⚠ Not yet confirmed — production is blocked.</span>}
+              </p>
+              <details className="mt-3 rounded-lg border p-3 text-sm" open={revisions.length > 1}>
+                <summary className="cursor-pointer font-semibold">Specification revisions ({revisions.length})</summary>
+                <ol className="mt-2 grid gap-2">
+                  {revisions.map((r) => (
+                    <li key={r.id} className="tabular-nums">
+                      <b>Rev. {r.revision_number}</b> · {REVISION_LABEL[r.revision_type]} · {formatPeso(r.quoted_furniture_price)}
+                      {r.quoted_delivery_fee > 0 && ` + ${formatPeso(r.quoted_delivery_fee)} delivery`}
+                      <span className="block text-xs text-muted-foreground">{formatDateTime(r.created_at)} · {r.created_by_id ? nameOf(profiles, r.created_by_id) : r.created_by_role}</span>
+                      {"backfill" in r.changed_fields ? <span className="block text-xs text-muted-foreground">Created from the original order record</span>
+                        : r.revision_number > 1 && <span className="block text-xs">{describeDiff(r.changed_fields as SpecDiff) || "No changes"}</span>}
+                    </li>
+                  ))}
+                </ol>
+              </details>
+            </div>
+            <PreviewPanel spec={specOf(o)} legacyDimensions={o.is_legacy_incomplete ? o.dimensions : null} />
           </CardContent>
         </Card>
 
@@ -173,6 +222,7 @@ export default async function OrderDetailPage({ params }: PageProps<"/staff/orde
                     {e.status === "Pending" && (
                       <div className="mt-2">
                         {e.category === "On-Site Scratch Touch-Up / Repair" ? <ResolveRepairDialog ex={e} orderCode={o.order_code} />
+                          : isCustomerProposal(e) ? <ReviewProposalControls ex={e} order={o} proposal={revisions.at(-1)?.revision_type === "customer_proposal" ? specOf(revisions.at(-1)!) : null} />
                           : e.category === "Spec Clarification" ? <LinkButton href="/staff">Answer in Today&apos;s Work</LinkButton>
                           : <DecideExceptionControls ex={e} canApprove={isOwner} />}
                       </div>

@@ -19,7 +19,8 @@ import { toClientOrder } from "@/lib/client-order";
 import { formatDate, formatDateTime } from "@/lib/domain/dates";
 import { formatPeso } from "@/lib/domain/finance";
 import { getStore, requireActor } from "@/lib/server/context";
-import { loadOfficeData, nameOf } from "@/lib/server/office-data";
+import { loadOfficeData, loadProposalSpecs, nameOf } from "@/lib/server/office-data";
+import { ReviewProposalControls } from "@/components/office/spec-dialogs";
 import { staffTasks } from "@/lib/services/insights";
 import { SMS_SIMULATED_NOTE, smsMode } from "@/lib/services/notify";
 
@@ -29,10 +30,11 @@ export default async function StaffPage() {
   const actor = await requireActor(["staff", "owner"]);
   const data = await loadOfficeData(await getStore());
   const t = staffTasks(data.orders, data.payments, data.deliveries, data.exceptions, data.notifications);
+  const proposalSpecs = await loadProposalSpecs(await getStore(), t.specProposals.map((e) => e.order_id));
   const byId = new Map(data.orders.map((o) => [o.id, toClientOrder(o)]));
   const drivers = data.profiles.filter((p) => p.role === "driver" && p.is_active);
   const total =
-    t.needsConfirmation.length + t.needsDownPayment.length + t.specQuestions.length + t.toSchedule.length +
+    t.specProposals.length + t.needsConfirmation.length + t.needsDownPayment.length + t.specQuestions.length + t.toSchedule.length +
     t.failedDeliveries.length + t.cashHandovers.length + t.touchUps.length + t.missingFields.length + t.failedSms.length;
 
   return (
@@ -54,15 +56,35 @@ export default async function StaffPage() {
 
         <TabsContent value="today">
           <div className="grid gap-x-6 lg:grid-cols-2">
+            {t.specProposals.length > 0 && (
+              <Section title="Customer proposed specification changes" count={t.specProposals.length}>
+                <ul className="grid gap-2">
+                  {t.specProposals.map((ex) => {
+                    const o = byId.get(ex.order_id);
+                    if (!o) return null;
+                    return (
+                      <TaskCard key={ex.id} order={o} tone="warning" meta={<span className="whitespace-pre-line">{ex.description}</span>}
+                        actions={<ReviewProposalControls ex={ex} order={o} proposal={proposalSpecs[o.id] ?? null} />} />
+                    );
+                  })}
+                </ul>
+              </Section>
+            )}
+
             <Section title="Record customer spec confirmation" count={t.needsConfirmation.length}>
               {t.needsConfirmation.length === 0 ? <EmptyState title="No orders waiting for confirmation" /> : (
                 <ul className="grid gap-2">
                   {t.needsConfirmation.map((o) => {
                     const c = byId.get(o.id)!;
+                    const blocked = o.is_legacy_incomplete
+                      ? "Legacy order: issue a revised quote with exact W × H × D first."
+                      : data.exceptions.some((e) => e.order_id === o.id && e.status === "Pending")
+                        ? "Open review item (e.g. owner approval) must be resolved before confirmation."
+                        : null;
                     return (
                       <TaskCard key={o.id} order={c} tone="warning"
-                        meta={<>{o.dimensions} · {o.wood_type} · {o.color_finish} · <b className="text-foreground">{formatPeso(o.furniture_price)}</b></>}
-                        actions={<><ConfirmSpecsDialog order={c} /><LinkButton href={`/staff/orders/${o.id}/slip`}>Print slip</LinkButton></>} />
+                        meta={<>Rev. {o.current_revision} · <span className="tabular-nums">{o.dimensions}</span> · {o.wood_type} · {o.color_finish} · <b className="text-foreground tabular-nums">{formatPeso(o.furniture_price)}</b>{blocked && <span className="block font-semibold text-warning">{blocked}</span>}</>}
+                        actions={<>{blocked ? <LinkButton href={`/staff/orders/${o.id}`}>Open order</LinkButton> : <ConfirmSpecsDialog order={c} />}<LinkButton href={`/staff/orders/${o.id}/slip`}>Print slip</LinkButton></>} />
                     );
                   })}
                 </ul>

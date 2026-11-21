@@ -28,6 +28,7 @@ export function ActionDialog<T>({
   children,
   wide,
   onDone,
+  triggerClassName,
 }: {
   trigger: string;
   icon?: ReactNode;
@@ -41,12 +42,13 @@ export function ActionDialog<T>({
   children: ReactNode | ((errors: Record<string, string>) => ReactNode);
   wide?: boolean;
   onDone?: (data?: T) => void;
+  triggerClassName?: string;
 }) {
   const [open, setOpen] = useState(false);
   const { pending, run, errors, setErrors } = useServerAction();
   return (
     <>
-      <Button variant={variant} size={size} onClick={() => { setErrors({}); setOpen(true); }}>
+      <Button variant={variant} size={size} className={triggerClassName} onClick={() => { setErrors({}); setOpen(true); }}>
         {icon}
         {trigger}
       </Button>

@@ -62,11 +62,14 @@ Scroll to **What we found in the Discover phase**, then **One record, five porta
    | Municipality | **Lantapan** |
    | Delivery fee | **800** |
    | Delivery address | Purok 3, Brgy. Poblacion, beside the chapel |
-   | Item | 4-Seater Dining Set |
-   | Dimensions | 150cm x 90cm x 76cm |
-   | Wood type | **Mahogany** |
-   | Color / finish | Dark Walnut Gloss |
+   | Furniture category (configurator) | **Dining Table** |
+   | Design | 6-Seater Classic |
+   | Size preset | **180 × 76 × 90 cm** (W × H × D) |
+   | Wood | Tap **Gmelina**, then **Mahogany** |
+   | Color / finish | Tap **Gloss White**, **Dark Espresso**, then **Walnut Stain** |
    | Furniture price | **24000** |
+
+   **Say:** "The configurator stores exact centimetres in structured columns. The preview beside it, with a 165 cm person for scale, updates as I tap. It is labelled as an illustrative reference only, not a manufacturing drawing."
 
 3. Point at the **Price & payment** box: 30% down payment **₱7,200**, 70% balance **₱16,800**, delivery fee **₱800**, collect on delivery **₱17,600**.
 4. Change **Municipality** to **Valencia City**. The fee becomes **FREE** and the amount to collect becomes **₱16,800**.
@@ -83,9 +86,11 @@ Scroll to **What we found in the Discover phase**, then **One record, five porta
 
 1. Top bar → **Customer**. Type **DR-0149** in Order ID and leave the PIN empty. Click **Check status only**.
    **Say:** "With only the Order ID, anyone holding the slip sees the stage and the two dates, but no phone number, no address and no money."
-2. Type the **PIN** from the slip and click **Open with PIN**. Show the specifications and the **Payment summary**.
-3. Click **Confirm Specifications** → **Yes, these are correct**.
-   **Say:** "The customer has confirmed. This clears the production gate. The draft becomes JJ-2026-0149, stage 2 of 7."
+2. Type the **PIN** from the slip and click **Open with PIN**. Show the configurator with the shop's quote (revision 1) and the **Payment summary**.
+3. Tap **Gmelina**. A line appears: *"Your changes: Wood: Mahogany -> Gmelina"* with **Submit Specification Changes for Review**.
+   **Say:** "While the order is waiting, the customer can explore. Submitting would create a new proposal revision for the shop to re-quote. Nothing is approved until the customer confirms a shop quote." Click **Undo my changes**.
+4. Click **Confirm Specifications** → **Yes, these are correct**.
+   **Say:** "The customer confirmed this exact revision. This clears the production gate. The draft becomes JJ-2026-0149, stage 2 of 7, and the spec is now locked for the workshop."
 
 ## 4. Craftsmen Portal (C-01) and Owner Dashboard (O-01) — 2:00
 

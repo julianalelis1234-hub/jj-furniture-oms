@@ -38,6 +38,10 @@
   --color-info-foreground: var(--info-foreground);
   --color-info-soft: var(--info-soft);
   --color-danger-soft: var(--danger-soft);
+  --color-accent-soft: var(--accent-soft);
+  --color-wood-mahogany: var(--wood-mahogany);
+  --color-wood-gmelina: var(--wood-gmelina);
+  --color-wood-other: var(--wood-other);
   --color-demo-bar: var(--demo-bar);
   --color-demo-bar-foreground: var(--demo-bar-foreground);
   --color-accent-foreground: var(--accent-foreground);
@@ -62,103 +66,121 @@
 }
 
 /* =========================================================================
-   JJ Furniture OMS design tokens (1:1 with Figma variables / html.to.design)
-   Light = "Normal Mode": high contrast for bright, dusty workshop + sunlight.
-   Dark  = Stage 2 prototype palette (#0B0B0C / #141416 surfaces).
+   JJ Furniture OMS — Classy Wooden Minimalist design tokens
+   (1:1 with Figma variables; exported by `npm run tokens`)
+   Light = "Normal Mode": warm alabaster, espresso text — high contrast for
+           workshop and outdoor sunlight readability.
+   Dark  = "Workshop Night / Low-Glare": smoked walnut surfaces.
    ========================================================================= */
 :root {
   --radius: 0.75rem;
-  --background: #f6f5f3;
-  --foreground: #0c0a09;
+  --background: #faf7f2;          /* warm alabaster / cream parchment */
+  --foreground: #231a14;          /* deep espresso charcoal */
   --card: #ffffff;
-  --card-foreground: #0c0a09;
+  --card-foreground: #231a14;
   --popover: #ffffff;
-  --popover-foreground: #0c0a09;
-  --primary: #7c2d12;            /* mahogany */
-  --primary-foreground: #ffffff;
-  --secondary: #efece8;
-  --secondary-foreground: #1c1917;
-  --muted: #efece8;
-  --muted-foreground: #44403c;
-  --accent: #fdf0d5;
-  --accent-foreground: #5c2a0c;
-  --destructive: #b91c1c;
+  --popover-foreground: #231a14;
+  --primary: #6f4229;             /* rich Philippine mahogany */
+  --primary-foreground: #faf7f2;
+  --secondary: #efe8dd;           /* warm gmelina timber tint */
+  --secondary-foreground: #231a14;
+  --muted: #f3eee6;
+  --muted-foreground: #5e5045;
+  --accent: #b8864b;              /* brushed brass / warm varnish gold */
+  --accent-foreground: #231a14;
+  --accent-soft: #f6eddf;         /* brass wash for highlight boxes */
+  --destructive: #a23b2a;
   --destructive-foreground: #ffffff;
-  --success: #15803d;
+  --success: #2f6b3a;
   --success-foreground: #ffffff;
-  --success-soft: #dcfce7;
-  --warning: #a16207;
+  --success-soft: #e8f1e5;
+  --warning: #8a5a12;
   --warning-foreground: #ffffff;
-  --warning-soft: #fef3c7;
-  --info: #1d4ed8;
+  --warning-soft: #f7ecd6;
+  --info: #2d5f8a;
   --info-foreground: #ffffff;
-  --info-soft: #dbeafe;
-  --danger-soft: #fee2e2;
-  --border: #c9c4bd;
-  --input: #a8a29e;
-  --ring: #7c2d12;
-  --demo-bar: #1c1917;
-  --demo-bar-foreground: #fafaf9;
-  --chart-1: #7c2d12;
-  --chart-2: #1d4ed8;
-  --chart-3: #15803d;
-  --chart-4: #a16207;
-  --chart-5: #6d28d9;
+  --info-soft: #e4edf5;
+  --danger-soft: #f7e4df;
+  --border: #e6ddd0;              /* warm sand */
+  --input: #cfc3b2;
+  --ring: #6f4229;
+  --demo-bar: #231a14;
+  --demo-bar-foreground: #faf7f2;
+  --wood-mahogany: #8a4a2b;
+  --wood-gmelina: #d9b57e;
+  --wood-other: #a68664;
+  --chart-1: #6f4229;
+  --chart-2: #2d5f8a;
+  --chart-3: #2f6b3a;
+  --chart-4: #b8864b;
+  --chart-5: #6a4c7d;
   --sidebar: #ffffff;
-  --sidebar-foreground: #0c0a09;
-  --sidebar-primary: #7c2d12;
-  --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #efece8;
-  --sidebar-accent-foreground: #1c1917;
-  --sidebar-border: #c9c4bd;
-  --sidebar-ring: #7c2d12;
+  --sidebar-foreground: #231a14;
+  --sidebar-primary: #6f4229;
+  --sidebar-primary-foreground: #faf7f2;
+  --sidebar-accent: #efe8dd;
+  --sidebar-accent-foreground: #231a14;
+  --sidebar-border: #e6ddd0;
+  --sidebar-ring: #6f4229;
+  --shadow-color: 35 26 20;
+  --foliage-1: #6f8a52;
+  --foliage-2: #587140;
+  --foliage-3: #45592f;
 }
 
 .dark {
-  --background: #0b0b0c;
-  --foreground: #f5f5f4;
-  --card: #141416;
-  --card-foreground: #f5f5f4;
-  --popover: #141416;
-  --popover-foreground: #f5f5f4;
-  --primary: #f59e0b;
-  --primary-foreground: #0b0b0c;
-  --secondary: #1d1d21;
-  --secondary-foreground: #f5f5f4;
-  --muted: #1d1d21;
-  --muted-foreground: #b6b6be;
-  --accent: #2a2217;
-  --accent-foreground: #fcd34d;
-  --destructive: #f87171;
-  --destructive-foreground: #0b0b0c;
-  --success: #4ade80;
-  --success-foreground: #0b0b0c;
-  --success-soft: #0f2a19;
-  --warning: #fbbf24;
-  --warning-foreground: #0b0b0c;
-  --warning-soft: #2b2108;
-  --info: #60a5fa;
-  --info-foreground: #0b0b0c;
-  --info-soft: #0f1d33;
-  --danger-soft: #2e1111;
-  --border: #33333a;
-  --input: #4a4a52;
-  --ring: #f59e0b;
-  --demo-bar: #000000;
-  --demo-bar-foreground: #f5f5f4;
-  --chart-1: #f59e0b;
-  --chart-2: #60a5fa;
-  --chart-3: #4ade80;
-  --chart-4: #fbbf24;
-  --chart-5: #a78bfa;
-  --sidebar: #141416;
-  --sidebar-foreground: #f5f5f4;
-  --sidebar-primary: #f59e0b;
-  --sidebar-primary-foreground: #0b0b0c;
-  --sidebar-accent: #1d1d21;
-  --sidebar-accent-foreground: #f5f5f4;
-  --sidebar-border: #33333a;
-  --sidebar-ring: #f59e0b;
+  --background: #14100d;          /* deep smoked walnut */
+  --foreground: #f5efe6;          /* warm ivory */
+  --card: #1e1814;
+  --card-foreground: #f5efe6;
+  --popover: #1e1814;
+  --popover-foreground: #f5efe6;
+  --primary: #c88a55;             /* warm amber mahogany */
+  --primary-foreground: #14100d;
+  --secondary: #2a221c;           /* dark roast timber */
+  --secondary-foreground: #f5efe6;
+  --muted: #2a221c;
+  --muted-foreground: #c4b6a6;
+  --accent: #c9a06a;
+  --accent-foreground: #14100d;
+  --accent-soft: #2b2117;
+  --destructive: #e58a78;
+  --destructive-foreground: #14100d;
+  --success: #86c28b;
+  --success-foreground: #14100d;
+  --success-soft: #182619;
+  --warning: #e2b462;
+  --warning-foreground: #14100d;
+  --warning-soft: #2c2213;
+  --info: #92b9db;
+  --info-foreground: #14100d;
+  --info-soft: #17222d;
+  --danger-soft: #2e1a16;
+  --border: #332922;              /* warm timber borders */
+  --input: #4a3d33;
+  --ring: #c88a55;
+  --demo-bar: #0c0907;
+  --demo-bar-foreground: #f5efe6;
+  --wood-mahogany: #a65a35;
+  --wood-gmelina: #caa36a;
+  --wood-other: #93765a;
+  --chart-1: #c88a55;
+  --chart-2: #92b9db;
+  --chart-3: #86c28b;
+  --chart-4: #c9a06a;
+  --chart-5: #b79ad0;
+  --sidebar: #1e1814;
+  --sidebar-foreground: #f5efe6;
+  --sidebar-primary: #c88a55;
+  --sidebar-primary-foreground: #14100d;
+  --sidebar-accent: #2a221c;
+  --sidebar-accent-foreground: #f5efe6;
+  --sidebar-border: #332922;
+  --sidebar-ring: #c88a55;
+  --shadow-color: 0 0 0;
+  --foliage-1: #7f9a62;
+  --foliage-2: #66804e;
+  --foliage-3: #4d633b;
 }
 
 @layer base {
@@ -174,7 +196,11 @@
 }
 @layer base {
   html { -webkit-text-size-adjust: 100%; }
-  body { font-size: 16px; line-height: 1.5; }
+  body { font-size: 16px; line-height: 1.5; font-feature-settings: "ss01", "cv11"; }
+  /* numbers that people compare (₱ amounts, cm) never jump around */
+  .tabular-nums, [data-num] { font-variant-numeric: tabular-nums; }
+  /* warm, quiet elevation for cards */
+  [data-slot="card"] { box-shadow: 0 1px 2px rgb(var(--shadow-color) / 0.05), 0 4px 16px -8px rgb(var(--shadow-color) / 0.12); }
   /* honour reduced motion for older phones / accessibility */
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
@@ -187,3 +213,45 @@
   .print-sheet { box-shadow: none !important; border: 0 !important; margin: 0 !important; max-width: none !important; }
   @page { size: A5 portrait; margin: 10mm; }
 }
+
+/* ---------------------------------------------------------------- swaying tree */
+.jj-tree-trunk { fill: var(--primary); }
+.jj-tree-ground { stroke: var(--border); }
+.jj-tree-leaf-1 { fill: var(--foliage-1); }
+.jj-tree-leaf-2 { fill: var(--foliage-2); }
+.jj-tree-leaf-3 { fill: var(--foliage-3); }
+.jj-tree-vein { stroke: var(--accent); opacity: 0.55; }
+.jj-tree-drift { fill: var(--accent); opacity: 0; }
+.jj-tree-canopy {
+  transform-box: fill-box;
+  transform-origin: bottom center;
+  animation: jj-sway 5.5s ease-in-out infinite alternate;
+}
+.jj-tree-canopy-1 { animation-duration: 6.5s; }
+.jj-tree-canopy-2 { animation-duration: 5.5s; animation-delay: -1.4s; }
+.jj-tree-canopy-3 { animation-duration: 4.5s; animation-delay: -2.6s; }
+.jj-tree-drift { transform-box: fill-box; transform-origin: center; animation: jj-drift 6.5s ease-in-out infinite; }
+.jj-tree-drift-2 { animation-duration: 5.5s; animation-delay: -3s; }
+@keyframes jj-sway {
+  from { transform: rotate(-2.5deg); }
+  to { transform: rotate(2.5deg); }
+}
+@keyframes jj-drift {
+  0% { opacity: 0; transform: translate(0, 0) rotate(0deg); }
+  15% { opacity: 0.85; }
+  85% { opacity: 0.6; }
+  100% { opacity: 0; transform: translate(-14px, 46px) rotate(-70deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .jj-tree-canopy, .jj-tree-drift { animation: none !important; }
+  .jj-tree-drift-1 { opacity: 0.8; transform: translate(-4px, 22px) rotate(-25deg); }
+  .jj-tree-drift-2 { opacity: 0; }
+}
+
+/* ------------------------------------------------------ furniture preview */
+.jj-ground { stroke: var(--border); stroke-width: 1.2; }
+.jj-human { fill: var(--muted-foreground); opacity: 0.28; }
+.jj-dim line { stroke: var(--muted-foreground); stroke-width: 0.8; }
+.jj-dim text, .jj-dim-text-muted { fill: var(--foreground); font-size: 8.5px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.jj-dim-text-muted { fill: var(--muted-foreground); font-weight: 600; }
+.jj-arrow-head { fill: var(--muted-foreground); }
