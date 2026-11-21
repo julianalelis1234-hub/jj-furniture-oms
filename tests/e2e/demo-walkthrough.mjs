@@ -83,7 +83,6 @@ async function scrollTo(locator) {
 }
 
 let newCode = "";
-let pin = "";
 let orderId = "";
 try {
   // ---------------------------------------------------------------- 0. reset
@@ -117,6 +116,7 @@ try {
   await page.fill("#paper_slip_number", "0149");
   await page.fill("#customer_name", "Rosalinda Abellana");
   await page.fill("#customer_phone", "0900 000 0149");
+  await page.fill("#customer_email", "rosalinda.abellana@example.com");
   await page.selectOption("#municipality", "Lantapan");
   await page.fill("#delivery_fee", "800");
   await page.fill("#delivery_address", "Purok 3, Brgy. Poblacion, beside the chapel");
@@ -143,10 +143,9 @@ try {
   await page.getByRole("button", { name: "Save order" }).click();
   await page.waitForURL(/\/slip\?new=1/);
   newCode = (await page.locator("article .font-mono").first().innerText()).trim();
-  pin = (await page.locator("article .font-mono").nth(2).innerText()).trim();
   orderId = page.url().match(/orders\/([^/]+)\/slip/)[1];
-  if (!/^DR-\d{4}$/.test(newCode) || !/^\d{4}$/.test(pin)) throw new Error(`slip shows ${newCode} / ${pin}`);
-  await caption(`Printable confirmation slip: Order ID ${newCode}, PIN, QR code, separate completion & delivery dates`);
+  if (!/^DR-\d{4}$/.test(newCode)) throw new Error(`slip shows ${newCode}`);
+  await caption(`Paper slip: Order ID ${newCode}, QR code, two dates — the quotation review link went to the customer's email (no PIN)`);
   await checkLayout("slip");
   await pause(3500);
   await scrollTo(page.getByText("Estimated completion", { exact: false }).first());
@@ -165,16 +164,21 @@ try {
   if (cardText.includes("₱") || cardText.includes("0900")) throw new Error("Order-ID-only view leaked money or phone");
   await scrollTo(card);
   await pause(4000);
-  await caption("Adding the 4-digit PIN from the slip unlocks specifications and payments");
-  await page.fill("#pin", pin);
-  await page.getByRole("button", { name: "Open with PIN" }).click();
-  await page.waitForURL(/\/track\/order/);
-  await page.waitForLoadState("networkidle");
-  await checkLayout("customer order");
+  await caption("The quotation arrives by email (demo inbox) with a single-use review link");
+  await page.goto("/demo/inbox");
+  const mail = page.getByTestId("inbox-item").filter({ hasText: "rosalinda.abellana@example.com" }).first();
+  await scrollTo(mail);
   await pause(2500);
-  await pause(1000);
-  await caption("While waiting for confirmation the customer can explore woods and finishes live");
-  await scrollTo(page.getByText("Your furniture specification"));
+  const reviewHref = await mail.locator('a[href^="/customer/review"]').first().getAttribute("href");
+  await page.goto(reviewHref);
+  await caption("Opening the link verifies the email and opens ONLY this quotation (scanners cannot use it up)");
+  await pause(2000);
+  await page.getByRole("button", { name: "Open my quotation" }).click();
+  await page.waitForURL(/\/customer\/review\/quote/);
+  await page.waitForLoadState("networkidle");
+  await checkLayout("customer review");
+  await pause(2500);
+  await caption("While reviewing, the customer can explore woods and finishes live");
   await page.getByTestId("wood-Gmelina").first().click();
   await page.getByText("Your changes:").waitFor();
   await pause(2500);
@@ -189,8 +193,22 @@ try {
   await page.getByTestId("accept-quotation").check();
   await pause(1000);
   await page.getByRole("dialog").getByRole("button", { name: "Accept quote & confirm" }).click();
-  await toast("You accepted the specifications and the quotation");
-  await page.waitForLoadState("networkidle");
+  await page.getByTestId("setup-email-sent").waitFor();
+  await caption("Accepted — the customer gets an email to create a password (never a plaintext password)");
+  await pause(3000);
+  const setupHref = await (async () => {
+    await page.goto("/demo/inbox");
+    return page.getByTestId("inbox-item").filter({ hasText: "rosalinda.abellana@example.com" }).first()
+      .locator('a[href^="/customer/setup-password"]').first().getAttribute("href");
+  })();
+  await page.goto(setupHref);
+  await page.fill("#password", "Narra-Dining-2026");
+  await page.fill("#confirm", "Narra-Dining-2026");
+  await pause(1200);
+  await page.getByRole("button", { name: "Save password" }).click();
+  await page.waitForURL(/\/customer\/orders/);
+  await caption("Customer dashboard (email + password): all their orders, 7-stage progress, 3D preview, payments");
+  await pause(3500);
   newCode = newCode.replace(/^DR-(\d{4})$/, `JJ-${new Date().getFullYear()}-$1`);
   await caption(`Confirmed — ${newCode} is at stage 2/7, but wood is not cut until the 30% is verified`);
   await page.evaluate(() => window.scrollTo(0, 0));
