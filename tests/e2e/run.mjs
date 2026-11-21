@@ -54,6 +54,18 @@ async function asPersona(name, opts = mobile) {
   return { ctx, page };
 }
 
+/** Demo inbox: the newest link of a given kind sent to an address (path only). */
+async function inboxLink(page, to, kind = "/customer/review") {
+  await page.goto("/demo/inbox");
+  const item = page.getByTestId("inbox-item").filter({ hasText: to }).filter({ has: page.locator(`a[href^="${kind}"]`) }).first();
+  await item.waitFor();
+  return item.locator(`a[href^="${kind}"]`).first().getAttribute("href");
+}
+async function openReview(page, href) {
+  await page.goto(href);
+  await page.getByRole("button", { name: "Open my quotation" }).click();
+  await page.waitForURL(/\/customer\/review\/quote/);
+}
 // ---------------------------------------------------------------- staff --
 let newOrderCode = "";
 await step("staff: Today's Work lists task queues", async () => {
@@ -65,7 +77,7 @@ await step("staff: Today's Work lists task queues", async () => {
   await ctx.close();
 });
 
-await step("staff: new order form validates then saves a DR draft with PIN slip", async () => {
+await step("staff: new order form validates (email or walk-in) then saves a DR draft; slip shows the email, no PIN", async () => {
   const { page, ctx } = await asPersona("Gilbert Decena");
   await page.goto("/staff/new");
   await page.getByRole("button", { name: "Save order" }).click();
@@ -76,6 +88,7 @@ await step("staff: new order form validates then saves a DR draft with PIN slip"
   await page.selectOption("#municipality", "Lantapan");
   await page.fill("#delivery_fee", "800");
   await page.fill("#delivery_address", "Purok 2, Brgy. Alanib, near the school");
+  await page.fill("#customer_email", " Rosalie.Ompad@Example.com ");
   // configurator: Custom Piece → Bookshelf / Divider, custom W×H×D, Other wood needs a note
   await page.getByTestId("cat-Custom Piece").click();
   await page.getByRole("radio", { name: "Bookshelf / Divider" }).check({ force: true });
@@ -98,7 +111,7 @@ await step("staff: new order form validates then saves a DR draft with PIN slip"
   await page.waitForURL(/\/slip\?new=1/);
   newOrderCode = (await page.locator("article .font-mono").first().innerText()).trim();
   expect(/^DR-\d{4}$/.test(newOrderCode), `draft code expected, got ${newOrderCode}`);
-  expect(/^\d{4}$/.test((await page.locator("article .font-mono").nth(2).innerText()).trim()), "PIN on slip");
+  expect((await page.getByTestId("slip-contact").innerText()).trim() === "rosalie.ompad@example.com", "slip shows the normalized email (no PIN)");
   expect(await page.locator("article svg").first().isVisible(), "QR code on slip");
   await noHorizontalScroll(page, "staff-slip-mobile");
   await page.screenshot({ path: `${SHOTS}/staff-slip-mobile.png`, fullPage: true });
@@ -211,7 +224,7 @@ await step("staff: driver cash appears as a handover to verify", async () => {
 });
 
 // ------------------------------------------------------------- customer --
-await step("customer: Order ID only hides money; PIN unlocks full view; accept quote + spec (both boxes)", async () => {
+await step("customer: Order ID status, email login dashboard, legacy PIN slip, review link → accept → set password", async () => {
   const ctx = await browser.newContext({ ...mobile, baseURL: BASE });
   const page = await ctx.newPage();
   await page.goto("/track");
@@ -222,39 +235,81 @@ await step("customer: Order ID only hides money; PIN unlocks full view; accept q
   expect(!card.includes("₱") && !card.includes("0900"), "Order-ID-only view must not show money or phone");
   await noHorizontalScroll(page, "customer-track-mobile");
   await page.screenshot({ path: `${SHOTS}/customer-track-mobile.png`, fullPage: true });
+  // older paper slips keep their PIN
+  await page.fill("#order_code", "JJ-2026-0133");
   await page.fill("#pin", "0000");
   await page.getByRole("button", { name: "Open with PIN" }).click();
   await page.getByText(/do not match/).waitFor();
-  await page.fill("#pin", "4821");
+  await page.fill("#pin", "1357");
   await page.getByRole("button", { name: "Open with PIN" }).click();
   await page.waitForURL(/\/track\/order/);
-  expect((await page.content()).includes("₱"), "full view shows payment summary");
-  await noHorizontalScroll(page, "customer-order-mobile");
-  await page.screenshot({ path: `${SHOTS}/customer-order-mobile.png`, fullPage: true });
 
-  await page.goto("/track");
-  await page.getByRole("button", { name: /DR-0148/ }).click();
-  await page.waitForURL(/\/track\/order/);
-  await page.getByTestId("quote-validity").waitFor();
+  // email + password login → dashboard of linked orders only
+  await page.goto("/customer/login");
+  await page.fill("#email", "maria.santos@example.com");
+  await page.fill("#password", "wrong-password-123");
+  await page.getByRole("button", { name: "Log in" }).click();
+  await page.getByTestId("login-error").waitFor();
+  expect((await page.getByTestId("login-error").innerText()).includes("Email or password is incorrect"), "generic login error");
+  await page.getByTestId("demo-login-fill").click();
+  await page.getByRole("button", { name: "Log in" }).click();
+  await page.waitForURL(/\/customer\/orders/);
+  const list = await page.getByTestId("customer-orders").innerText();
+  expect(list.includes("JJ-2026-0145") && !list.includes("JJ-2026-0136"), "dashboard lists only this account's orders");
+  await noHorizontalScroll(page, "customer-dashboard-mobile");
+  await page.screenshot({ path: `${SHOTS}/customer-dashboard-mobile.png`, fullPage: true });
+  await page.getByText("JJ-2026-0145").first().click();
+  await page.getByTestId("approved-spec").waitFor();
+  expect((await page.getByTestId("payment-summary").innerText()).includes("₱"), "payment summary on the order page");
+  await page.goto("/customer/orders/JJ-2026-0136");
+  expect((await page.content()).includes("404") || (await page.getByText(/could not be found|not found/i).count()) > 0, "another customer's order is not reachable");
+  await page.getByTestId("customer-logout").first().click().catch(() => {});
+
+  // Ramon: the review link from his (simulated) inbox → accept → password set-up
+  const href = await inboxLink(page, "ramon.delacruz@example.com");
+  await openReview(page, href);
+  await noHorizontalScroll(page, "customer-review-mobile");
+  await page.screenshot({ path: `${SHOTS}/customer-review-mobile.png`, fullPage: true });
   await page.getByRole("button", { name: "Accept Quote & Confirm Specifications" }).click();
-  // both acceptances are required
   await page.getByTestId("accept-specification").check();
   await page.getByRole("dialog").getByRole("button", { name: "Accept quote & confirm" }).click();
   expect(await page.getByRole("dialog").isVisible(), "dialog stays open until the quotation box is ticked");
   await page.getByTestId("accept-quotation").check();
   await page.getByRole("dialog").getByRole("button", { name: "Accept quote & confirm" }).click();
-  await page.getByText(/You accepted the specifications and the quotation/).first().waitFor();
+  await page.getByTestId("setup-email-sent").waitFor();
+  // the same link cannot be used twice
+  await page.goto(href);
+  await page.getByRole("button", { name: "Open my quotation" }).click();
+  expect((await page.getByTestId("review-error").innerText()).includes("already used"), "review link is single-use");
+  // set the password from the emailed link, land on the dashboard
+  const setup = await inboxLink(page, "ramon.delacruz@example.com", "/customer/setup-password");
+  await page.goto(setup);
+  await page.fill("#password", "short");
+  await page.fill("#confirm", "short");
+  await page.getByRole("button", { name: "Save password" }).click();
+  await page.getByTestId("setup-error").waitFor();
+  await page.fill("#password", "Kamagong-Bed-2026");
+  await page.fill("#confirm", "Kamagong-Bed-2026");
+  await page.getByRole("button", { name: "Save password" }).click();
+  await page.waitForURL(/\/customer\/orders/);
+  await page.getByTestId("welcome").waitFor();
+  expect((await page.getByTestId("customer-orders").innerText()).includes("0148"), "accepted order appears in the new account");
   await ctx.close();
 });
 
-await step("customer: propose spec changes → staff revised quote → customer confirms new revision", async () => {
+await step("customer: staff resend link → propose changes in the review session → staff re-quote → new link → accept", async () => {
+  const staff = await asPersona("Gilbert Decena", desktop);
+  await staff.page.getByRole("tab", { name: /All Orders/ }).click();
+  await staff.page.getByText("JJ-2026-0144").first().click();
+  await staff.page.waitForURL(/\/staff\/orders\//);
+  expect((await staff.page.getByTestId("customer-email-status").innerText()).includes("unverified"), "email shown as unverified");
+  staff.page.once("dialog", (d) => d.accept());
+  await staff.page.getByRole("button", { name: "Resend review link" }).click();
+  await staff.page.getByText("A new review link was issued").first().waitFor();
+
   const ctx = await browser.newContext({ ...mobile, baseURL: BASE });
   const page = await ctx.newPage();
-  await page.goto("/track");
-  await page.fill("#order_code", "JJ-2026-0144");
-  await page.fill("#pin", "1212");
-  await page.getByRole("button", { name: "Open with PIN" }).click();
-  await page.waitForURL(/\/track\/order/);
+  await openReview(page, await inboxLink(page, "jocelyn.tan@example.com"));
   // mobile preview bar must not cover the inputs it describes
   await page.getByTestId("wood-Mahogany").scrollIntoViewIfNeeded();
   const bar = await page.getByTestId("configurator-bar").boundingBox();
@@ -267,11 +322,10 @@ await step("customer: propose spec changes → staff revised quote → customer 
   await noHorizontalScroll(page, "customer-proposal-mobile");
   await page.screenshot({ path: `${SHOTS}/customer-proposal-mobile.png`, fullPage: false });
   await page.getByRole("button", { name: "Submit Specification Changes for Review" }).click();
-  await page.getByText(/sent to JJ Furniture for review/).first().waitFor();
-  expect(!(await page.getByRole("button", { name: "Accept Quote & Confirm Specifications" }).isVisible()), "cannot accept own proposal");
+  await page.getByTestId("review-proposal-sent").waitFor();
 
-  // staff sees the proposal with the exact diff and sends a revised quote
-  const staff = await asPersona("Gilbert Decena", desktop);
+  // staff see the proposal with the exact diff and send a revised quote (emails a fresh link)
+  await staff.page.goto("/staff");
   await staff.page.getByRole("heading", { name: "Customer proposed specification changes" }).waitFor();
   const card = staff.page.locator("li", { hasText: "JJ-2026-0144" }).first();
   expect((await card.innerText()).includes("Wood: Gmelina -> Mahogany"), "staff card shows exact diff");
@@ -283,15 +337,15 @@ await step("customer: propose spec changes → staff revised quote → customer 
   await staff.page.screenshot({ path: `${SHOTS}/staff-after-proposal-desktop.png`, fullPage: false });
   await staff.ctx.close();
 
-  // customer accepts the new revision (3)
-  await page.reload();
+  // the customer opens the NEW link and accepts revision 3
+  await openReview(page, await inboxLink(page, "jocelyn.tan@example.com"));
+  await page.getByText("Quotation · revision 3").waitFor();
   await page.getByRole("button", { name: "Accept Quote & Confirm Specifications" }).click();
-  await page.getByText("Accept revision 3?").waitFor();
   expect((await page.getByRole("dialog").innerText()).includes("₱14,500"), "dialog shows revised price");
   await page.getByTestId("accept-specification").check();
   await page.getByTestId("accept-quotation").check();
   await page.getByRole("dialog").getByRole("button", { name: "Accept quote & confirm" }).click();
-  await page.getByText(/You accepted the specifications and the quotation/).first().waitFor();
+  await page.getByTestId("review-accepted").waitFor();
   await ctx.close();
 });
 
@@ -311,6 +365,7 @@ await step("Option 2: customer designs & requests → staff quotation → custom
   await page.getByRole("button", { name: "Send request for quotation" }).click();
   await page.getByText("Your name is required.").first().waitFor();
   await page.fill("#customer_name", "Teodora Bacus");
+  await page.fill("#customer_email", "teodora.bacus@example.com");
   await page.fill("#customer_phone", "0900 000 0601");
   await page.selectOption("#municipality", "Lantapan");
   await page.fill("#delivery_address", "Purok 2, Brgy. Songco, near the health center");
@@ -319,13 +374,8 @@ await step("Option 2: customer designs & requests → staff quotation → custom
   await page.getByTestId("request-done").waitFor();
   const reqCode = (await page.getByTestId("request-code").innerText()).trim();
   expect(/^DR-\d{4}$/.test(reqCode), `request code expected, got ${reqCode}`);
-  expect(/^\d{4}$/.test((await page.getByTestId("request-pin").innerText()).trim()), "PIN shown once");
+  expect((await page.getByTestId("request-email").innerText()).trim() === "teodora.bacus@example.com", "quotation goes to the entered email (no PIN)");
   await page.screenshot({ path: `${SHOTS}/customer-request-done-mobile.png`, fullPage: false });
-  await page.getByRole("link", { name: "View my request" }).click();
-  await page.waitForURL(/\/track\/order/);
-  await page.getByTestId("quote-requested-banner").waitFor();
-  await page.getByTestId("payment-pending").waitFor();
-  expect((await page.getByRole("button", { name: "Accept Quote & Confirm Specifications" }).count()) === 0, "nothing to accept before the quotation");
 
   // staff issue the official quotation from the Option 2 queue
   const staff = await asPersona("Gilbert Decena", desktop);
@@ -338,15 +388,14 @@ await step("Option 2: customer designs & requests → staff quotation → custom
   await staff.page.getByText("Quotation saved as a new revision.").first().waitFor();
   await staff.ctx.close();
 
-  // the customer accepts the quotation (valid 7 days)
-  await page.reload();
-  await page.getByTestId("quote-validity").waitFor();
+  // the quotation arrives by email; the customer opens the link and accepts (valid 7 days)
+  await openReview(page, await inboxLink(page, "teodora.bacus@example.com"));
   await page.getByRole("button", { name: "Accept Quote & Confirm Specifications" }).click();
   expect((await page.getByRole("dialog").innerText()).includes("₱26,800"), "total = price + delivery fee");
   await page.getByTestId("accept-specification").check();
   await page.getByTestId("accept-quotation").check();
   await page.getByRole("dialog").getByRole("button", { name: "Accept quote & confirm" }).click();
-  await page.getByText(/You accepted the specifications and the quotation/).first().waitFor();
+  await page.getByTestId("setup-email-sent").waitFor();
   await noHorizontalScroll(page, "customer-request-accepted-mobile");
   await ctx.close();
 });

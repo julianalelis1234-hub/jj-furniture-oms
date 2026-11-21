@@ -135,7 +135,12 @@ export const editOrderSchema = z.object({
   reference_photo_url: z.union([z.literal(""), z.url()]).optional().default(""),
   estimated_completion_date: isoDate("Estimated completion date"),
   scheduled_delivery_date: z.union([z.literal(""), isoDate("Scheduled delivery date")]).optional().default(""),
-}).superRefine(refineEmailOrWalkIn);
+}).superRefine((v, ctx) => {
+  // edits: never both; "neither" is checked in the service (allowed only for legacy rows recorded before emails)
+  if (v.has_no_email && v.customer_email) ctx.addIssue({ code: "custom", path: ["customer_email"], message: "Clear the email for a Walk-In / No Email order." });
+  else if (v.customer_email && !emailField().safeParse(v.customer_email).success)
+    ctx.addIssue({ code: "custom", path: ["customer_email"], message: "Enter a valid email address, e.g. name@example.com." });
+});
 
 /**
  * Staff/owner quotation (revised_quote): full spec + price (+ provincial fee).

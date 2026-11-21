@@ -1,4 +1,4 @@
-import { PencilRuler, Search } from "lucide-react";
+import { KeyRound, PencilRuler, Search } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { LinkButton } from "@/components/link-button";
 import { isDemoMode } from "@/lib/config";
@@ -27,8 +27,13 @@ export default async function TrackPage({ searchParams }: PageProps<"/track">) {
             <h2 id="opt1" className="flex items-center gap-2 text-lg font-bold">
               <Search className="size-5 text-primary" aria-hidden /> Option 1 · Track or Confirm My Order
             </h2>
+            <div className="flex flex-wrap items-center gap-2 rounded-2xl border bg-card p-3" data-testid="login-callout">
+              <KeyRound className="size-5 text-primary" aria-hidden />
+              <p className="min-w-0 flex-1 text-sm">Have an account? Log in with your email and password to see all your orders.</p>
+              <LinkButton href="/customer/login" variant="default">Customer login</LinkButton>
+            </div>
             <p className="text-sm text-muted-foreground">
-              Enter the Order ID from your slip. Add your 4-digit PIN to see prices, accept your quotation or request a touch-up.
+              Or check the status with the Order ID from your slip. Quotations are accepted from the secure link we email you.
             </p>
             <LookupForm initialCode={typeof code === "string" ? code : ""} samples={isDemoMode() ? DEMO_CUSTOMER_SAMPLES : []} />
           </section>
@@ -41,9 +46,9 @@ export default async function TrackPage({ searchParams }: PageProps<"/track">) {
             </p>
             <ol className="grid gap-1 text-sm text-muted-foreground">
               <li>1. Design your piece and send the request.</li>
-              <li>2. Get your Order ID and PIN right away.</li>
-              <li>3. JJ Furniture checks it and sends an official quotation.</li>
-              <li>4. Accept the quotation here; production starts after the 30% down payment.</li>
+              <li>2. Get your Order ID right away.</li>
+              <li>3. JJ Furniture checks it and emails you the official quotation with a secure link.</li>
+              <li>4. Accept it from that link, then set your password to follow your orders.</li>
             </ol>
             <LinkButton href="/track/request" variant="default" size="xl" className="w-full" data-testid="option-2">
               <PencilRuler aria-hidden /> Design & Request Custom Furniture

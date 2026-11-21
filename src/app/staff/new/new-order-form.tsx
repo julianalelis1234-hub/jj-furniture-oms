@@ -22,6 +22,8 @@ export function NewOrderForm({ staff, currentUserId }: { staff: { id: string; fu
   const [fee, setFee] = useState("");
   const [terms, setTerms] = useState("Standard 30/70");
   const [config, setConfig] = useState<ConfigValue>(emptyConfig);
+  const [email, setEmail] = useState("");
+  const [walkIn, setWalkIn] = useState(false);
   const preview = previewNewOrder(Number(price) || 0, municipality, Number(fee) || 0);
   const today = todayISO();
   const err = (k: string) => errors[k];
@@ -62,6 +64,15 @@ export function NewOrderForm({ staff, currentUserId }: { staff: { id: string; fu
             </Field>
             <Field label="Mobile number" htmlFor="customer_phone" required error={err("customer_phone")} hint="09XX XXX XXXX">
               <TextInput id="customer_phone" name="customer_phone" inputMode="tel" placeholder="09XX XXX XXXX" invalid={!!err("customer_phone")} />
+            </Field>
+            <Field label="Customer email" htmlFor="customer_email" required={!walkIn} error={err("customer_email")} className="sm:col-span-2"
+              hint={walkIn ? "Walk-in: paper slip only — no portal login and no email updates." : "The quotation review link is emailed here. It stays unverified until the customer opens that link."}>
+              <TextInput id="customer_email" name="customer_email" type="email" inputMode="email" autoComplete="off" placeholder="name@example.com"
+                value={walkIn ? "" : email} onChange={(e) => setEmail(e.target.value)} disabled={walkIn} invalid={!!err("customer_email")} />
+              <label className="mt-2 flex min-h-11 items-center gap-2 text-sm font-medium">
+                <input type="checkbox" name="has_no_email" checked={walkIn} onChange={(e) => setWalkIn(e.target.checked)} className="size-5" data-testid="walk-in" />
+                Walk-In / No Email (Paper Slip Only)
+              </label>
             </Field>
             <Field label="Municipality" htmlFor="municipality" required error={err("municipality")}>
               <NativeSelect id="municipality" name="municipality" value={municipality}

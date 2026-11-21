@@ -1,3 +1,4 @@
+import { ZodError } from "zod";
 import type { DataStore, OrderPatch, SpecInput } from "@/lib/data/store";
 import { formatDate } from "@/lib/domain/dates";
 import { DomainError } from "@/lib/domain/errors";
@@ -245,7 +246,10 @@ export async function editOrderDetails(store: DataStore, actor: Actor, orderId: 
   const feeChanged = newFee !== order.delivery_fee;
   if (feeChanged && order.status !== "Waiting for Confirmation" && order.status !== "Quote Requested")
     throw new DomainError("SPEC_LOCKED", "The delivery fee is part of the confirmed quote. Use a change request to adjust it.");
-  const email = v.has_no_email ? null : v.customer_email;
+  const email = v.has_no_email ? null : v.customer_email || null;
+  if (!email && !v.has_no_email && !order.legacy_contact_unknown)
+    throw new DomainError("VALIDATION", "Enter the customer's email, or tick Walk-In / No Email (paper slip only).",
+      new ZodError([{ code: "custom", path: ["customer_email"], message: "Enter the customer's email, or tick Walk-In / No Email (paper slip only).", input: "" }]));
   const emailChanged = email !== order.customer_email || v.has_no_email !== order.has_no_email;
   const res = await store.updateOrder(
     orderId,

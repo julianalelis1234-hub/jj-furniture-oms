@@ -1,6 +1,7 @@
 import { Mail } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { connection } from "next/server";
 import { AppShell, EmptyState } from "@/components/app-shell";
 import { isDemoMode } from "@/lib/config";
 import type { MemoryStore } from "@/lib/data/memory-store";
@@ -15,6 +16,7 @@ export const metadata = { title: "Demo inbox" };
  * this page does not exist in production.
  */
 export default async function DemoInboxPage() {
+  await connection(); // always render at request time (live demo data)
   if (!isDemoMode()) notFound();
   const store = await getPublicStore();
   const mails = store.kind === "memory" ? (store as MemoryStore).t.demo_mailbox : [];

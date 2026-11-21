@@ -24,7 +24,7 @@ export const REVIEW_COOKIE = "jj_review";
 const REVIEW_TTL_S = 30 * 60;
 const CUSTOMER_TTL_S = 8 * 60 * 60;
 
-const useSupabaseAuth = () => !isDemoMode() && hasSupabase();
+const supabaseAuthEnabled = () => !isDemoMode() && hasSupabase();
 
 // ------------------------------------------------------------ auth provider ----
 /** Supabase Auth: users created WITHOUT a password; set-up / reset via one-time recovery links. */
@@ -59,7 +59,7 @@ export function supabaseCustomerAuth(store: DataStore): CustomerAuthProvider {
 
 export async function getCustomerAuth(): Promise<CustomerAuthProvider> {
   const store = await getPublicStore();
-  return useSupabaseAuth() ? supabaseCustomerAuth(store) : demoCustomerAuth(store);
+  return supabaseAuthEnabled() ? supabaseCustomerAuth(store) : demoCustomerAuth(store);
 }
 
 // ------------------------------------------------------------ review session ----
@@ -77,7 +77,7 @@ export async function getReviewSession(): Promise<{ order_id: string; revision_i
 /** The signed-in customer (never a staff member), or null. */
 export async function getCustomer(): Promise<CustomerAccount | null> {
   const store = await getPublicStore();
-  if (useSupabaseAuth()) {
+  if (supabaseAuthEnabled()) {
     const { data } = await (await createUserClient()).auth.getUser();
     if (!data.user) return null;
     const acct = await store.elevated().getCustomerAccount(data.user.id);
@@ -99,7 +99,7 @@ const GENERIC_LOGIN_ERROR = "Email or password is incorrect.";
 
 export async function customerSignIn(email: string, password: string) {
   const store = await getPublicStore();
-  if (useSupabaseAuth()) {
+  if (supabaseAuthEnabled()) {
     const supabase = await createUserClient();
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error || !data.user) throw new DomainError("FORBIDDEN", GENERIC_LOGIN_ERROR);
@@ -116,7 +116,7 @@ export async function customerSignIn(email: string, password: string) {
 }
 
 export async function customerSignOut() {
-  if (useSupabaseAuth()) await (await createUserClient()).auth.signOut();
+  if (supabaseAuthEnabled()) await (await createUserClient()).auth.signOut();
   (await cookies()).delete({ name: CUSTOMER_AUTH_COOKIE, path: "/" });
 }
 
@@ -141,7 +141,7 @@ export async function customerRequestReset(email: string) {
  */
 export async function customerSetPassword(token: string | null, password: string) {
   const store = await getPublicStore();
-  if (useSupabaseAuth()) {
+  if (supabaseAuthEnabled()) {
     const supabase = await createUserClient();
     const { data } = await supabase.auth.getUser();
     if (!data.user) throw new DomainError("VALIDATION", "This link is invalid or has expired. Ask for a new one from the login page.");

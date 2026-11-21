@@ -9,6 +9,7 @@ import {
   CheckCircle2,
   ClipboardCheck,
   HandCoins,
+  MailCheck,
   Hammer,
   MessageSquareReply,
   Pencil,
@@ -24,6 +25,8 @@ import {
   logPaymentAction,
   moveQueueAction,
   recordConfirmationAction,
+  resendReviewLinkAction,
+  retryProvisioningAction,
   retrySmsAction,
   reviseSpecsAction,
   scheduleDeliveryAction,
@@ -255,6 +258,13 @@ export function EditDetailsDialog({ order }: { order: ClientOrder }) {
       submitLabel="Save details" action={(fd) => editOrderAction(order.id, fd)}>
       {(errors) => (
         <div className="grid gap-3 sm:grid-cols-2">
+          <Field label="Customer email" htmlFor="edit_customer_email" error={errors.customer_email} className="sm:col-span-2"
+            hint="A new or changed email is unverified until the customer opens the review link sent to it.">
+            <TextInput id="edit_customer_email" name="customer_email" type="email" defaultValue={order.customer_email ?? ""} placeholder="name@example.com" />
+            <label className="mt-2 flex min-h-11 items-center gap-2 text-sm">
+              <input type="checkbox" name="has_no_email" defaultChecked={order.has_no_email} className="size-5" /> Walk-In / No Email (Paper Slip Only)
+            </label>
+          </Field>
           <Field label="Mobile number" htmlFor="customer_phone" required error={errors.customer_phone}>
             <TextInput id="customer_phone" name="customer_phone" defaultValue={order.customer_phone} inputMode="tel" required />
           </Field>
@@ -392,5 +402,23 @@ export function StartProductionDialog({
           options={[{ value: "", label: "Not assigned yet" }, ...craftsmen.map((c) => ({ value: c.id, label: c.full_name }))]} />
       </Field>
     </ActionDialog>
+  );
+}
+
+/** Staff: issue a fresh single-use review link for the current quotation (the previous link stops working). */
+export function ResendReviewLinkButton({ orderId }: { orderId: string }) {
+  return (
+    <ActionButton action={() => resendReviewLinkAction(orderId)} confirmText="Send a new review link to the customer's email? Any earlier link stops working.">
+      <MailCheck aria-hidden /> Resend review link
+    </ActionButton>
+  );
+}
+
+/** Staff: retry the post-acceptance account set-up (idempotent; the acceptance itself is never touched). */
+export function RetryProvisioningButton({ orderId }: { orderId: string }) {
+  return (
+    <ActionButton action={() => retryProvisioningAction(orderId)}>
+      <RefreshCw aria-hidden /> Retry account set-up
+    </ActionButton>
   );
 }

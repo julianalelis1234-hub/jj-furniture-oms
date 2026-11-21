@@ -15,7 +15,7 @@ import {
   getReviewSession,
   setReviewSession,
 } from "@/lib/server/customer-auth";
-import { acceptFromReview, openReviewLink, type ProvisionResult } from "@/lib/services/customer-portal";
+import { acceptFromReview, openReviewLink, proposeFromReview, type ProvisionResult } from "@/lib/services/customer-portal";
 
 function fail(e: unknown): { ok: false; message: string; code?: string; fieldErrors?: Record<string, string> } {
   if (e instanceof DomainError) {
@@ -53,6 +53,18 @@ export async function reviewAcceptAction(input: {
   try {
     const { provisioning } = await acceptFromReview(await getPublicStore(), await getCustomerAuth(), scope, input);
     return { ok: true, data: provisioning, message: "Thank you! You accepted the specifications and the quotation." };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+/** Submit Specification Changes for Review — limited to the review session's order. */
+export async function reviewProposeAction(fd: FormData): Promise<ActionResult<{ revision_number: number }>> {
+  const scope = await getReviewSession();
+  if (!scope) return { ok: false, message: "Your review session ended. Open the link from your email again, or ask the shop for a new one." };
+  try {
+    const r = await proposeFromReview(await getPublicStore(), scope, Object.fromEntries(fd));
+    return { ok: true, data: { revision_number: r.revision_number }, message: "Your changes were sent to JJ Furniture. They will email you a revised quotation." };
   } catch (e) {
     return fail(e);
   }

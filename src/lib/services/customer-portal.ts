@@ -4,7 +4,7 @@ import { formatDate } from "@/lib/domain/dates";
 import { formatPeso } from "@/lib/domain/finance";
 import { isQuoteExpired } from "@/lib/domain/gate";
 import { QUOTE_REVISION_TYPES, type ConsumeReviewResult, type Order, type ProvisioningStatus } from "@/lib/domain/types";
-import { customerAcceptQuote, customerOrderView, type CustomerOrderView } from "./customer";
+import { customerAcceptQuote, customerOrderView, customerProposeChanges, type CustomerOrderView } from "./customer";
 import type { CustomerAuthProvider } from "./customer-auth";
 import { newSecret, sha256 } from "./customer-auth";
 import { sendEmail, siteUrl } from "./email";
@@ -89,6 +89,8 @@ export async function openReviewLink(publicStore: DataStore, rawToken: string): 
 // ---------------------------------------------------------------- review view ----
 export interface ReviewView {
   scope_current: boolean; // the scoped revision is still the order's latest
+  /** the customer already sent changes for this quotation from this session */
+  proposal_pending: boolean;
   quote_expired: boolean;
   accepted: boolean; // this exact revision was accepted
   order: CustomerOrderView;
@@ -103,8 +105,10 @@ export async function reviewView(publicStore: DataStore, scope: ReviewScope): Pr
   const rev = (await store.listRevisions(o.id)).find((r) => r.revision_id === scope.revision_id);
   if (!rev) throw new DomainError("NOT_FOUND", "Quotation not found.");
   const accepted = (await store.listConfirmations(o.id)).some((c) => c.revision_id === scope.revision_id);
+  const latest = (await store.listRevisions(o.id)).find((r) => r.revision_number === o.current_revision);
   return {
     scope_current: rev.revision_number === o.current_revision,
+    proposal_pending: latest?.revision_type === "customer_proposal" && latest.revision_number === rev.revision_number + 1,
     quote_expired: isQuoteExpired(rev),
     accepted,
     order: await customerOrderView(store, o.id),
@@ -245,4 +249,16 @@ export async function customerOwnedOrder(publicStore: DataStore, userId: string,
   const o = await store.getOrderByCode(orderCode);
   if (!o || o.customer_user_id !== userId) throw new DomainError("NOT_FOUND", "Order not found.");
   return { order: o, view: await customerOrderView(store, o.id) };
+}
+
+/**
+ * "Submit Specification Changes for Review" from a review session: a new
+ * customer_proposal revision for the scoped order only (the existing proposal
+ * flow); the shop re-quotes and a fresh review link is emailed.
+ */
+export async function proposeFromReview(publicStore: DataStore, scope: ReviewScope, raw: unknown) {
+  const store = publicStore.elevated();
+  const rev = (await store.listRevisions(scope.order_id)).find((r) => r.revision_id === scope.revision_id);
+  if (!rev) throw new DomainError("NOT_FOUND", "Quotation not found.");
+  return customerProposeChanges(store, scope.order_id, rev.revision_number, raw);
 }
