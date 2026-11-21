@@ -54,11 +54,11 @@ export default async function Home() {
         )}
 
         <div className="mt-6 grid gap-3 sm:grid-cols-2">
-          <Link href="/track" className="group flex items-start gap-4 rounded-2xl border-2 border-primary bg-card p-5 hover:bg-accent-soft sm:col-span-2">
+          <Link href="/customer/login" className="group flex items-start gap-4 rounded-2xl border-2 border-primary bg-card p-5 hover:bg-accent-soft sm:col-span-2">
             <span className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground"><PackageSearch /></span>
             <span>
-              <span className="block text-lg font-bold">Customers: track your order <span className="text-xs font-normal text-muted-foreground">CU-01</span></span>
-              <span className="text-muted-foreground">Use the Order ID and 4-digit PIN on your slip. No account needed.</span>
+              <span className="block text-lg font-bold">Customers: log in to track your orders <span className="text-xs font-normal text-muted-foreground">CU-01</span></span>
+              <span className="text-muted-foreground">Log in with your email and password — or customize a piece and request a quote.</span>
             </span>
             <ArrowRight className="ml-auto self-center transition group-hover:translate-x-1" aria-hidden />
           </Link>

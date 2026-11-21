@@ -45,6 +45,8 @@ fi
 run "$DB" supabase/migrations/005a_customer_role_enums.sql
 run "$DB" supabase/migrations/005b_customer_email_auth.sql 2>/dev/null
 psql "$PGURL/$DB" -v ON_ERROR_STOP=1 -f supabase/tests/07_customer_email_auth.sql 2>&1 | grep -E "ok -|FAILED|ERROR|PASSED"
+run "$DB" supabase/migrations/006_remove_pin_customer_rls.sql
+psql "$PGURL/$DB" -v ON_ERROR_STOP=1 -f supabase/tests/09_remove_pin_customer_rls.sql 2>&1 | grep -E "ok -|FAILED|ERROR|PASSED"
 
 # 1d. Race: two sessions open the same review link at the same moment ---------
 RORDER=$(psql "$PGURL/$DB" -Atc "insert into public.orders (order_code, paper_slip_number, customer_name, customer_phone, delivery_address, municipality, item_name, quantity, dimensions, wood_type, color_finish, furniture_price, estimated_completion_date, furniture_category, design_variant, width_cm, height_cm, depth_cm, customer_email) values ('DR-0710','S-710','C','09000000710','Purok 1, Poblacion','Valencia City','Door',1,'-','Mahogany','Natural Varnish',9000,current_date,'Panel Door','Classic 2-Panel',80,210,4.5,'race@example.com') returning id" | head -1)
@@ -88,6 +90,10 @@ run "$DB2" supabase/migrations/005a_customer_role_enums.sql
 run "$DB2" supabase/migrations/005b_customer_email_auth.sql 2>/dev/null
 run "$DB2" supabase/migrations/005b_customer_email_auth.sql 2>/dev/null
 psql "$PGURL/$DB2" -v ON_ERROR_STOP=1 -f supabase/tests/08_migration_005_legacy.sql 2>&1 | grep -E "ok -|FAILED|ERROR|PASSED"
+run "$DB2" supabase/migrations/006_remove_pin_customer_rls.sql
+run "$DB2" supabase/migrations/006_remove_pin_customer_rls.sql
+HIST=$(psql "$PGURL/$DB2" -Atc "select count(*) filter (where pin_code_hash is not null) from public.orders")
+if [[ "$HIST" == "14" ]]; then echo "NOTICE:  ok - migration 006 on the live data keeps all 14 historical PIN hashes (data untouched)"; else echo "TEST FAILED: historical PIN hashes after 006: $HIST"; exit 1; fi
 
 # 3. Demo seed loads into the full schema; DB balances match the TS engine ---
 psql "$PGURL/postgres" -qc "create database $DB3" >/dev/null

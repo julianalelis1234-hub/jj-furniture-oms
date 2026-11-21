@@ -6,8 +6,7 @@ import { StageTracker, StatusBadge } from "@/components/status";
 import { formatDate } from "@/lib/domain/dates";
 import { formatPeso } from "@/lib/domain/finance";
 import { STATUS_CUSTOMER_COPY } from "@/lib/domain/status";
-import { getPublicStore } from "@/lib/server/context";
-import { getCustomer } from "@/lib/server/customer-auth";
+import { getCustomer, getCustomerStore } from "@/lib/server/customer-auth";
 import { customerDashboard } from "@/lib/services/customer-portal";
 import { CustomerLogoutButton } from "../logout-button";
 
@@ -18,7 +17,7 @@ export default async function CustomerOrdersPage({ searchParams }: { searchParam
   const customer = await getCustomer();
   if (!customer) redirect("/customer/login");
   const welcome = (await searchParams).welcome === "1";
-  const orders = await customerDashboard(await getPublicStore(), customer.id);
+  const orders = await customerDashboard(await getCustomerStore(), customer.id);
   return (
     <AppShell portal="customer" actor={null} headerExtra={<CustomerLogoutButton />}>
       <div className="mx-auto grid max-w-5xl gap-4">

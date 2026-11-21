@@ -20,7 +20,7 @@ import { afterQuoteIssued } from "./customer-portal";
 import { ensureRole } from "./guard";
 import { notifyCustomer } from "./notify";
 
-const trackUrl = () => `${process.env.NEXT_PUBLIC_SITE_URL ?? ""}/track`;
+const portalUrl = () => `${process.env.NEXT_PUBLIC_SITE_URL ?? ""}/customer/login`;
 
 export async function mustGetOrder(store: DataStore, id: string): Promise<Order> {
   const o = await store.getOrder(id);
@@ -135,7 +135,7 @@ export interface AcceptanceInput {
 export async function recordConfirmation(store: DataStore, actor: Actor | null, input: AcceptanceInput) {
   if (actor) ensureRole(actor, ["owner", "staff"], "record customer acceptance");
   if (actor && input.confirmation_method === "Customer Portal PIN")
-    throw new DomainError("FORBIDDEN", "Only the customer can accept through the PIN portal.");
+    throw new DomainError("FORBIDDEN", "Only the customer can accept through the customer portal.");
   if (!actor && input.confirmation_method !== "Customer Portal PIN") throw new DomainError("FORBIDDEN", "Not allowed.");
 
   const order = await mustGetOrder(store, input.order_id);
@@ -179,7 +179,7 @@ export async function recordConfirmation(store: DataStore, actor: Actor | null, 
     confirmed,
     `JJ Furniture: ${confirmed.order_code} (${confirmed.item_name}) is confirmed. Production starts after your 30% down payment of ${formatPeso(
       confirmed.standard_down_payment_due,
-    )} is verified. ${confirmed.customer_email ? "Follow it in your JJ Furniture account." : `Check the status at ${trackUrl()} with your Order ID.`}`,
+    )} is verified. ${confirmed.customer_email ? "Follow it in your JJ Furniture account." : `Questions? Call the shop with your Order ID ${confirmed.order_code}.`}`,
   );
   return confirmed;
 }
@@ -316,7 +316,7 @@ const CUSTOMER_MESSAGES: Partial<Record<OrderStatus, (o: Order) => string>> = {
     `JJ Furniture: ${o.order_code} passed quality inspection and is Ready for Delivery. Delivery date: ${formatDate(o.scheduled_delivery_date)}.`,
   "Out for Delivery": (o) =>
     `JJ Furniture: Your ${o.item_name} (${o.order_code}) is out for delivery today. Amount to prepare: ${formatPeso(o.collectible_on_delivery)}.`,
-  Delivered: (o) => `JJ Furniture: ${o.order_code} delivered. Salamat! Report any scratch or repair need at ${trackUrl()}.`,
+  Delivered: (o) => `JJ Furniture: ${o.order_code} delivered. Salamat! Report any scratch or repair need: log in at ${portalUrl()} or call the shop.`,
 };
 
 export async function transitionOrder(store: DataStore, actor: Actor, orderId: string, to: OrderStatus, opts: TransitionOptions = {}) {

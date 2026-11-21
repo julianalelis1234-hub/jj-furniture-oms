@@ -47,7 +47,7 @@ const PORTALS: { icon: ReactNode; code: string; title: string; text: string }[] 
   { icon: <Store />, code: "S-01", title: "Store Staff", text: "Encode paper slips, record confirmations & 30% payments, schedule drivers." },
   { icon: <Hammer />, code: "C-01", title: "Craftsmen", text: "Priority-sorted job cards with no prices. Start, Ready, Ask." },
   { icon: <Truck />, code: "D-01", title: "Delivery Driver", text: "Assigned trips, exact amount to collect, works offline." },
-  { icon: <PackageSearch />, code: "CU-01", title: "Customer", text: "Order ID for status; Order ID + PIN for details and confirmation." },
+  { icon: <PackageSearch />, code: "CU-01", title: "Customer", text: "Email + password login to track orders; customize & request a quote; one-time emailed review links." },
 ];
 
 export default function AboutPage() {
@@ -117,7 +117,7 @@ export default function AboutPage() {
 
         <div className="mt-8 flex flex-wrap gap-3">
           <LinkButton href="/" variant="default" size="xl">Start the demo <ArrowRight aria-hidden /></LinkButton>
-          <LinkButton href="/track" size="xl">Customer status lookup</LinkButton>
+          <LinkButton href="/customer/login" size="xl">Customer portal</LinkButton>
         </div>
         {demo && (
           <p className="mt-4 text-xs text-muted-foreground">

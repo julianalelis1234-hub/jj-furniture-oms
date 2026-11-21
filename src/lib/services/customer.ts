@@ -2,18 +2,11 @@ import type { DataStore } from "@/lib/data/store";
 import { DomainError } from "@/lib/domain/errors";
 import { effectiveDeliveryFee, furniturePaidFrom, feePaidFrom } from "@/lib/domain/finance";
 import { blockingItems, isQuoteExpired } from "@/lib/domain/gate";
-import { QUOTE_REVISION_TYPES, type CustomerTrack, type Order, type OrderStatus, type SpecRevision } from "@/lib/domain/types";
+import { QUOTE_REVISION_TYPES, type Order, type OrderStatus, type SpecRevision } from "@/lib/domain/types";
 import { recordConfirmation } from "./orders";
 import { nextDraftCode } from "./codes";
 import { describeDiff, dimensionsText, itemNameFor, normalizeSpec, type Dims, type FurnitureSpec, type SpecDiff } from "@/lib/domain/furniture";
 import { customerProposalSchema, customerRequestSchema } from "@/lib/domain/validation";
-
-/** Order-ID-only lookup — stage and the two dates, nothing else. */
-export async function trackOrder(publicStore: DataStore, code: string): Promise<CustomerTrack | null> {
-  const clean = code.trim().toUpperCase();
-  if (!/^(JJ-\d{4}-\d{4}|DR-\d{4})$/.test(clean)) return null;
-  return publicStore.customerTrack(clean);
-}
 
 /** Spec shown to the customer: one immutable revision. */
 export interface CustomerSpecView {
@@ -98,8 +91,10 @@ const toSpecView = (r: SpecRevision): CustomerSpecView => ({
 });
 
 /**
- * Full view for one order, only after PIN verification (the caller passes the
- * order id taken from a verified, signed customer token).
+ * Full customer-facing view for one order. Callers pass an order id whose
+ * ownership was already established: the signed-in customer's own order
+ * (customer_user_id = auth.uid(), checked by the server and by RLS) or the
+ * single order of a consumed review link.
  */
 export async function customerOrderView(publicStore: DataStore, orderId: string): Promise<CustomerOrderView> {
   const store = publicStore.elevated();

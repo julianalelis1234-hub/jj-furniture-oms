@@ -23,7 +23,7 @@ export default async function SlipPage({ params, searchParams }: PageProps<"/sta
   const profiles = await store.listProfiles();
   const h = await headers();
   const origin = process.env.NEXT_PUBLIC_SITE_URL || `${h.get("x-forwarded-proto") ?? "http"}://${h.get("host")}`;
-  const trackUrl = `${origin}/track?code=${encodeURIComponent(o.order_code)}`;
+  const portalUrl = `${origin}/customer/login`;
   const down = o.standard_down_payment_due;
 
   return (
@@ -54,17 +54,13 @@ export default async function SlipPage({ params, searchParams }: PageProps<"/sta
             <p className="mt-2 text-sm font-bold tracking-wide uppercase">Specification Confirmation Slip</p>
             <p className="text-xs tabular-nums">Specification revision {o.current_revision ?? "—"}{o.approved_revision_number ? ` · confirmed` : " · awaiting customer confirmation"}</p>
           </div>
-          <SlipQr value={trackUrl} />
+          <SlipQr value={portalUrl} />
         </header>
 
         <section className="grid grid-cols-3 gap-2 border-b border-black py-3 text-center">
           <div><p className="text-[0.65rem] uppercase">Order ID</p><p className="font-mono text-base font-black">{o.order_code}</p></div>
           <div><p className="text-[0.65rem] uppercase">Paper Slip #</p><p className="font-mono text-base font-black">{o.paper_slip_number}</p></div>
-          {o.pin_code_display ? (
-            <div><p className="text-[0.65rem] uppercase">Customer PIN</p><p className="font-mono text-xl font-black tracking-[0.3em]">{o.pin_code_display}</p></div>
-          ) : (
-            <div><p className="text-[0.65rem] uppercase">Customer updates</p><p className="text-xs font-bold break-all" data-testid="slip-contact">{o.customer_email ?? "Walk-in · paper slip only"}</p></div>
-          )}
+          <div><p className="text-[0.65rem] uppercase">Customer updates</p><p className="text-xs font-bold break-all" data-testid="slip-contact">{o.customer_email ?? (o.has_no_email ? "Walk-in · paper slip only" : "Contact the shop")}</p></div>
         </section>
 
         <section className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 border-b border-black py-3 text-sm">
@@ -94,12 +90,10 @@ export default async function SlipPage({ params, searchParams }: PageProps<"/sta
 
         <section className="py-3 text-xs">
           <p>
-            Track your order: scan the QR code or visit <b>{origin.replace(/^https?:\/\//, "")}/track</b> and enter your Order ID.
-            {o.pin_code_display
-              ? "Use your PIN to see the payment summary and confirm the specifications. Keep your PIN private."
-              : o.customer_email
-                ? "Your quotation review link is sent by email. After you accept, set your password and log in at /customer/login to follow all your orders."
-                : "Walk-in order: ask the shop for updates; status by Order ID is always available online."}
+            Your Order ID <b>{o.order_code}</b> is your reference when you contact the shop.{" "}
+            {o.customer_email
+              ? <>Your quotation review link is sent by email. After you accept, create your password and log in at <b>{origin.replace(/^https?:\/\//, "")}/customer/login</b> (or scan the QR code) to follow all your orders.</>
+              : "Walk-in order: the shop sends you SMS updates; call or visit the shop with your Order ID for anything else."}
           </p>
           <div className="mt-6 grid grid-cols-2 gap-6">
             <div className="border-t border-black pt-1 text-center">Customer signature (specs &amp; price confirmed)</div>

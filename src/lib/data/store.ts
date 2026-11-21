@@ -3,14 +3,12 @@ import type {
   ConsumeReviewResult,
   CustomerAccount,
   ConfirmationMethod,
-  CustomerTrack,
   DeliveryAssignment,
   NotificationLog,
   Order,
   OrderConfirmation,
   OrderException,
   Payment,
-  PinResult,
   Profile,
   RevisionType,
   SpecRevision,
@@ -145,9 +143,6 @@ export interface DataStore {
   listNotifications(orderId?: string): Promise<NotificationLog[]>;
   insertNotification(row: Insert<NotificationLog>): Promise<NotificationLog>;
   updateNotification(id: string, patch: Partial<NotificationLog>): Promise<NotificationLog>;
-
-  customerTrack(orderCode: string): Promise<CustomerTrack | null>;
-  customerVerifyPin(orderCode: string, pin: string, clientKey: string): Promise<PinResult>;
 
   // ---------------------------------------------- customer email auth (005)
   /** issue_quote_review_token(): stores only the hash; invalidates older open links for the order. */

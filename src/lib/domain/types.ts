@@ -51,6 +51,16 @@ export type PaymentExceptionType = (typeof PAYMENT_EXCEPTION_TYPES)[number];
 
 export const CONFIRMATION_METHODS = ["Signed Paper Slip", "Messenger Reply", "Customer Portal PIN"] as const;
 export type ConfirmationMethod = (typeof CONFIRMATION_METHODS)[number];
+/**
+ * "Customer Portal PIN" is the stored enum label (migration 001; kept so past
+ * acceptances stay intact) for any acceptance the CUSTOMER made online. Since
+ * migration 006 that is always the emailed review link, never a PIN.
+ */
+export const CONFIRMATION_METHOD_LABEL: Record<ConfirmationMethod, string> = {
+  "Signed Paper Slip": "Signed paper slip",
+  "Messenger Reply": "Messenger reply",
+  "Customer Portal PIN": "Customer portal (online)",
+};
 
 export const PAYMENT_TYPES = [
   "Down Payment (30%)",
@@ -316,23 +326,6 @@ export interface NotificationLog {
   message_body: string;
   delivery_status: NotificationStatus;
   created_at: string;
-}
-
-/** Public projection for Order-ID-only lookups (no PII, no money). */
-export interface CustomerTrack {
-  order_code: string;
-  item_name: string;
-  status: OrderStatus;
-  estimated_completion_date: string | null;
-  scheduled_delivery_date: string | null;
-  updated_at: string;
-}
-
-export interface PinResult {
-  ok: boolean;
-  order_id?: string;
-  locked?: boolean;
-  remaining_attempts?: number;
 }
 
 export interface Actor {

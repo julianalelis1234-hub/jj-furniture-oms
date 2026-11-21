@@ -40,7 +40,7 @@ export function DemoBar({ current }: { current: Role | "customer" | null }) {
               disabled={pending}
               onClick={() =>
                 start(async () => {
-                  if (t.role === "customer") router.push("/track");
+                  if (t.role === "customer") router.push("/customer/login");
                   else await switchDemoRole(t.role);
                 })
               }

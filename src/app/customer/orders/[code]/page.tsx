@@ -9,10 +9,10 @@ import { DomainError } from "@/lib/domain/errors";
 import { formatDate, formatDateTime } from "@/lib/domain/dates";
 import { formatPeso } from "@/lib/domain/finance";
 import { STATUS_CUSTOMER_COPY } from "@/lib/domain/status";
-import { getPublicStore } from "@/lib/server/context";
-import { getCustomer } from "@/lib/server/customer-auth";
+import { getCustomer, getCustomerStore } from "@/lib/server/customer-auth";
 import { customerOwnedOrder } from "@/lib/services/customer-portal";
 import { CustomerLogoutButton } from "../../logout-button";
+import { PostConfirmationRequest } from "./order-request";
 
 export const metadata = { title: "My order" };
 
@@ -22,7 +22,7 @@ export default async function CustomerOrderDetail({ params }: { params: Promise<
   const { code } = await params;
   let data;
   try {
-    data = await customerOwnedOrder(await getPublicStore(), customer.id, decodeURIComponent(code));
+    data = await customerOwnedOrder(await getCustomerStore(), customer.id, decodeURIComponent(code));
   } catch (e) {
     if (e instanceof DomainError && e.code === "NOT_FOUND") notFound();
     throw e;
@@ -70,6 +70,21 @@ export default async function CustomerOrderDetail({ params }: { params: Promise<
           </Card>
           {spec && <FurniturePreviewSlot spec={spec.spec} legacyDimensions={spec.legacy_dimensions_text} />}
         </div>
+        {v.spec_state === "locked" && (
+          <Card data-testid="post-confirmation">
+            <CardHeader><CardTitle>Need a change or a repair?</CardTitle></CardHeader>
+            <CardContent className="grid gap-3 text-sm">
+              <PostConfirmationRequest orderCode={v.order_code} status={v.status} />
+              {v.open_repairs.length > 0 && (
+                <ul className="grid gap-1" data-testid="open-requests">
+                  {v.open_repairs.map((r, i) => (
+                    <li key={i} className="rounded-lg border p-2"><b>{r.status}</b> · {r.description} <span className="text-muted-foreground">· {formatDateTime(r.created_at)}</span></li>
+                  ))}
+                </ul>
+              )}
+            </CardContent>
+          </Card>
+        )}
         <Card data-testid="payment-summary">
           <CardHeader><CardTitle>Payment summary</CardTitle></CardHeader>
           <CardContent>

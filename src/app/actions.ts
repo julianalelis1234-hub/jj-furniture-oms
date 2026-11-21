@@ -1,7 +1,7 @@
 "use server";
 
 import { refresh } from "next/cache";
-import { cookies, headers } from "next/headers";
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { ZodError } from "zod";
 import { isDemoMode } from "@/lib/config";
@@ -10,16 +10,13 @@ import { DEMO_PERSONA, SEED_PROFILES } from "@/lib/data/seed";
 import { DomainError } from "@/lib/domain/errors";
 import type { Actor, ConfirmationMethod, OrderStatus, PaymentExceptionType, PriorityLabel, Role } from "@/lib/domain/types";
 import { ROLES } from "@/lib/domain/types";
-import { firstErrors, pinSchema } from "@/lib/domain/validation";
+import { firstErrors } from "@/lib/domain/validation";
 import { authorize, DEMO_COOKIE, getPublicStore, getStore, PORTAL_FOR, setDemoSession } from "@/lib/server/context";
 import { resetMemoryStore } from "@/lib/server/memory";
 import { createUserClient } from "@/lib/server/supabase";
-import { signToken } from "@/lib/server/token";
-import { isHttpsRequest } from "@/lib/server/request";
-import { CUSTOMER_COOKIE, getVerifiedCustomerOrderId } from "@/lib/server/customer-session";
 import { issueReviewLink, provisionCustomerAccount } from "@/lib/services/customer-portal";
 import { getCustomerAuth } from "@/lib/server/customer-auth";
-import { createCustomerRequest, customerAcceptQuote, customerProposeChanges, customerRequestRepair, trackOrder } from "@/lib/services/customer";
+import { createCustomerRequest } from "@/lib/services/customer";
 import { scheduleDelivery } from "@/lib/services/deliveries";
 import { decideException, requestException, reviewCustomerProposal } from "@/lib/services/exceptions";
 import { retryNotification, SMS_SIMULATED_NOTE, smsMode } from "@/lib/services/notify";
@@ -226,84 +223,18 @@ export async function retrySmsAction(id: string, phone?: string) {
 }
 
 // -------------------------------------------------------------- customer --
-async function clientKey() {
-  const h = await headers();
-  return (h.get("x-forwarded-for")?.split(",")[0] || h.get("x-real-ip") || "local").trim();
-}
-
-export async function customerLookupAction(_: unknown, fd: FormData) {
-  const code = str(fd, "order_code").trim().toUpperCase();
-  const pin = str(fd, "pin").trim();
-  try {
-    const store = await getPublicStore();
-    if (!pin) {
-      const track = await trackOrder(store, code);
-      if (!track) return { ok: false as const, message: "No order found with that Order ID. Check your receipt (e.g. JJ-2026-0145)." };
-      return { ok: true as const, data: { mode: "track" as const, track } };
-    }
-    const parsed = pinSchema.safeParse({ order_code: code, pin });
-    if (!parsed.success) return { ok: false as const, message: parsed.error.issues[0].message };
-    const r = await store.customerVerifyPin(parsed.data.order_code, parsed.data.pin, await clientKey());
-    if (r.locked) return { ok: false as const, message: "Too many wrong PINs. Please wait 15 minutes or call the shop." };
-    if (!r.ok || !r.order_id)
-      return { ok: false as const, message: `Order ID and PIN do not match. ${r.remaining_attempts ?? 0} tries left.` };
-    (await cookies()).set(CUSTOMER_COOKIE, signToken({ oid: r.order_id }, 60 * 60), {
-      httpOnly: true, sameSite: "lax", secure: await isHttpsRequest(), path: "/track", maxAge: 60 * 60,
-    });
-    redirect("/track/order");
-  } catch (e) {
-    if (e instanceof DomainError) return { ok: false as const, message: e.message };
-    throw e; // includes the redirect signal
-  }
-}
-
-/** Scenario 1: [Accept Quote & Confirm Specifications] for the exact revision + quotation shown. */
-export async function customerAcceptAction(input: {
-  revision_id: string;
-  expected_revision_number: number;
-  accepted_furniture_price: number;
-  accepted_delivery_fee: number;
-  client_idempotency_key: string;
-  accept_specification: boolean;
-  accept_quotation: boolean;
-}) {
-  const oid = await getVerifiedCustomerOrderId();
-  if (!oid) return { ok: false as const, message: "Your session expired. Enter your Order ID and PIN again." };
-  if (!Number.isInteger(input.expected_revision_number)) return { ok: false as const, message: "Reload the page and try again." };
-  return run(null, async () => { await customerAcceptQuote(await getPublicStore(), oid, input); },
-    "Thank you! You accepted the specifications and the quotation. Production starts once your 30% down payment is verified.");
-}
+// Customer access is email-based only: /customer/login (account), the single-use
+// /customer/review?token= link (one quotation), and this anonymous quote request.
+// The retired Order ID + PIN lookup has no action any more (migration 006).
 
 /**
- * Option 2: Design & Request Custom Furniture — creates a Quote Requested order.
- * No PIN and no session: the email is unverified until the customer opens the
- * review link that comes with the official quotation.
+ * Option 2: Customize & Request a Quote — creates a Quote Requested order.
+ * No session: the email is unverified until the customer opens the review
+ * link that comes with the official quotation.
  */
 export async function customerRequestAction(_: unknown, fd: FormData): Promise<ActionResult<{ order_code: string; email: string }>> {
   return run(null, async () => {
     const { order } = await createCustomerRequest(await getPublicStore(), Object.fromEntries(fd));
     return { order_code: order.order_code, email: order.customer_email ?? "" };
   }, "Request sent. Your quotation will be emailed to you.");
-}
-
-/** Scenario 2: the customer proposes changes (saved for the shop's review; nothing is unlocked). */
-export async function customerProposeAction(seenRevision: number, fd: FormData) {
-  const oid = await getVerifiedCustomerOrderId();
-  if (!oid) return { ok: false as const, message: "Your session expired. Enter your Order ID and PIN again." };
-  return run(null, async () => {
-    const r = await customerProposeChanges(await getPublicStore(), oid, seenRevision, Object.fromEntries(fd));
-    return { revision_number: r.revision_number };
-  }, "Your changes were sent to JJ Furniture for review. Production stays on hold until you confirm the revised quote.");
-}
-
-export async function customerRepairAction(description: string, kind: "change" | "repair" = "repair") {
-  const oid = await getVerifiedCustomerOrderId();
-  if (!oid) return { ok: false as const, message: "Your session expired. Enter your Order ID and PIN again." };
-  return run(null, async () => { await customerRequestRepair(await getPublicStore(), oid, description, kind); },
-    kind === "change" ? "Change request sent. The shop will review it and contact you." : "Request sent. The shop will contact you to schedule the touch-up.");
-}
-
-export async function customerSignOut() {
-  (await cookies()).delete({ name: CUSTOMER_COOKIE, path: "/track" });
-  redirect("/track");
 }
