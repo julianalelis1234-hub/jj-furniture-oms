@@ -9,6 +9,8 @@ import { QUOTE_REVISION_TYPES } from "@/lib/domain/types";
 import { currentActorRole } from "@/lib/realtime/actor-context";
 import { classifyOrderChange, classifyPaymentChange, type LiveEvent, type LiveOp, type LiveSource } from "@/lib/realtime/events";
 import type {
+  NewOutboxRow,
+  OutboxRow,
   ConsumeReviewResult,
   CustomerAccount,
   QuoteReviewToken,
@@ -54,6 +56,9 @@ export interface MemoryTables {
   demo_mailbox: { id: string; to: string; subject: string; text: string; order_id: string | null; created_at: string }[];
   /** mirrors public.order_live_events (migration 007) */
   live_events: LiveEvent[];
+  /** mirrors public.notification_outbox / rate_limit_hits (migration 008) */
+  notification_outbox: OutboxRow[];
+  rate_limit_hits: { bucket: string; at: number }[];
 }
 
 export function emptyTables(): MemoryTables {
@@ -72,6 +77,8 @@ export function emptyTables(): MemoryTables {
     password_tokens: [],
     demo_mailbox: [],
     live_events: [],
+    notification_outbox: [],
+    rate_limit_hits: [],
   };
 }
 
@@ -129,6 +136,128 @@ export class MemoryStore implements DataStore {
       prev_status: null, transition: null, payment_verified: null, order_updated_at: o?.updated_at ?? null, ...extra,
     });
   }
+  // ------------------------------------------ email outbox (mirrors migration 008)
+  private get outbox() {
+    return (this.t.notification_outbox ??= []);
+  }
+  async enqueueOutbox(row: NewOutboxRow) {
+    const email = row.recipient_email;
+    if (email !== email.trim().toLowerCase() || !EMAIL_RE.test(email)) throw new DomainError("VALIDATION", "Recipient email must be normalized.");
+    if (!row.idempotency_key || row.idempotency_key.length > 256) throw new DomainError("VALIDATION", "Invalid idempotency key.");
+    if (row.encrypted_payload !== null) {
+      let env: Record<string, unknown> | null = null;
+      try { env = JSON.parse(row.encrypted_payload); } catch { /* rejected below */ }
+      if (!env || typeof env !== "object" || !["v", "iv", "tag", "ct"].every((k) => k in env!))
+        throw new DomainError("VALIDATION", "Outbox payloads must be encrypted envelopes.");
+    }
+    const existing = this.outbox.find((o) => o.idempotency_key === row.idempotency_key);
+    if (existing) return { row: clone(existing), duplicate: true };
+    const ts = now();
+    const r: OutboxRow = {
+      id: randomUUID(), kind: row.kind, order_id: row.order_id, recipient_email: email, customer_user_id: row.customer_user_id,
+      review_token_id: row.review_token_id, template_data: row.template_data, idempotency_key: row.idempotency_key,
+      delivery_status: "pending", encrypted_payload: row.encrypted_payload, processing_lease_token: null, processing_lease_until: null,
+      next_retry_at: ts, attempt_count: 0, max_attempts: row.max_attempts ?? 5, is_permanent_failure: false, provider_message_id: null,
+      last_sanitized_error: null, requested_by_user_id: row.requested_by_user_id, created_at: ts, updated_at: ts, sent_at: null,
+    };
+    this.outbox.push(r);
+    return { row: clone(r), duplicate: false };
+  }
+  async claimOutbox(limit: number, leaseSeconds: number, onlyId?: string) {
+    const t = Date.now();
+    const expired = (o: OutboxRow) => !!o.processing_lease_until && Date.parse(o.processing_lease_until) < t;
+    for (const o of this.outbox)
+      if (o.delivery_status === "processing" && expired(o) && o.attempt_count >= o.max_attempts)
+        Object.assign(o, { delivery_status: "failed", is_permanent_failure: true, encrypted_payload: null, processing_lease_token: null,
+          processing_lease_until: null, last_sanitized_error: o.last_sanitized_error ?? "worker lease expired on the final attempt", updated_at: now() });
+    const due = this.outbox
+      .filter((o) => (o.delivery_status === "pending" || o.delivery_status === "failed" || (o.delivery_status === "processing" && expired(o)))
+        && !o.is_permanent_failure && o.attempt_count < o.max_attempts && Date.parse(o.next_retry_at) <= t
+        && (!o.processing_lease_until || expired(o)) && (!onlyId || o.id === onlyId))
+      .sort((a, b) => a.next_retry_at.localeCompare(b.next_retry_at) || a.created_at.localeCompare(b.created_at))
+      .slice(0, Math.max(1, Math.min(limit, 100)));
+    for (const o of due)
+      Object.assign(o, { delivery_status: "processing", processing_lease_token: randomUUID(),
+        processing_lease_until: new Date(t + leaseSeconds * 1000).toISOString(), attempt_count: o.attempt_count + 1, updated_at: now() });
+    return clone(due);
+  }
+  private leased(id: string, lease: string) {
+    const o = this.outbox.find((x) => x.id === id);
+    return o && o.processing_lease_token === lease && o.delivery_status === "processing" ? o : null;
+  }
+  async updateOutboxPayload(id: string, lease: string, encryptedPayload: string) {
+    const o = this.leased(id, lease);
+    if (!o) return false;
+    Object.assign(o, { encrypted_payload: encryptedPayload, updated_at: now() });
+    return true;
+  }
+  async completeOutbox(id: string, lease: string, providerMessageId: string) {
+    const o = this.leased(id, lease);
+    if (!o) return false;
+    Object.assign(o, { delivery_status: "sent", provider_message_id: providerMessageId.slice(0, 200), sent_at: now(), encrypted_payload: null,
+      last_sanitized_error: null, processing_lease_token: null, processing_lease_until: null, updated_at: now() });
+    return true;
+  }
+  async failOutbox(id: string, lease: string, error: string, permanent: boolean, retrySeconds: number) {
+    const o = this.leased(id, lease);
+    if (!o) return false;
+    const perm = permanent || o.attempt_count >= o.max_attempts;
+    Object.assign(o, { delivery_status: "failed", is_permanent_failure: perm, encrypted_payload: perm ? null : o.encrypted_payload,
+      last_sanitized_error: error.slice(0, 500), next_retry_at: new Date(Date.now() + Math.max(1, Math.min(retrySeconds, 86400)) * 1000).toISOString(),
+      processing_lease_token: null, processing_lease_until: null, updated_at: now() });
+    return true;
+  }
+  async releaseOutbox(id: string, lease: string, retrySeconds: number) {
+    const o = this.leased(id, lease);
+    if (!o) return false;
+    Object.assign(o, { delivery_status: "pending", attempt_count: Math.max(0, o.attempt_count - 1),
+      next_retry_at: new Date(Date.now() + Math.max(1, Math.min(retrySeconds, 86400)) * 1000).toISOString(),
+      processing_lease_token: null, processing_lease_until: null, updated_at: now() });
+    return true;
+  }
+  async scrubOutbox() {
+    let n = 0;
+    for (const o of this.outbox) {
+      if (!o.encrypted_payload || o.delivery_status === "processing") continue;
+      const tok = o.review_token_id ? this.t.quote_review_tokens.find((x) => x.token_id === o.review_token_id) : null;
+      const deadToken = o.kind === "quote_review_ready" && (!tok || !!tok.consumed_at || !!tok.invalidated_at || Date.parse(tok.expires_at) <= Date.now());
+      if (o.delivery_status === "sent" || o.is_permanent_failure || deadToken) {
+        Object.assign(o, { encrypted_payload: null, is_permanent_failure: o.delivery_status !== "sent" || o.is_permanent_failure,
+          delivery_status: o.delivery_status === "sent" ? "sent" : "failed",
+          last_sanitized_error: o.delivery_status === "sent" ? o.last_sanitized_error : (o.last_sanitized_error ?? "review link no longer valid"), updated_at: now() });
+        n++;
+      }
+    }
+    return n;
+  }
+  /** mirrors trigger quote_review_tokens_scrub_outbox */
+  private scrubForToken(tokenId: string) {
+    for (const o of this.outbox)
+      if (o.review_token_id === tokenId && o.encrypted_payload && o.delivery_status !== "sent" && o.delivery_status !== "processing")
+        Object.assign(o, { encrypted_payload: null, delivery_status: "failed", is_permanent_failure: true,
+          last_sanitized_error: "review link no longer valid", processing_lease_token: null, processing_lease_until: null, updated_at: now() });
+  }
+  async listOutbox(filter?: { orderId?: string }) {
+    return clone(this.outbox.filter((o) => !filter?.orderId || o.order_id === filter.orderId));
+  }
+  async getOutbox(id: string) {
+    return clone(this.outbox.find((o) => o.id === id) ?? null);
+  }
+  async reviewTokenState(tokenId: string) {
+    const t = this.t.quote_review_tokens.find((x) => x.token_id === tokenId);
+    if (!t) return null;
+    return { usable: !t.consumed_at && !t.invalidated_at && Date.parse(t.expires_at) > Date.now(), token_hash: t.token_hash };
+  }
+  async hitRateLimit(bucket: string, windowSeconds: number, max: number) {
+    const hits = (this.t.rate_limit_hits ??= []);
+    const since = Date.now() - windowSeconds * 1000;
+    for (let i = hits.length - 1; i >= 0; i--) if (hits[i].bucket === bucket && hits[i].at < since) hits.splice(i, 1);
+    for (let i = hits.length - 1; i >= 0; i--) if (hits[i].at < Date.now() - 86_400_000) hits.splice(i, 1);
+    if (hits.filter((h) => h.bucket === bucket).length >= max) return false;
+    hits.push({ bucket, at: Date.now() });
+    return true;
+  }
+
   async listLiveEvents(afterId: number, limit: number) {
     return clone((this.t.live_events ?? []).filter((e) => e.id > afterId).slice(0, limit));
   }
@@ -636,7 +765,7 @@ export class MemoryStore implements DataStore {
       throw new DomainError("STALE_REVISION", "A review link can only be issued for the current shop quotation.");
     const ts = now();
     for (const t of this.t.quote_review_tokens)
-      if (t.order_id === o.id && !t.consumed_at && !t.invalidated_at) t.invalidated_at = ts;
+      if (t.order_id === o.id && !t.consumed_at && !t.invalidated_at) { t.invalidated_at = ts; this.scrubForToken(t.token_id); }
     const hours = Math.min(336, Math.max(1, Math.round(input.ttl_hours)));
     const row: QuoteReviewToken = {
       token_id: randomUUID(), order_id: o.id, revision_id: rev.revision_id, token_hash: input.token_hash.toLowerCase(),
@@ -656,9 +785,10 @@ export class MemoryStore implements DataStore {
     if (Date.now() > Date.parse(t.expires_at)) return { ok: false, reason: "expired" };
     const o = this.find(this.t.orders, t.order_id, "Order");
     const rev = this.t.order_specification_revisions.find((r) => r.revision_id === t.revision_id)!;
-    if (o.customer_email !== t.sent_to_email) { t.invalidated_at = now(); return { ok: false, reason: "email_changed" }; }
-    if (rev.revision_number !== o.current_revision) { t.invalidated_at = now(); return { ok: false, reason: "replaced" }; }
+    if (o.customer_email !== t.sent_to_email) { t.invalidated_at = now(); this.scrubForToken(t.token_id); return { ok: false, reason: "email_changed" }; }
+    if (rev.revision_number !== o.current_revision) { t.invalidated_at = now(); this.scrubForToken(t.token_id); return { ok: false, reason: "replaced" }; }
     t.consumed_at = now();
+    this.scrubForToken(t.token_id);
     o.email_verified_at ??= now();
     o.version += 1;
     o.updated_at = now();

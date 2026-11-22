@@ -197,7 +197,7 @@ try {
   const setupHref = await (async () => {
     await page.goto("/demo/inbox");
     return page.getByTestId("inbox-item").filter({ hasText: "rosalinda.abellana@example.com" }).first()
-      .locator('a[href^="/customer/setup-password"]').first().getAttribute("href");
+      .locator('a[href^="/customer/set-password"]').first().getAttribute("href");
   })();
   await page.goto(setupHref);
   await page.fill("#password", "Narra-Dining-2026");

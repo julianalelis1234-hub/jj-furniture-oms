@@ -1,6 +1,7 @@
 "use client";
 
-import { FlaskConical, KeyRound, Loader2, LogIn, Mail } from "lucide-react";
+import { Eye, EyeOff, FlaskConical, KeyRound, Loader2, LogIn, Mail } from "lucide-react";
+import { cn } from "@/lib/utils";
 import Link from "next/link";
 import { useActionState, useState, useTransition } from "react";
 import { customerForgotAction, customerLoginAction, customerSetPasswordAction, demoCustomerLoginAction } from "@/app/customer/actions";
@@ -55,18 +56,56 @@ export function ForgotForm() {
   );
 }
 
+/** 0–4 estimate for feedback only; the server and Supabase Auth make the real decision. */
+export function passwordStrength(pw: string): { score: 0 | 1 | 2 | 3 | 4; label: string } {
+  if (!pw) return { score: 0, label: "Enter a password" };
+  let score = 0;
+  if (pw.length >= 8) score++;
+  if (pw.length >= 12) score++;
+  if (/[a-z]/.test(pw) && /[A-Z]/.test(pw)) score++;
+  if (/\d/.test(pw) && /[^A-Za-z0-9]/.test(pw)) score++;
+  if (pw.length < 8 || /^(.)\1+$/.test(pw)) score = Math.min(score, 1);
+  const s = score as 0 | 1 | 2 | 3 | 4;
+  return { score: s, label: ["Too short", "Weak", "Fair", "Good", "Strong"][s] };
+}
+
 export function SetPasswordForm({ token }: { token: string | null }) {
   const [state, action, pending] = useActionState<R, FormData>(customerSetPasswordAction.bind(null, token), null);
+  const [pw, setPw] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [show, setShow] = useState(false);
+  const strength = passwordStrength(pw);
+  const longEnough = pw.length >= 8;
+  const matches = pw.length > 0 && pw === confirm;
+  const canSubmit = longEnough && matches && !pending;
   return (
     <form action={action} className="grid gap-3" noValidate>
-      <Field label="New password" htmlFor="password" required hint="At least 10 characters. Avoid your name or email.">
-        <TextInput id="password" name="password" type="password" autoComplete="new-password" minLength={10} />
+      <Field label="New password" htmlFor="password" required hint="At least 8 characters. Avoid your name or email.">
+        <div className="relative">
+          <TextInput id="password" name="password" type={show ? "text" : "password"} autoComplete="new-password" minLength={8} maxLength={128}
+            value={pw} onChange={(e) => setPw(e.target.value)} aria-describedby="pw-strength" className="pr-12" />
+          <button type="button" onClick={() => setShow((v) => !v)} aria-pressed={show} aria-label={show ? "Hide passwords" : "Show passwords"}
+            className="absolute inset-y-0 right-0 flex w-11 items-center justify-center rounded-r-xl text-primary hover:bg-accent-soft" data-testid="toggle-password">
+            {show ? <EyeOff className="size-5" aria-hidden /> : <Eye className="size-5" aria-hidden />}
+          </button>
+        </div>
       </Field>
-      <Field label="Type it again" htmlFor="confirm" required error={state?.ok === false ? state.fieldErrors?.confirm : undefined}>
-        <TextInput id="confirm" name="confirm" type="password" autoComplete="new-password" />
+      <div id="pw-strength" aria-live="polite" className="grid gap-1" data-testid="password-strength" data-score={strength.score}>
+        <div className="grid grid-cols-4 gap-1" aria-hidden>
+          {[1, 2, 3, 4].map((i) => (
+            <span key={i} className={cn("h-1.5 rounded-full", strength.score >= i ? (strength.score >= 3 ? "bg-success" : strength.score === 2 ? "bg-live" : "bg-destructive") : "bg-stage-track")} />
+          ))}
+        </div>
+        <p className="text-xs text-muted-foreground">Strength: <b className="text-foreground">{strength.label}</b>{!longEnough && pw ? ` · ${8 - pw.length} more character${8 - pw.length === 1 ? "" : "s"} needed` : ""}</p>
+      </div>
+      <Field label="Type it again" htmlFor="confirm" required error={state?.ok === false ? state.fieldErrors?.confirm : confirm && !matches ? "The two passwords do not match yet." : undefined}>
+        <TextInput id="confirm" name="confirm" type={show ? "text" : "password"} autoComplete="new-password" maxLength={128} value={confirm} onChange={(e) => setConfirm(e.target.value)} />
       </Field>
       {state && !state.ok && <p role="alert" className="text-sm font-medium text-destructive" data-testid="setup-error">{state.message}</p>}
-      <Button type="submit" size="xl" disabled={pending}>{pending ? <Loader2 className="animate-spin" aria-hidden /> : <KeyRound aria-hidden />} Save password</Button>
+      <Button type="submit" size="xl" className="w-full rounded-full" disabled={!canSubmit} aria-disabled={!canSubmit}>
+        {pending ? <Loader2 className="animate-spin" aria-hidden /> : <KeyRound aria-hidden />} Save password
+      </Button>
+      {!canSubmit && !pending && <p className="text-center text-xs text-muted-foreground">The button turns on when both passwords match and have at least 8 characters.</p>}
     </form>
   );
 }

@@ -1,15 +1,17 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { after } from "next/server";
+import { requestSetupLink, SETUP_LINK_GENERIC } from "@/lib/email/requests";
+import { clientIp } from "@/lib/server/request-meta";
 import { ZodError } from "zod";
 import type { ActionResult } from "@/lib/action-result";
 import { isDemoMode } from "@/lib/config";
 import { DEMO_CUSTOMER_LOGIN } from "@/lib/data/seed";
 import { DomainError } from "@/lib/domain/errors";
-import { customerLoginSchema, emailField, firstErrors } from "@/lib/domain/validation";
+import { customerLoginSchema, firstErrors } from "@/lib/domain/validation";
 import { getPublicStore } from "@/lib/server/context";
 import {
-  customerRequestReset,
   customerSetPassword,
   customerSignIn,
   customerSignOut,
@@ -113,15 +115,14 @@ export async function customerOrderRequestAction(orderCode: string, kind: "chang
   return { ok: true, message: kind === "change" ? "Change request sent. The shop will review it and contact you." : "Request sent. The shop will contact you to schedule the touch-up." };
 }
 
+/** "Forgot Password?" — same service, limits and generic answer as POST /api/auth/request-setup-link. */
 export async function customerForgotAction(_: unknown, fd: FormData): Promise<ActionResult> {
-  const parsed = emailField().safeParse(fd.get("email") ?? "");
-  if (!parsed.success) return { ok: false, message: "Enter a valid email address.", fieldErrors: { email: "Enter a valid email address." } };
   try {
-    await customerRequestReset(parsed.data);
-  } catch (e) {
-    console.warn("[reset] ", e instanceof Error ? e.message : e); // same answer either way (no account enumeration)
+    const r = await requestSetupLink(await getPublicStore(), await getCustomerAuth(), { email: fd.get("email"), clientIp: await clientIp() }, (task) => after(task));
+    return { ok: r.status === 200, message: r.message };
+  } catch {
+    return { ok: true, message: SETUP_LINK_GENERIC };
   }
-  return { ok: true, message: "If that email has a JJ Furniture account, a reset link is on its way. It works once and expires in 24 hours." };
 }
 
 export async function customerSetPasswordAction(token: string | null, _: unknown, fd: FormData): Promise<ActionResult> {

@@ -3,6 +3,8 @@ import type { PostgrestError, SupabaseClient } from "@supabase/supabase-js";
 import { DomainError, fromPostgresMessage } from "@/lib/domain/errors";
 import { LIVE_EVENT_COLUMNS, type LiveEvent } from "@/lib/realtime/events";
 import type {
+  NewOutboxRow,
+  OutboxRow,
   ConsumeReviewResult,
   CustomerAccount,
   DeliveryAssignment,
@@ -106,6 +108,70 @@ export class SupabaseStore implements DataStore {
     if (error) fail(error);
     return data ? normOrder(data as Order) : null;
   }
+  // ------------------------------------------------- email outbox (008)
+  // Service role only (RLS on, no policies). Call these on elevated().
+  async enqueueOutbox(row: NewOutboxRow) {
+    const { data, error } = await this.db.from("notification_outbox").insert(row).select("*").single();
+    if (!error) return { row: data as OutboxRow, duplicate: false };
+    if (error.code === "23505") {
+      const { data: existing, error: e2 } = await this.db.from("notification_outbox").select("*").eq("idempotency_key", row.idempotency_key).single();
+      if (e2) fail(e2);
+      return { row: existing as OutboxRow, duplicate: true };
+    }
+    fail(error);
+  }
+  async claimOutbox(limit: number, leaseSeconds: number, onlyId?: string) {
+    const { data, error } = await this.db.rpc("claim_notification_outbox", { p_limit: limit, p_lease_seconds: leaseSeconds, p_only_id: onlyId ?? null });
+    if (error) fail(error);
+    return (data ?? []) as OutboxRow[];
+  }
+  private async leaseRpc(fn: string, args: Record<string, unknown>) {
+    const { data, error } = await this.db.rpc(fn, args);
+    if (error) fail(error);
+    return data === true;
+  }
+  updateOutboxPayload(id: string, lease: string, encryptedPayload: string) {
+    return this.leaseRpc("update_notification_outbox_payload", { p_id: id, p_lease: lease, p_encrypted_payload: encryptedPayload });
+  }
+  completeOutbox(id: string, lease: string, providerMessageId: string) {
+    return this.leaseRpc("complete_notification_outbox", { p_id: id, p_lease: lease, p_provider_message_id: providerMessageId });
+  }
+  failOutbox(id: string, lease: string, error: string, permanent: boolean, retrySeconds: number) {
+    return this.leaseRpc("fail_notification_outbox", { p_id: id, p_lease: lease, p_error: error, p_permanent: permanent, p_retry_seconds: Math.round(retrySeconds) });
+  }
+  releaseOutbox(id: string, lease: string, retrySeconds: number) {
+    return this.leaseRpc("release_notification_outbox", { p_id: id, p_lease: lease, p_retry_seconds: Math.round(retrySeconds) });
+  }
+  async scrubOutbox() {
+    const { data, error } = await this.db.rpc("scrub_notification_outbox");
+    if (error) fail(error);
+    return Number(data ?? 0);
+  }
+  async listOutbox(filter?: { orderId?: string }) {
+    let q = this.db.from("notification_outbox").select("*").order("created_at", { ascending: false }).limit(200);
+    if (filter?.orderId) q = q.eq("order_id", filter.orderId);
+    const { data, error } = await q;
+    if (error) fail(error);
+    return (data ?? []) as OutboxRow[];
+  }
+  async getOutbox(id: string) {
+    const { data, error } = await this.db.from("notification_outbox").select("*").eq("id", id).maybeSingle();
+    if (error) fail(error);
+    return (data as OutboxRow | null) ?? null;
+  }
+  async reviewTokenState(tokenId: string) {
+    const { data, error } = await this.db.from("quote_review_tokens").select("token_hash, consumed_at, invalidated_at, expires_at").eq("token_id", tokenId).maybeSingle();
+    if (error) fail(error);
+    if (!data) return null;
+    const t = data as { token_hash: string; consumed_at: string | null; invalidated_at: string | null; expires_at: string };
+    return { usable: !t.consumed_at && !t.invalidated_at && Date.parse(t.expires_at) > Date.now(), token_hash: t.token_hash };
+  }
+  async hitRateLimit(bucket: string, windowSeconds: number, max: number) {
+    const { data, error } = await this.db.rpc("hit_rate_limit", { p_bucket: bucket, p_window_seconds: windowSeconds, p_max: max });
+    if (error) fail(error);
+    return data === true;
+  }
+
   // ------------------------------------------------- live-sync feed (007)
   // With the user's JWT the RLS policies on order_live_events decide visibility.
   async listLiveEvents(afterId: number, limit: number) {

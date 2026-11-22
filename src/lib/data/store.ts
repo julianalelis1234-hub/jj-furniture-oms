@@ -1,4 +1,5 @@
 import type { LiveEvent } from "@/lib/realtime/events";
+import type { NewOutboxRow, OutboxRow } from "@/lib/domain/types";
 import type { FurnitureSpec } from "@/lib/domain/furniture";
 import type {
   ConsumeReviewResult,
@@ -103,6 +104,24 @@ export type Insert<T extends { id: string }> = Omit<T, "id"> & { id?: string };
  * state machine, versioning, uniqueness) are enforced identically by both.
  */
 export interface DataStore {
+  // ------------------------------------------------- email outbox (008)
+  /** Inserts a queued email; an existing idempotency key returns the existing row (duplicate: true). */
+  enqueueOutbox(row: NewOutboxRow): Promise<{ row: OutboxRow; duplicate: boolean }>;
+  /** claim_notification_outbox(): atomic, SKIP LOCKED; committed before the caller does any network I/O. */
+  claimOutbox(limit: number, leaseSeconds: number, onlyId?: string): Promise<OutboxRow[]>;
+  /** The following only succeed for the CURRENT lease holder (a stale worker matches nothing). */
+  updateOutboxPayload(id: string, lease: string, encryptedPayload: string): Promise<boolean>;
+  completeOutbox(id: string, lease: string, providerMessageId: string): Promise<boolean>;
+  failOutbox(id: string, lease: string, error: string, permanent: boolean, retrySeconds: number): Promise<boolean>;
+  releaseOutbox(id: string, lease: string, retrySeconds: number): Promise<boolean>;
+  scrubOutbox(): Promise<number>;
+  listOutbox(filter?: { orderId?: string }): Promise<OutboxRow[]>;
+  getOutbox(id: string): Promise<OutboxRow | null>;
+  /** Whether a review token is still usable (not consumed / invalidated / expired) and its hash. */
+  reviewTokenState(tokenId: string): Promise<{ usable: boolean; token_hash: string } | null>;
+  /** Fixed-window rate limit; false when the bucket is full. */
+  hitRateLimit(bucket: string, windowSeconds: number, max: number): Promise<boolean>;
+
   // ------------------------------------------------- live-sync feed (007)
   /** Feed rows after `afterId` (ascending), as visible to this store's caller (RLS in production). */
   listLiveEvents(afterId: number, limit: number): Promise<LiveEvent[]>;
