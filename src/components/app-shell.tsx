@@ -19,11 +19,11 @@ const PORTAL_LABEL: Record<Role | "customer", { title: string; code: string }> =
 export function Logo() {
   return (
     <Link href="/" className="flex items-center gap-2.5" aria-label="JJ Furniture Shop and Enterprises — home">
-      <span className="flex size-9 items-center justify-center rounded-xl bg-primary font-serif text-base font-bold text-primary-foreground">JJ</span>
-      {/* serif wordmark: the only place the serif face is used besides the hero tagline */}
-      <span className="font-serif leading-none">
-        <span className="block text-[1.2rem] font-semibold tracking-tight">JJ Furniture</span>
-        <span className="block text-[0.78rem] font-medium tracking-[0.04em] text-muted-foreground">Shop and Enterprises</span>
+      <span className="flex size-9 items-center justify-center rounded-xl bg-primary font-brand text-base font-extrabold text-primary-foreground">JJ</span>
+      {/* rounded-sans wordmark */}
+      <span className="font-brand leading-none">
+        <span className="block text-[1.2rem] font-extrabold tracking-tight">JJ Furniture</span>
+        <span className="block pt-0.5 text-[0.72rem] font-bold tracking-[0.06em] text-muted-foreground">Shop and Enterprises</span>
       </span>
     </Link>
   );

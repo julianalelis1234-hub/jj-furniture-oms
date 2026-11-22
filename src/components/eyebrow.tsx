@@ -10,7 +10,7 @@ export function Eyebrow({ children, icon, className }: { children: ReactNode; ic
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-full border border-live bg-background/60 px-3 py-1 text-[11px] font-semibold tracking-[0.14em] text-muted-foreground uppercase sm:text-xs",
+        "inline-flex items-center gap-1.5 rounded-full border border-live bg-background/60 px-3 py-1 font-serif text-xs font-semibold tracking-[0.14em] text-muted-foreground uppercase sm:text-[13px]",
         className,
       )}
     >

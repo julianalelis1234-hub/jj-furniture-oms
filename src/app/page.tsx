@@ -38,9 +38,9 @@ export default async function Home() {
           <div className="jj-hero-glow absolute top-0 left-1/2 -z-10 size-[22rem] -translate-x-1/2 sm:size-[28rem]" aria-hidden />
           <Eyebrow>Custom handcrafted furniture • Valencia City</Eyebrow>
           <SwayingTree className="mt-5 h-36 w-32 sm:h-44 sm:w-40" />
-          <p className="mt-2 font-serif text-lg tracking-[0.28em] text-muted-foreground lowercase sm:text-xl">modern • warm • luxurious</p>
+          <p className="mt-2 font-serif text-lg tracking-[0.28em] text-muted-foreground lowercase italic sm:text-xl">modern • warm • luxurious</p>
           <p className="mt-4 font-serif text-2xl font-semibold sm:text-3xl">JJ Furniture Shop and Enterprises</p>
-          <h1 id="hero-title" className="mt-1 text-3xl font-extrabold text-balance sm:text-4xl">Order Monitoring System</h1>
+          <h1 id="hero-title" className="mt-1 text-4xl font-semibold text-balance sm:text-5xl">Order Monitoring System</h1>
           <p className="mt-3 max-w-2xl text-base text-muted-foreground sm:text-lg">
             Paper slips at the counter, one shared live record for the owner, store, workshop, drivers and customers. Works in any phone browser. Nothing to install.
           </p>
