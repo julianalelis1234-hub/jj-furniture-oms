@@ -17,8 +17,8 @@ import { SCENES } from "./timeline";
 
 const COMPONENTS: Record<string, React.FC> = { s1: S1Home, s2: S2Roles, s3: S3Customer, s4: S4Staff, s5: S5Accept, s6: S6Gate, s7: S7Workshop, s8: S8Delivery, s9: S9Closing };
 
-/** JJ Furniture Management System — 3:30 pitch demo, 1920x1080 @ 60 fps. */
-export const PitchVideo: React.FC = () => (
+/** All nine scenes on the 3:30 timeline (no captions, no audio): reused by the 60-second ad. */
+export const PitchVisuals: React.FC = () => (
   <AbsoluteFill style={{ backgroundColor: C.espresso }}>
     {SCENES.map((s, i) => {
       const next = SCENES[i + 1];
@@ -31,6 +31,13 @@ export const PitchVideo: React.FC = () => (
         </Sequence>
       );
     })}
+  </AbsoluteFill>
+);
+
+/** JJ Furniture Management System — 3:30 pitch demo, 1920x1080 @ 60 fps. */
+export const PitchVideo: React.FC = () => (
+  <AbsoluteFill style={{ backgroundColor: C.espresso }}>
+    <PitchVisuals />
     <Captions />
     <Mix />
   </AbsoluteFill>

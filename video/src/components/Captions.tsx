@@ -1,12 +1,12 @@
 import React from "react";
 import { AbsoluteFill, useCurrentFrame } from "remotion";
 import { C, ease, FPS, sans } from "../theme";
-import { SCHEDULE } from "../vo";
+import { SCHEDULE, type Scheduled } from "../vo";
 
 /** Lower-third captions, exactly the narrated words, so the pitch also works muted. */
-export const Captions: React.FC = () => {
+export const Captions: React.FC<{ schedule?: Scheduled[] }> = ({ schedule = SCHEDULE }) => {
   const t = useCurrentFrame() / FPS;
-  const line = SCHEDULE.find((s) => t >= s.start - 0.15 && t <= s.end + 0.45);
+  const line = schedule.find((s) => t >= s.start - 0.15 && t <= s.end + 0.45);
   if (!line) return null;
   const pin = ease((t - (line.start - 0.15)) / 0.35);
   const pout = 1 - ease((t - (line.end + 0.1)) / 0.35);

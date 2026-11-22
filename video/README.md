@@ -13,6 +13,13 @@ app's `tsconfig.json` and ESLint, and it never touches app code, RLS or the data
 | 4. Narration | `npm run vo` | `public/vo/<line>.mp3` + `src/vo-manifest.json` |
 | 5. Preview / edit | `npx remotion studio` | every scene is also its own composition |
 | 6. Render | `npm run render` | `out/jj-furniture-pitch-demo.mp4` (H.264, AAC 48 kHz) |
+| 7. 60-second ad | `npm run ad-music && npm run render:ad` | `out/jj-furniture-ad-60s.mp4` |
+
+**60-second ad (`Ad60`).** A beat-synced highlight edit of the pitch timeline (`src/ad/AdVideo.tsx`: 17 cuts,
+125 beats at 125 BPM = exactly 60 s), with its own narration (`src/ad/adScript.ts`, files `public/vo/ad-*.mp3`),
+bold captions and an original energetic track (`scripts/make-ad-music.py`: drums, side-chained bass, chord stabs,
+arpeggio, riser + drop, ending hit). If Remotion cannot download its browser, set `REMOTION_BROWSER` to a local
+headless Chromium.
 
 **Narration.** The script lives in `src/script.ts` (the same text is used for captions). The voice is
 ElevenLabs "Clementine 2.0 – Upbeat, Engaging, Clear" (English, female). `npm run vo` reads

@@ -40,7 +40,7 @@ const GateMeter: React.FC<{ at: number }> = ({ at }) => {
   const show = Math.min(ease((t - (at - 0.8)) / 0.6), 1 - ease((t - (at + 8.2)) / 0.6));
   if (show <= 0) return null;
   const fill = ease((t - at) / 1.4);
-  const flipped = t > at + 1.4;
+  const flipped = fill > 0.97; // flips exactly as the bar completes
   return (
     <AbsoluteFill style={{ alignItems: "center", paddingTop: 120, pointerEvents: "none" }}>
       <div style={{ width: 880, padding: "22px 30px", borderRadius: 22, background: "rgba(43,29,23,0.94)", border: `1.5px solid ${flipped ? C.caramel : C.border}`, boxShadow: flipped ? "0 0 40px rgba(196,138,90,0.45)" : "0 20px 50px -10px rgba(0,0,0,0.7)", opacity: show, translate: `0 ${(1 - show) * -20}px`, fontFamily: sans }}>
