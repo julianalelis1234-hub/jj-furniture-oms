@@ -1,6 +1,6 @@
-# JJ Furniture — pitch demo video (`video/`)
+# JJ Furniture — pitch demo videos (`video/`)
 
-A 3:30, 1920×1080, 60 fps pitch video for the thesis/capstone defense. It is built with
+Three cuts, all 1920×1080 at 60 fps: the **1:30 pitch** (`Pitch90`, the defense cut), the full **3:30 walkthrough** (`PitchVideo`) and a **60-second ad** (`Ad60`). The 3:30 was the original pitch video for the thesis/capstone defense. It is built with
 [Remotion](https://www.remotion.dev) from **real screen captures of the app** (Demo Mode, the curated
 5-order dataset). It is fully isolated from the Next.js app: its own `package.json`, excluded from the
 app's `tsconfig.json` and ESLint, and it never touches app code, RLS or the database.
@@ -12,8 +12,17 @@ app's `tsconfig.json` and ESLint, and it never touches app code, RLS or the data
 | 3. Music bed + sound effects | `npm run audio` | `public/audio/*.wav` (original, synthesised: no licences needed) |
 | 4. Narration | `npm run vo` | `public/vo/<line>.mp3` + `src/vo-manifest.json` |
 | 5. Preview / edit | `npx remotion studio` | every scene is also its own composition |
-| 6. Render | `npm run render` | `out/jj-furniture-pitch-demo.mp4` (H.264, AAC 48 kHz) |
+| 6. Render the 1:30 pitch | `npm run render` | `out/jj-furniture-pitch-demo.mp4` (H.264, AAC 48 kHz, 90.0 s) |
+| 6b. Render the 3:30 walkthrough | `npm run render:3m30` | `out/jj-furniture-pitch-demo-3m30.mp4` |
 | 7. 60-second ad | `npm run ad-music && npm run render:ad` | `out/jj-furniture-ad-60s.mp4` |
+
+**1:30 pitch (`Pitch90`, `src/p90/`).** Follows the defense brief second by second: homepage title → a floating
+5-roles hub (`Hub.tsx`) that the cursor returns to and dives through for each role (Customer, Staff, Craftsmen,
+Delivery Rider) → the customer's real live 3D preview cropped into a centered "hologram" stage with floating
+choice pills that click in sync with the real clicks → staff quotation → acceptance + password → 30% gate and
+owner release → craftsman phone sliding to the owner's inspection pass → rider delivery → all 7 stages → sign-off.
+Narration: `src/p90/script90.ts` (`public/vo/p90-*.mp3`); the calm acoustic bed ducks to −22 dB under the voice
+(250 ms envelope) and swells to −14 dB on transitions.
 
 **60-second ad (`Ad60`).** A beat-synced highlight edit of the pitch timeline (`src/ad/AdVideo.tsx`: 17 cuts,
 125 beats at 125 BPM = exactly 60 s), with its own narration (`src/ad/adScript.ts`, files `public/vo/ad-*.mp3`),

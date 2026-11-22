@@ -32,16 +32,16 @@ const STAGES = ["Waiting for Confirmation", "Confirmed", "In Production", "Compl
 export const s8Sfx = (): Sfx[] => [...clipSfx("s8", d, S8_ANCHORS, 0, [0, CUSTOMER_FROM])];
 
 /** Motion graphic of the 7-stage tracker lighting up, node by node. */
-const Tracker: React.FC = () => {
+export const Tracker: React.FC<{ at?: number }> = ({ at = TRACKER_AT }) => {
   const t = useCurrentFrame() / FPS;
-  const show = ease((t - (TRACKER_AT - 0.5)) / 0.6);
+  const show = ease((t - (at - 0.5)) / 0.6);
   return (
     <AbsoluteFill style={{ alignItems: "center", paddingTop: 118, pointerEvents: "none" }}>
       <div style={{ display: "flex", alignItems: "flex-start", padding: "26px 34px 22px", borderRadius: 24, background: "rgba(43,29,23,0.94)", border: `1px solid ${C.border}`, boxShadow: "0 30px 70px -20px rgba(0,0,0,0.8)", opacity: show, translate: `0 ${(1 - show) * -20}px` }}>
         {STAGES.map((s, i) => {
-          const on = ease((t - (TRACKER_AT + i * 0.32)) / 0.35);
+          const on = ease((t - (at + i * 0.32)) / 0.35);
           const last = i === STAGES.length - 1;
-          const pulse = last && on >= 1 ? 0.5 + 0.5 * Math.sin((t - TRACKER_AT) * 4) : 0;
+          const pulse = last && on >= 1 ? 0.5 + 0.5 * Math.sin((t - at) * 4) : 0;
           return (
             <React.Fragment key={s}>
               {i > 0 && <div style={{ width: 62, height: 3, marginTop: 23, background: on > 0 ? C.caramel : "#4a3329", opacity: 0.4 + 0.6 * on }} />}

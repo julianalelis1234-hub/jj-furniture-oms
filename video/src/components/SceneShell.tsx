@@ -18,6 +18,7 @@ function enter(kind: TransitionKind, p: number, w: number, h: number): Fx {
     case "rackFocus": return { ...NONE, opacity: p, scale: mix(0.96, 1, p), blur: 10 * q };
     case "panUp": return { ...NONE, ty: h * q, blur: 6 * q };
     case "iris": return { ...NONE, opacity: Math.min(1, p * 1.4), clip: `circle(${mix(0, 80, p)}% at 50% 50%)` };
+    case "zoomOut": return { ...NONE, opacity: p, scale: mix(1.12, 1, p), blur: 6 * q };
   }
 }
 /** how the OUTGOING scene leaves while the next one enters */
@@ -31,6 +32,7 @@ function leave(kind: TransitionKind, p: number, w: number, h: number): Fx {
     case "rackFocus": return { ...NONE, blur: 10 * p, bright: mix(1, 0.45, p) };
     case "panUp": return { ...NONE, ty: -h * p, blur: 6 * p };
     case "iris": return { ...NONE, opacity: 1 - p * 0.8, blur: 4 * p };
+    case "zoomOut": return { ...NONE, opacity: 1 - p, scale: mix(1, 0.85, p), blur: 8 * p };
   }
 }
 

@@ -3,7 +3,7 @@
  * transition begins, so both scenes are on screen during the overlap.
  * Matches the production brief: 0:00 – 3:30 at 60 fps (12,600 frames).
  */
-export type TransitionKind = "dissolve" | "zoomThrough" | "slidePush" | "crossZoom" | "slideLeft" | "rackFocus" | "panUp" | "iris";
+export type TransitionKind = "dissolve" | "zoomThrough" | "slidePush" | "crossZoom" | "slideLeft" | "rackFocus" | "panUp" | "iris" | "zoomOut";
 export type SceneSpec = { id: string; start: number; end: number; in?: { kind: TransitionKind; dur: number }; label?: string; role?: string };
 
 export const SCENES: SceneSpec[] = [

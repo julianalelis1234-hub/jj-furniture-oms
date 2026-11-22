@@ -35,7 +35,7 @@ export const s6Sfx = (): Sfx[] => [
 ];
 
 /** Motion-graphic summary of the real gate card: 30% required vs verified, filling as the payment is verified. */
-const GateMeter: React.FC<{ at: number }> = ({ at }) => {
+export const GateMeter: React.FC<{ at: number }> = ({ at }) => {
   const t = useCurrentFrame() / FPS;
   const show = Math.min(ease((t - (at - 0.8)) / 0.6), 1 - ease((t - (at + 8.2)) / 0.6));
   if (show <= 0) return null;

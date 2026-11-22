@@ -1,6 +1,7 @@
 import React from "react";
 import { Composition, Folder } from "remotion";
 import { AD_SECONDS, AdVideo } from "./ad/AdVideo";
+import { P90_SECONDS, Pitch90 } from "./p90/Pitch90";
 import { PitchVideo } from "./PitchVideo";
 import { S1Home } from "./scenes/S1Home";
 import { S2Roles } from "./scenes/S2Roles";
@@ -19,6 +20,7 @@ const len = (id: string) => Math.round((scene(id).end - scene(id).start) * FPS);
 export const RemotionRoot: React.FC = () => (
   <>
     <Composition id="PitchVideo" component={PitchVideo} durationInFrames={TOTAL_FRAMES} fps={FPS} width={W} height={H} />
+    <Composition id="Pitch90" component={Pitch90} durationInFrames={P90_SECONDS * FPS} fps={FPS} width={W} height={H} />
     <Composition id="Ad60" component={AdVideo} durationInFrames={AD_SECONDS * FPS} fps={FPS} width={W} height={H} />
     <Folder name="Scenes">
       <Composition id="S1-Home" component={S1Home} durationInFrames={len("s1")} fps={FPS} width={W} height={H} />

@@ -35,9 +35,10 @@
     "capture": "node capture/capture-all.mjs",
     "audio": "python3 -I scripts/make-audio.py",
     "vo": "node scripts/generate-vo.mjs && node scripts/vo-manifest.mjs",
-    "render": "remotion render PitchVideo out/jj-furniture-pitch-demo.mp4 --codec h264 --audio-codec aac --crf 18 --x264-preset medium --browser-executable=${REMOTION_BROWSER:-/opt/pw-browsers/chromium_headless_shell-1243/chrome-headless-shell-linux64/chrome-headless-shell}",
+    "render": "remotion render Pitch90 out/jj-furniture-pitch-demo.mp4 --codec h264 --audio-codec aac --crf 18 --x264-preset medium --browser-executable=${REMOTION_BROWSER:-/opt/pw-browsers/chromium_headless_shell-1243/chrome-headless-shell-linux64/chrome-headless-shell}",
     "render:ad": "remotion render Ad60 out/jj-furniture-ad-60s.mp4 --codec h264 --audio-codec aac --crf 18 --x264-preset medium --browser-executable=${REMOTION_BROWSER:-/opt/pw-browsers/chromium_headless_shell-1243/chrome-headless-shell-linux64/chrome-headless-shell}",
-    "ad-music": "python3 -I scripts/make-ad-music.py"
+    "ad-music": "python3 -I scripts/make-ad-music.py",
+    "render:3m30": "remotion render PitchVideo out/jj-furniture-pitch-demo-3m30.mp4 --codec h264 --audio-codec aac --crf 18 --x264-preset medium --browser-executable=${REMOTION_BROWSER:-/opt/pw-browsers/chromium_headless_shell-1243/chrome-headless-shell-linux64/chrome-headless-shell}"
   },
   "allowScripts": {
     "esbuild": false
