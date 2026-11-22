@@ -9,7 +9,7 @@ import type { ActionResult } from "@/lib/action-result";
 import { isDemoMode } from "@/lib/config";
 import type { DataStore } from "@/lib/data/store";
 import type { MemoryStore } from "@/lib/data/memory-store";
-import { DEMO_CUSTOMER_LOGIN } from "@/lib/data/seed";
+import { demoCustomerLogin } from "@/lib/data/seed";
 import { DomainError } from "@/lib/domain/errors";
 import { customerLoginSchema, firstErrors } from "@/lib/domain/validation";
 import { getPublicStore } from "@/lib/server/context";
@@ -112,7 +112,8 @@ export async function customerLoginAction(_: unknown, fd: FormData): Promise<Act
 export async function demoCustomerLoginAction(): Promise<ActionResult> {
   if (!isDemoMode()) return { ok: false, code: "FORBIDDEN", message: "Demo login is not available." };
   try {
-    await customerSignIn(DEMO_CUSTOMER_LOGIN.email, DEMO_CUSTOMER_LOGIN.password);
+    const demo = demoCustomerLogin();
+    await customerSignIn(demo.email, demo.password);
   } catch (e) {
     return fail(e);
   }

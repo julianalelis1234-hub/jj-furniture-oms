@@ -5,7 +5,7 @@ import { buildSeedTables } from "../src/lib/data/seed";
 const q = (v: unknown) => `'${JSON.stringify(v).replace(/'/g, "''")}'::jsonb`;
 const COMPUTED = ["standard_down_payment_due", "remaining_furniture_balance", "collectible_on_delivery", "version", "updated_at"];
 
-buildSeedTables().then((t) => {
+buildSeedTables(process.argv.includes("--curated") ? "curated" : "fixtures").then((t) => {
   const orders = t.orders.map((o) => Object.fromEntries(Object.entries(o).filter(([k]) => !COMPUTED.includes(k))));
   const out = [
     process.argv.includes("--supabase")

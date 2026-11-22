@@ -98,6 +98,12 @@ interface SeedOrder {
   encodedBy: string;
   payments?: { type: PaymentType; amount: number; method?: "Cash" | "GCash / Bank Transfer"; verified?: boolean; by?: string; daysAgo: number }[];
   revision?: boolean;
+  /** "Other" wood: the species (Narra, Acacia, Molave …) */
+  woodNote?: string;
+  /** overrides SEED_EMAIL (fixtures) */
+  email?: string | "walk-in";
+  /** note on the latest status entry (e.g. a workshop sub-detail) */
+  stageNote?: string;
 }
 
 const ORDERS: SeedOrder[] = [
@@ -235,17 +241,12 @@ const ts = (daysAgo: number, hour = 9) => {
   return d.toISOString();
 };
 
-/**
- * Builds the full demo dataset (relative to today) by going through the
- * MemoryStore so every computed field matches the database formulas.
- */
-export async function buildSeedTables(): Promise<MemoryTables> {
-  const store = new MemoryStore();
+/** Inserts staff-encoded seed orders (+ history, revision 1, confirmation, payments) through the MemoryStore. */
+async function seedOrders(store: MemoryStore, list: SeedOrder[]) {
   const t = store.t;
   const today = todayISO();
-  t.profiles = SEED_PROFILES.map((p) => ({ ...p, created_at: ts(90) }));
-
-  for (const s of ORDERS) {
+  for (const s of list) {
+    const email = s.email ?? SEED_EMAIL[s.code];
     const confirmed = s.status !== "Waiting for Confirmation";
     const order = await store.insertOrder({
       order_code: s.code,
@@ -258,8 +259,8 @@ export async function buildSeedTables(): Promise<MemoryTables> {
       // historical data only: these slips were printed with a PIN before email login; nothing verifies it any more
       pin_code_hash: LEGACY_PIN_ORDERS.has(s.code) ? bcrypt.hashSync(s.pin, 6).replace(/^\$2b\$/, "$2a$") : null,
       pin_code_display: LEGACY_PIN_ORDERS.has(s.code) ? s.pin : null,
-      customer_email: SEED_EMAIL[s.code] && SEED_EMAIL[s.code] !== "walk-in" ? SEED_EMAIL[s.code] : null,
-      has_no_email: !SEED_EMAIL[s.code] || SEED_EMAIL[s.code] === "walk-in",
+      customer_email: email && email !== "walk-in" ? email : null,
+      has_no_email: !email || email === "walk-in",
       item_name: s.item,
       quantity: s.qty,
       dimensions: s.legacy ? s.dims : dimensionsText({ width_cm: s.w!, height_cm: s.h!, depth_cm: s.d! }),
@@ -270,7 +271,7 @@ export async function buildSeedTables(): Promise<MemoryTables> {
       width_cm: s.legacy ? null : s.w!,
       height_cm: s.legacy ? null : s.h!,
       depth_cm: s.legacy ? null : s.d!,
-      custom_wood_note: null,
+      custom_wood_note: s.woodNote ?? null,
       is_legacy_incomplete: !!s.legacy,
       special_instructions: s.notes ?? null,
       reference_photo_url: s.photo ?? null,
@@ -300,7 +301,7 @@ export async function buildSeedTables(): Promise<MemoryTables> {
         from_status: prev,
         to_status: WORKSHOP_STAGES[i],
         changed_by_id: i <= 1 ? s.encodedBy : i <= 3 ? (s.craftsman ?? null) : i === 4 ? STAFF.owner : STAFF.jesse,
-        notes: i === 0 ? `Encoded from paper slip #${s.slip}` : null,
+        notes: i === 0 ? `Encoded from paper slip #${s.slip}` : i === target && s.stageNote ? s.stageNote : i === 4 ? "Passed quality inspection" : null,
         client_transaction_id: null,
         changed_at: when,
       });
@@ -377,6 +378,18 @@ export async function buildSeedTables(): Promise<MemoryTables> {
     }
     o.version = 1; // seed rows start fresh
   }
+}
+
+/**
+ * Regression-test dataset (15 orders covering every edge case). Used by the
+ * unit / E2E suites and by the demo when DEMO_DATASET=fixtures.
+ */
+export async function buildFixtureTables(): Promise<MemoryTables> {
+  const store = new MemoryStore();
+  const t = store.t;
+  const today = todayISO();
+  t.profiles = SEED_PROFILES.map((p) => ({ ...p, created_at: ts(90) }));
+  await seedOrders(store, ORDERS);
 
   const byCode = (c: string) => t.orders.find((o) => o.order_code === c)!;
 
@@ -486,4 +499,135 @@ export async function buildSeedTables(): Promise<MemoryTables> {
   nt("JJ-2026-0133", "JJ Furniture: JJ-2026-0133 delivered. Thank you!", "Sent", 3, "Messenger");
 
   return structuredClone(t);
+}
+
+// =============================================================================
+// Curated Demo Mode dataset: exactly five active orders for JJ Furniture Shop
+// and Enterprises (Valencia City, Bukidnon). DEMO DATA ONLY — production reads
+// the real database and is never capped or seeded from here.
+// PRIVACY: fictional contact details (example.com, 0900-000-xxxx).
+// =============================================================================
+export type DemoDataset = "curated" | "fixtures";
+/** Demo Mode shows the curated five; the test suites start the server with DEMO_DATASET=fixtures. */
+export const demoDataset = (): DemoDataset => (process.env.DEMO_DATASET === "fixtures" ? "fixtures" : "curated");
+
+const DEMO_PASSWORD = "Narra-Table-2026";
+export const CURATED_CUSTOMER_LOGIN = { email: "juliana.lelis@example.com", password: DEMO_PASSWORD, name: "Juliana Lelis" };
+/** The one-click Demo Customer Login for the active dataset. */
+export const demoCustomerLogin = () => (demoDataset() === "fixtures" ? DEMO_CUSTOMER_LOGIN : CURATED_CUSTOMER_LOGIN);
+
+const CURATED: SeedOrder[] = [
+  {
+    code: "JJ-2026-1001", slip: "1001", pin: "", customer: "Juliana Lelis", phone: "09000001001", email: "juliana.lelis@example.com",
+    address: "Purok 3, Brgy. Poblacion", municipality: "Valencia City", item: "Narra 6-Seater Dining Table",
+    cat: "Dining Table", variant: "6-Seater Classic", w: 200, h: 76, d: 95, qty: 1, dims: "",
+    wood: "Other", woodNote: "Narra", finish: "Natural Matte Varnish", notes: "Rounded table corners. Customer will pick up the bench separately.",
+    price: 38500, fee: 0, status: "In Production", rank: 1, label: "High", craftsman: STAFF.nolito, estDays: 6, deliveryDays: 9,
+    createdDaysAgo: 14, encodedBy: STAFF.gilbert, stageNote: "Timber joinery complete; surface sanding underway",
+    payments: [{ type: "Down Payment (30%)", amount: 15000, method: "GCash / Bank Transfer", daysAgo: 12 }],
+  },
+  {
+    code: "JJ-2026-1002", slip: "1002", pin: "", customer: "Rea Caday", phone: "09000001002", email: "rea.caday@example.com",
+    address: "Purok 7, Brgy. Lumbo", municipality: "Valencia City", item: "Solid Mahogany King Platform Bed",
+    cat: "Custom Piece", variant: "Bed Frame", w: 190, h: 110, d: 210, qty: 1, dims: "",
+    wood: "Mahogany", finish: "Warm Espresso Stain", notes: "Low platform, no footboard.",
+    price: 44000, fee: 0, status: "Waiting for Confirmation", estDays: 21, createdDaysAgo: 2, encodedBy: STAFF.liza,
+  },
+  {
+    code: "JJ-2026-1004", slip: "1004", pin: "", customer: "Riezbell Naquinez", phone: "09000001004", email: "riezbell.naquinez@example.com",
+    address: "Zone 1, Brgy. Poblacion (near the city plaza)", municipality: "Valencia City", item: "Acacia L-Shaped Executive Study Desk",
+    cat: "Dining Table", variant: "4-Seater Rectangular", w: 160, h: 75, d: 140, qty: 1, dims: "",
+    wood: "Other", woodNote: "Acacia", finish: "Natural Oil Finish", notes: "L-return on the right side; cable grommet at the back corner.",
+    price: 24800, fee: 0, status: "Ready for Delivery", rank: 2, craftsman: STAFF.carlo, estDays: -1, deliveryDays: 1,
+    createdDaysAgo: 24, encodedBy: STAFF.gilbert, stageNote: "Passed inspection; scheduled for Valencia City Poblacion drop-off",
+    payments: [{ type: "Down Payment (30%)", amount: 10000, daysAgo: 22 }],
+  },
+  {
+    code: "JJ-2026-1005", slip: "1005", pin: "", customer: "Bon Ortizano", phone: "09000001005", email: "walk-in",
+    address: "Purok 2, Brgy. Bagontaas", municipality: "Valencia City", item: "Molave Accent Lounge Chair Pair",
+    cat: "Living Room Set", variant: "Classic Curved Armrest Set", w: 72, h: 82, d: 78, qty: 2, dims: "",
+    wood: "Other", woodNote: "Molave", finish: "Mocha Hand-Rubbed Finish", notes: "Walk-in order at the counter. Pair of matching chairs.",
+    price: 19600, fee: 0, status: "Confirmed", estDays: 18, createdDaysAgo: 3, encodedBy: STAFF.gilbert,
+  },
+];
+
+async function buildCuratedTables(): Promise<MemoryTables> {
+  const store = new MemoryStore();
+  const t = store.t;
+  const today = todayISO();
+  t.profiles = SEED_PROFILES.map((p) => ({ ...p, created_at: ts(90) }));
+  await seedOrders(store, CURATED);
+  const byCode = (c: string) => t.orders.find((o) => o.order_code === c)!;
+
+  // JJ-2026-1003 — Option 2 self-service intake awaiting the shop's pricing (pre-quotation, not one of the 7 stages)
+  const req = await store.insertOrder({
+    order_code: "JJ-2026-1003", paper_slip_number: null, encoded_by_id: null,
+    customer_email: "julian.marte@example.com", has_no_email: false,
+    customer_name: "Julian Marte", customer_phone: "09000001003",
+    delivery_address: "Purok 4, Brgy. Mailag", municipality: "Valencia City",
+    pin_code_hash: null, pin_code_display: null,
+    item_name: "Gmelina Modular Wardrobe Cabinet", quantity: 1,
+    dimensions: dimensionsText({ width_cm: 180, height_cm: 210, depth_cm: 60 }),
+    wood_type: "Gmelina", color_finish: "Satin Caramel Finish",
+    furniture_category: "Custom Piece", design_variant: "Wardrobe / Aparador", width_cm: 180, height_cm: 210, depth_cm: 60,
+    custom_wood_note: null, special_instructions: "Three modules: two hanging sections and one shelf tower with drawers.",
+    reference_photo_url: null, specs_confirmed: false, status: "Quote Requested", priority_rank: 99, priority_label: "Normal",
+    assigned_craftsman_id: null, furniture_price: null, delivery_fee: 0, payment_exception_type: "Standard 30/70",
+    payment_exception_approved: false, estimated_completion_date: null, scheduled_delivery_date: null,
+    order_origin: "customer_self_service", client_request_key: "seed-request-1003",
+  });
+  await store.addSpecRevision({
+    order_id: req.id, type: "customer_request", expected_revision: null, created_by_role: "customer", created_by_id: null,
+    spec: { furniture_category: "Custom Piece", design_variant: "Wardrobe / Aparador", width_cm: 180, height_cm: 210, depth_cm: 60,
+      wood_type: "Gmelina", custom_wood_note: null, color_finish: "Satin Caramel Finish", quantity: 1 },
+  });
+  Object.assign(byCode("JJ-2026-1003"), { created_at: ts(0, 8), version: 1 });
+  t.order_specification_revisions.filter((r) => r.order_id === req.id).forEach((r) => (r.created_at = ts(0, 8)));
+  t.order_status_history.push({
+    id: crypto.randomUUID(), order_id: req.id, from_status: null, to_status: "Quote Requested", changed_by_id: null,
+    notes: "Customer self-service request (Option 2) · specification revision 1", client_transaction_id: null, changed_at: ts(0, 8),
+  });
+  // keep the table in creation order like the database
+  t.orders.sort((a, b) => a.order_code.localeCompare(b.order_code));
+
+  // verified customer accounts (Bon Ortizano is a walk-in: no email, no account, nothing linked)
+  const accounts: [string, string, string, number][] = [
+    ["JJ-2026-1001", "c0000000-0000-4000-8000-000000001001", "Juliana Lelis", 13],
+    ["JJ-2026-1002", "c0000000-0000-4000-8000-000000001002", "Rea Caday", 1],
+    ["JJ-2026-1003", "c0000000-0000-4000-8000-000000001003", "Julian Marte", 0],
+    ["JJ-2026-1004", "c0000000-0000-4000-8000-000000001004", "Riezbell Naquinez", 23],
+  ];
+  const pw = bcrypt.hashSync(DEMO_PASSWORD, 6);
+  for (const [code, id, name, daysAgo] of accounts) {
+    const o = byCode(code);
+    t.customer_accounts.push({ id, email: o.customer_email!, full_name: name, is_active: true, created_at: ts(daysAgo + 1), password_hash: pw });
+    Object.assign(o, { email_verified_at: ts(daysAgo), customer_user_id: id, provisioning_status: "linked" });
+  }
+
+  // JJ-2026-1004 — scheduled Poblacion drop-off
+  const d4 = byCode("JJ-2026-1004");
+  t.delivery_assignments.push({
+    id: crypto.randomUUID(), order_id: d4.id, driver_id: STAFF.jesse, vehicle_type: "Multicab", scheduled_date: addDays(today, 1),
+    time_window: "9:00 AM - 11:00 AM", delivery_fee: d4.delivery_fee, expected_collectible_amount: d4.collectible_on_delivery,
+    dispatch_status: "Scheduled", failure_or_damage_notes: null, updated_at: ts(0),
+  });
+
+  // JJ-2026-1002 — quotation Rev 1 issued; its single-use review link is in Rea's (simulated) inbox
+  const rea = byCode("JJ-2026-1002");
+  const rev = t.order_specification_revisions.find((r) => r.order_id === rea.id && r.revision_number === rea.current_revision)!;
+  rev.quoted_at = ts(1, 9);
+  rev.expires_at = new Date(Date.parse(ts(1, 9)) + 7 * 86_400_000).toISOString();
+  const raw = randomBytes(32).toString("base64url");
+  await store.issueReviewToken({ order_id: rea.id, revision_id: rev.revision_id, token_hash: createHash("sha256").update(raw).digest("hex"), ttl_hours: 72 });
+  t.demo_mailbox.push({
+    id: crypto.randomUUID(), to: rea.customer_email!, order_id: rea.id, created_at: ts(1, 9),
+    subject: `Your JJ Furniture quotation for ${rea.order_code} is ready`,
+    text: `Hello ${rea.customer_name},\n\nYour quotation for ${rea.item_name} is ready: ₱44,000.00 (free delivery in Valencia City).\n\nReview the exact specification and accept it here (single-use link):\n/customer/review?token=${raw}\n\nNothing is ordered or charged until you accept.`,
+  });
+  return structuredClone(t);
+}
+
+/** The Demo Mode dataset: the curated five by default, the regression fixtures when DEMO_DATASET=fixtures. */
+export async function buildSeedTables(dataset: DemoDataset = demoDataset()): Promise<MemoryTables> {
+  return dataset === "fixtures" ? buildFixtureTables() : buildCuratedTables();
 }

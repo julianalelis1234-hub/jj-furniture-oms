@@ -1,10 +1,10 @@
 import { MemoryStore } from "@/lib/data/memory-store";
-import { buildSeedTables, STAFF } from "@/lib/data/seed";
+import { buildFixtureTables, STAFF } from "@/lib/data/seed";
 import { addDays, todayISO } from "@/lib/domain/dates";
 import type { Actor } from "@/lib/domain/types";
 
 export async function seededStore() {
-  return new MemoryStore(await buildSeedTables());
+  return new MemoryStore(await buildFixtureTables());
 }
 
 export const actors = {

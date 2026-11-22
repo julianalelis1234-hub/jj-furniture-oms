@@ -70,10 +70,27 @@ async function checkLayout(label) {
 }
 const PORTAL = { Owner: "/owner", Staff: "/staff", Craftsmen: "/craftsman", "Delivery Driver": "/driver", Customer: "/customer/login" };
 async function role(name) {
+  await closeDrawer();
   await page.getByRole("navigation", { name: "Switch demo role" }).getByRole("button", { name: new RegExp(`^${name}`) }).click();
   // a signed-in customer is sent straight on from the login page to their orders
   await page.waitForURL((u) => u.pathname === PORTAL[name] || (name === "Customer" && u.pathname === "/customer/orders"), { timeout: 20000 });
   await page.waitForLoadState("networkidle");
+}
+/** Office workspace: open an order's drawer (search spans every stage), optionally on a tab. */
+async function openDrawer(code, tab) {
+  await page.getByTestId("queue-search").fill(code);
+  await page.locator(`[data-testid="queue-row"][data-code="${code}"], [data-testid="queue-card"][data-code="${code}"]`).filter({ visible: true }).first().click();
+  const d = page.getByTestId("order-drawer");
+  await d.waitFor();
+  await d.getByRole("heading", { name: code }).waitFor();
+  if (tab) await d.getByRole("tab", { name: tab }).click();
+  return d;
+}
+async function closeDrawer() {
+  if (await page.getByTestId("order-drawer").count()) {
+    await page.getByTestId("drawer-close").click();
+    await page.getByTestId("order-drawer").waitFor({ state: "detached" });
+  }
 }
 async function toast(text) {
   await page.getByText(text).first().waitFor({ timeout: 15000 });
@@ -108,10 +125,10 @@ try {
 
   // ----------------------------------------------------- 2. Staff portal 1:30
   await role("Staff");
-  await caption("2 · Staff portal (S-01) — Gilbert's Today's Work queues");
-  await checkLayout("staff today");
+  await caption("2 · Staff portal (S-01) — Operations & Order Queue: 4 live metrics, stage filters, one calm table");
+  await checkLayout("staff workspace");
   await pause(2500);
-  await page.getByRole("link", { name: "New Order" }).first().click();
+  await page.getByRole("link", { name: "New Walk-In / Phone Order" }).first().click();
   await page.waitForURL(/\/staff\/new/);
   await caption("+ New Order: copy the handwritten paper slip");
   await page.fill("#paper_slip_number", "0149");
@@ -215,15 +232,14 @@ try {
   // ------------------------- staff: verified 30% -> release to the workshop
   await role("Staff");
   await caption("Staff logs the 30% down payment, then releases the job to the workshop");
-  const dp = page.locator("li", { hasText: newCode }).filter({ hasText: "Still needed" }).first();
-  await scrollTo(dp);
-  await dp.getByRole("button", { name: "Log payment" }).click();
+  let drawer = await openDrawer(newCode, "Payments & Gate");
+  await caption("Order drawer · Payments & Gate: verified vs unverified payments, the 30% gate, balances and the separate delivery fee");
+  await pause(2500);
+  await drawer.getByTestId("next-step").getByRole("button", { name: "Log payment" }).click();
   await pause(1000);
   await page.getByRole("button", { name: "Save payment" }).click();
   await toast("Payment recorded.");
-  const rel = page.locator("li", { hasText: newCode }).filter({ has: page.getByRole("button", { name: "Release to workshop" }) }).first();
-  await scrollTo(rel);
-  await rel.getByRole("button", { name: "Release to workshop" }).click();
+  await drawer.getByTestId("next-step").getByRole("button", { name: "Release to workshop" }).click();
   await caption("The server re-checks: verified 30%, accepted latest revision, no price drift, no blocking items");
   await pause(2500);
   await page.getByRole("dialog").getByRole("button", { name: "Start production" }).click();
@@ -262,26 +278,28 @@ try {
 
   // ------------------------------------------------------------- 4b. Owner
   await role("Owner");
-  await caption("Owner dashboard (O-01) — 8 live KPI cards from the shared record");
+  await caption("Owner (O-01) — Shop Overview & Approvals: the same live metrics and queue, plus the owner's decisions");
   await checkLayout("owner");
   await pause(4000);
-  await scrollTo(page.getByRole("heading", { name: "Needs your attention" }));
-  await caption("Needs Your Attention: the craftsman's spec question, approvals and inspections");
-  await pause(2500);
-  const q = page.locator("li", { hasText: "Should the table edge be rounded" }).first();
+  drawer = await openDrawer(newCode);
+  await caption("The craftsman's spec question is answered right in the order's drawer");
+  const q = drawer.locator("li", { hasText: "Should the table edge be rounded" }).first();
   await scrollTo(q);
   await q.getByRole("button", { name: "Answer" }).click();
   await page.getByRole("textbox", { name: /Answer/ }).fill("Rounded edges, 1cm radius — confirmed with the customer.");
   await page.getByRole("button", { name: "Send answer to workshop" }).click();
   await toast("Marked resolved.");
+  await closeDrawer();
+  await scrollTo(page.getByRole("heading", { name: "Awaiting your decision" }));
   const inst = page.locator("li", { hasText: "Installment Approval" }).first();
   await scrollTo(inst);
   await caption("Approve an installment request (payment exception needs the owner)");
   await inst.getByRole("button", { name: "Approve" }).click();
   await page.getByRole("dialog").getByRole("button", { name: "Approve" }).click();
   await toast("Marked approved.");
-  const board = page.locator("section", { hasText: "Planning Board · production priority" });
-  await scrollTo(board.getByRole("heading").first());
+  const board = page.getByTestId("planning-board");
+  await scrollTo(board.locator("summary"));
+  await board.locator("summary").click();
   await caption("Planning Board: move jobs up/down or mark Urgent — craftsmen see the same order");
   const target = board.locator("ol > li", { hasText: newCode }).first();
   await scrollTo(target);
@@ -299,9 +317,8 @@ try {
   // ---------------------- staff hand-off: 30% down payment + driver schedule
   await role("Staff");
   await caption("Staff schedules Jesse's Multicab for today");
-  const sch = page.locator("li", { hasText: newCode }).filter({ has: page.getByRole("button", { name: "Schedule delivery" }) }).first();
-  await scrollTo(sch);
-  await sch.getByRole("button", { name: "Schedule delivery" }).click();
+  drawer = await openDrawer(newCode);
+  await drawer.getByTestId("next-step").getByRole("button", { name: "Schedule delivery" }).click();
   await page.selectOption("#driver_id", { label: "Jesse Decena" });
   await page.selectOption("#vehicle_type", "Multicab");
   await page.fill("#scheduled_date", manilaToday);
@@ -349,10 +366,12 @@ try {
   // --------------------------------------------------- 6. Final overview 1:00
   await role("Staff");
   await caption("6 · Overview — the driver's cash appears at the shop for handover verification");
-  const cash = page.locator("li", { hasText: newCode }).filter({ hasText: "Delivery Balance Collection" }).first();
+  drawer = await openDrawer(newCode, "Payments & Gate");
+  const cash = drawer.getByRole("button", { name: /Verify ₱/ }).first();
   await scrollTo(cash);
-  await cash.getByRole("button", { name: /Verify ₱/ }).click();
+  await cash.click();
   await toast("Cash handover verified.");
+  await closeDrawer();
   await page.goto(`/staff/orders/${orderId}`);
   await page.waitForLoadState("networkidle");
   await caption(`${newCode}: all 7 stages complete — Waiting → Confirmed → … → Delivered`);

@@ -147,3 +147,13 @@ psql "$PGURL/postgres" -qc "create database $DB3" >/dev/null
 run "$DB3" supabase/tests/00_supabase_stub.sql
 migrate_all "$DB3"
 npx tsx scripts/seed-sql.ts | psql "$PGURL/$DB3" -q -v ON_ERROR_STOP=1 2>&1 | grep -E "ok -|FAILED|ERROR"
+# 3b. The curated five-order Demo Mode dataset loads into the real schema too
+psql "$PGURL/postgres" -qc "drop database if exists $DB3" >/dev/null
+psql "$PGURL/postgres" -qc "create database $DB3" >/dev/null
+run "$DB3" supabase/tests/00_supabase_stub.sql
+migrate_all "$DB3"
+npx tsx scripts/seed-sql.ts --curated | psql "$PGURL/$DB3" -q -v ON_ERROR_STOP=1 2>&1 | grep -E "ok -|FAILED|ERROR"
+CUR=$(psql "$PGURL/$DB3" -Atc "select string_agg(order_code || ':' || status, ',' order by order_code) from public.orders")
+if [[ "$CUR" == "JJ-2026-1001:In Production,JJ-2026-1002:Waiting for Confirmation,JJ-2026-1003:Quote Requested,JJ-2026-1004:Ready for Delivery,JJ-2026-1005:Confirmed" ]]; then
+  echo "NOTICE:  ok - curated demo dataset: exactly the 5 specified orders and stages load into the real schema"
+else echo "TEST FAILED: curated dataset = $CUR"; exit 1; fi

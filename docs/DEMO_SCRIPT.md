@@ -26,6 +26,8 @@ data and real application features. Nothing is faked except where it says
 
 ## Sample data you will use
 
+> **Which demo data?** The default Demo Mode now opens with the **five curated orders** (JJ-2026-1001 … 1005, see the README's *Demo data*). This step-by-step presentation uses the larger regression dataset: start the app with `DEMO_DATASET=fixtures npm run dev` to follow it exactly.
+
 | Order | Customer (fictional) | Where it appears |
 |---|---|---|
 | **JJ-2026-0149** *(you create it in step 2)* | Rosalinda Abellana | Every portal, full 7-stage lifecycle |
@@ -52,7 +54,7 @@ Scroll to **What we found in the Discover phase**, then **One record, five porta
 
 ## 2. Staff Portal (S-01) — 1:30
 
-1. Top bar → **Staff**. Briefly show **Today's Work**: each card is one real task with the button that finishes it.
+1. Top bar → **Staff**. Show **Operations & Order Queue**: four live metrics, stage filters with counts, one calm 5-column table. Click any row: the order opens in a slide-over drawer with *Overview & 3D Spec*, *Quotation & Revisions* and *Payments & Gate* tabs.
 2. Click **+ New Order** and fill in the form:
 
    | Field | Value |
@@ -116,11 +118,11 @@ Scroll to **What we found in the Discover phase**, then **One record, five porta
 
 **Owner**
 5. Top bar → **Owner**. Walk through the **8 KPI cards**: Active Orders, Delayed/At Risk, In Production, Waiting Inspection, Deliveries to Watch, Balances Still to Collect, Unpaid After Delivery, Approvals Waiting.
-6. **Needs your attention**:
+6. **Awaiting your decision** (approvals and inspections) — the craftsman question is answered in the order's drawer:
    - Find the spec question → **Answer** → *"Rounded edges, 1cm radius — confirmed with the customer."* → **Send answer to workshop**.
    - **JJ-2026-0140 Installment Approval** → **Approve** → **Approve**.
 7. **Planning Board**: on JJ-2026-0149 click **Urgent**. It jumps to #1, and the craftsmen see the same order. Optionally use the ↑ / ↓ buttons.
-8. Back in **Needs your attention**, find **Quality inspection · JJ-2026-0149** → **Pass** → **Passed — ready for delivery**. It's now stage 5/7, Ready for Delivery.
+8. Back in **Awaiting your decision**, find **Quality inspection · JJ-2026-0149** → **Pass** → **Passed — ready for delivery**. It's now stage 5/7, Ready for Delivery.
 
 **Staff hand-off (about 20 seconds, needed before the driver can leave)**
 9. Top bar → **Staff**:

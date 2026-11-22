@@ -120,8 +120,17 @@ function linenTexture(): THREE.CanvasTexture {
 
 interface FinishParams { tint: string; roughness: number; clearcoat: number; clearcoatRoughness: number; grain: boolean }
 /** Four visibly distinct PBR finishes over the chosen wood. */
+/** Descriptive shop finishes ("Warm Espresso Stain", "Mocha Hand-Rubbed Finish" …) render as the nearest of the four PBR looks. */
+export function finishFamily(finish: string): string {
+  const f = finish.toLowerCase();
+  if (f.includes("espresso")) return "Dark Espresso";
+  if (f.includes("walnut") || f.includes("mocha") || f.includes("caramel")) return "Walnut Stain";
+  if (f.includes("white") || f.includes("gloss")) return "Gloss White";
+  return finish;
+}
+
 export function finishParams(finish: string): FinishParams {
-  switch (finish) {
+  switch (finishFamily(finish)) {
     case "Walnut Stain":
       return { tint: "#a8774f", roughness: 0.48, clearcoat: 0.4, clearcoatRoughness: 0.28, grain: true }; // warm walnut-brown stain, grain visible
     case "Gloss White":
