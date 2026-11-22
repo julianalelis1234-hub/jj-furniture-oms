@@ -21,7 +21,7 @@ export function TaskCard({
   return (
     <li
       className={cn(
-        "rounded-xl border bg-card p-3 sm:p-4",
+        "min-w-0 rounded-2xl border bg-card p-3 sm:p-4",
         tone === "warning" && "border-l-4 border-l-warning",
         tone === "danger" && "border-l-4 border-l-destructive",
         tone === "info" && "border-l-4 border-l-info",

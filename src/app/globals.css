@@ -10,6 +10,8 @@
   --font-sans: var(--font-sans);
   --font-mono: var(--font-geist-mono);
   --font-heading: var(--font-sans);
+  --font-serif: var(--font-serif);
+  --font-brand: var(--font-brand);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -40,6 +42,10 @@
   --color-danger-soft: var(--danger-soft);
   --color-accent-soft: var(--accent-soft);
   --color-live: var(--live);
+  --color-primary-hover: var(--primary-hover);
+  --color-stage-done: var(--stage-done);
+  --color-stage-done-foreground: var(--stage-done-foreground);
+  --color-stage-track: var(--stage-track);
   --color-wood-mahogany: var(--wood-mahogany);
   --color-wood-gmelina: var(--wood-gmelina);
   --color-wood-other: var(--wood-other);
@@ -67,29 +73,42 @@
 }
 
 /* =========================================================================
-   JJ Furniture OMS — Classy Wooden Minimalist design tokens
+   JJ Furniture OMS — "Modern Warm Luxury" design tokens
    (1:1 with Figma variables; exported by `npm run tokens`)
-   Light = "Normal Mode": warm alabaster, espresso text — high contrast for
-           workshop and outdoor sunlight readability.
-   Dark  = "Workshop Night / Low-Glare": smoked walnut surfaces.
+
+   Five brand colours, nothing else for the brand surfaces:
+     Espresso #2B1D17 · Mocha #6B4A3A · Caramel #C48A5A · Latte #E7D6C1 · Cream #FAF6F0
+   Derived tints are mixes of those five (noted inline). Status colours
+   (success / warning / info / destructive) stay functional, AA-checked
+   against the new surfaces.
+
+   Contrast (WCAG 2.x): Espresso/Cream 15.1 · Espresso/Latte 11.5 ·
+   Mocha/Cream 7.3 · Mocha/Latte 5.6 · Cream/Mocha 7.3 · Cream/Espresso 15.1 ·
+   Espresso/Caramel 5.5 · Caramel/Espresso 5.5 · Latte/#36251E 10.3.
+   Caramel is NEVER used for text on Cream/white (2.7): borders, fills,
+   glows and decorative icons only in light mode.
+
+   Light = "Cream & Latte Editorial" (default)
+   Dark  = "Smoked Espresso Atelier"
    ========================================================================= */
 :root {
   --radius: 0.75rem;
-  --background: #faf7f2;          /* warm alabaster / cream parchment */
-  --foreground: #231a14;          /* deep espresso charcoal */
-  --card: #ffffff;
-  --card-foreground: #231a14;
+  --background: #faf6f0;          /* Cream — canvas */
+  --foreground: #2b1d17;          /* Espresso — primary text */
+  --card: #ffffff;                /* elevated surface (warm shadow below) */
+  --card-foreground: #2b1d17;
   --popover: #ffffff;
-  --popover-foreground: #231a14;
-  --primary: #6f4229;             /* rich Philippine mahogany */
-  --primary-foreground: #faf7f2;
-  --secondary: #efe8dd;           /* warm gmelina timber tint */
-  --secondary-foreground: #231a14;
-  --muted: #f3eee6;
-  --muted-foreground: #5e5045;
-  --accent: #b8864b;              /* brushed brass / warm varnish gold */
-  --accent-foreground: #231a14;
-  --accent-soft: #f6eddf;         /* brass wash for highlight boxes */
+  --popover-foreground: #2b1d17;
+  --primary: #6b4a3a;             /* Mocha — primary actions, focus */
+  --primary-foreground: #faf6f0;  /* Cream on Mocha 7.3:1 */
+  --primary-hover: #2b1d17;       /* Espresso */
+  --secondary: #e7d6c1;           /* Latte — secondary containers, 3D stage */
+  --secondary-foreground: #2b1d17;
+  --muted: #f1e8db;               /* 45% Latte + Cream */
+  --muted-foreground: #6b4a3a;    /* Mocha — secondary text (6.5:1 on muted) */
+  --accent: #c48a5a;              /* Caramel — pills, highlights, progress */
+  --accent-foreground: #2b1d17;   /* Espresso on Caramel 5.5:1 */
+  --accent-soft: #f1e5d8;         /* 16% Caramel + Cream — highlight wash */
   --live: #c48a5a;                /* Caramel: Live Sync Active indicator */
   --destructive: #a23b2a;
   --destructive-foreground: #ffffff;
@@ -103,87 +122,100 @@
   --info-foreground: #ffffff;
   --info-soft: #e4edf5;
   --danger-soft: #f7e4df;
-  --border: #e6ddd0;              /* warm sand */
-  --input: #cfc3b2;
-  --ring: #6f4229;
-  --demo-bar: #231a14;
-  --demo-bar-foreground: #faf7f2;
-  --wood-mahogany: #8a4a2b;
+  --border: #dbd0c8;              /* Mocha hairline: rgba(107,74,58,0.22) over Cream */
+  --input: #9d867a;               /* 65% Mocha + Cream — 3.2:1 control outline */
+  --ring: #6b4a3a;                /* Mocha */
+  --demo-bar: #2b1d17;            /* Espresso */
+  --demo-bar-foreground: #faf6f0;
+  --wood-mahogany: #8a4a2b;       /* real timber swatches (product data, not theme) */
   --wood-gmelina: #d9b57e;
   --wood-other: #a68664;
-  --chart-1: #6f4229;
+  --chart-1: #6b4a3a;
   --chart-2: #2d5f8a;
   --chart-3: #2f6b3a;
-  --chart-4: #b8864b;
+  --chart-4: #c48a5a;
   --chart-5: #6a4c7d;
-  --sidebar: #ffffff;
-  --sidebar-foreground: #231a14;
-  --sidebar-primary: #6f4229;
-  --sidebar-primary-foreground: #faf7f2;
-  --sidebar-accent: #efe8dd;
-  --sidebar-accent-foreground: #231a14;
-  --sidebar-border: #e6ddd0;
-  --sidebar-ring: #6f4229;
-  --shadow-color: 35 26 20;
-  --foliage-1: #6f8a52;
-  --foliage-2: #587140;
-  --foliage-3: #45592f;
+  --sidebar: #2b1d17;             /* Espresso navigation anchor */
+  --sidebar-foreground: #faf6f0;
+  --sidebar-primary: #c48a5a;
+  --sidebar-primary-foreground: #2b1d17;
+  --sidebar-accent: #36251e;
+  --sidebar-accent-foreground: #faf6f0;
+  --sidebar-border: #4a3329;
+  --sidebar-ring: #c48a5a;
+  --stage-done: #6b4a3a;          /* Mocha completed nodes */
+  --stage-done-foreground: #faf6f0;
+  --stage-track: #e7d6c1;         /* Latte pending track */
+  --foliage-1: #c48a5a;           /* swaying tree: Caramel / Mocha / Espresso */
+  --foliage-2: #6b4a3a;
+  --foliage-3: #2b1d17;
+  --tree-trunk: #2b1d17;
+  --shadow-surface: 0 12px 32px -8px rgba(43, 29, 23, 0.08), 0 1px 2px rgba(43, 29, 23, 0.04);
+  --shadow-glow: 0 0 0 1px rgba(196, 138, 90, 0.35), 0 8px 24px -6px rgba(196, 138, 90, 0.45);
+  --hero-glow: rgba(196, 138, 90, 0.16);
 }
 
 .dark {
-  --background: #14100d;          /* deep smoked walnut */
-  --foreground: #f5efe6;          /* warm ivory */
-  --card: #1e1814;
-  --card-foreground: #f5efe6;
-  --popover: #1e1814;
-  --popover-foreground: #f5efe6;
-  --primary: #c88a55;             /* warm amber mahogany */
-  --primary-foreground: #14100d;
-  --secondary: #2a221c;           /* dark roast timber */
-  --secondary-foreground: #f5efe6;
-  --muted: #2a221c;
-  --muted-foreground: #c4b6a6;
-  --accent: #c9a06a;
-  --accent-foreground: #14100d;
-  --accent-soft: #2b2117;
+  --background: #2b1d17;          /* Espresso canvas */
+  --foreground: #faf6f0;          /* Cream headlines 15.1:1 */
+  --card: #36251e;                /* elevated Espresso-Mocha card */
+  --card-foreground: #faf6f0;
+  --popover: #36251e;
+  --popover-foreground: #faf6f0;
+  --primary: #c48a5a;             /* Caramel actions */
+  --primary-foreground: #2b1d17;  /* Espresso on Caramel 5.5:1 */
+  --primary-hover: #e7d6c1;       /* Latte (Espresso text 11.5:1) */
+  --secondary: #6b4a3a;           /* Mocha */
+  --secondary-foreground: #faf6f0;
+  --muted: #412d23;               /* 35% Mocha + Espresso */
+  --muted-foreground: #e7d6c1;    /* Latte — secondary text (9.1:1 on muted) */
+  --accent: #e7d6c1;              /* Latte — warm accent */
+  --accent-foreground: #2b1d17;
+  --accent-soft: #473123;         /* 18% Caramel + Espresso */
   --live: #c48a5a;
   --destructive: #e58a78;
-  --destructive-foreground: #14100d;
+  --destructive-foreground: #2b1d17;
   --success: #86c28b;
-  --success-foreground: #14100d;
-  --success-soft: #182619;
+  --success-foreground: #2b1d17;
+  --success-soft: #263222;
   --warning: #e2b462;
-  --warning-foreground: #14100d;
-  --warning-soft: #2c2213;
+  --warning-foreground: #2b1d17;
+  --warning-soft: #3d2d1a;
   --info: #92b9db;
-  --info-foreground: #14100d;
-  --info-soft: #17222d;
-  --danger-soft: #2e1a16;
-  --border: #332922;              /* warm timber borders */
-  --input: #4a3d33;
-  --ring: #c88a55;
-  --demo-bar: #0c0907;
-  --demo-bar-foreground: #f5efe6;
+  --info-foreground: #2b1d17;
+  --info-soft: #24282c;
+  --danger-soft: #3f241d;
+  --border: #4d3e36;              /* Latte hairline: rgba(231,214,193,0.18) over Espresso */
+  --input: #867567;               /* 45% Latte + #36251E — 3.3:1 control outline */
+  --ring: #c48a5a;
+  --demo-bar: #1f1511;            /* Espresso, 25% deeper */
+  --demo-bar-foreground: #faf6f0;
   --wood-mahogany: #a65a35;
   --wood-gmelina: #caa36a;
   --wood-other: #93765a;
-  --chart-1: #c88a55;
+  --chart-1: #c48a5a;
   --chart-2: #92b9db;
   --chart-3: #86c28b;
-  --chart-4: #c9a06a;
+  --chart-4: #e7d6c1;
   --chart-5: #b79ad0;
-  --sidebar: #1e1814;
-  --sidebar-foreground: #f5efe6;
-  --sidebar-primary: #c88a55;
-  --sidebar-primary-foreground: #14100d;
-  --sidebar-accent: #2a221c;
-  --sidebar-accent-foreground: #f5efe6;
-  --sidebar-border: #332922;
-  --sidebar-ring: #c88a55;
-  --shadow-color: 0 0 0;
-  --foliage-1: #7f9a62;
-  --foliage-2: #66804e;
-  --foliage-3: #4d633b;
+  --sidebar: #2b1d17;
+  --sidebar-foreground: #faf6f0;
+  --sidebar-primary: #c48a5a;
+  --sidebar-primary-foreground: #2b1d17;
+  --sidebar-accent: #36251e;
+  --sidebar-accent-foreground: #faf6f0;
+  --sidebar-border: #4d3e36;
+  --sidebar-ring: #c48a5a;
+  --stage-done: #e7d6c1;          /* Latte nodes read on Espresso (Mocha would be 1.9:1) */
+  --stage-done-foreground: #2b1d17;
+  --stage-track: #6b4a3a;         /* Mocha pending track */
+  --foliage-1: #e7d6c1;           /* Latte / Caramel / Mocha over a Caramel glow */
+  --foliage-2: #c48a5a;
+  --foliage-3: #6b4a3a;
+  --tree-trunk: #e7d6c1;
+  --shadow-surface: 0 0 28px rgba(196, 138, 90, 0.14), 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-glow: 0 0 0 1px rgba(196, 138, 90, 0.5), 0 8px 28px -6px rgba(196, 138, 90, 0.5);
+  --hero-glow: rgba(196, 138, 90, 0.22);
 }
 
 @layer base {
@@ -202,8 +234,14 @@
   body { font-size: 16px; line-height: 1.5; font-feature-settings: "ss01", "cv11"; }
   /* numbers that people compare (₱ amounts, cm) never jump around */
   .tabular-nums, [data-num] { font-variant-numeric: tabular-nums; }
-  /* warm, quiet elevation for cards */
-  [data-slot="card"] { box-shadow: 0 1px 2px rgb(var(--shadow-color) / 0.05), 0 4px 16px -8px rgb(var(--shadow-color) / 0.12); }
+  /* warm ambient elevation (light) / soft Caramel rim-glow (dark) — never harsh grey */
+  [data-slot="card"], .jj-surface { box-shadow: var(--shadow-surface); }
+  /* editorial headings: display serif for page / section titles (lining figures so
+     Order IDs and ₱ read evenly); card and dialog titles stay in the sans */
+  h1, h2 { font-family: var(--font-serif); font-weight: 600; letter-spacing: -0.01em; font-variant-numeric: lining-nums; }
+  h3, [data-slot="card-title"] { letter-spacing: -0.01em; }
+  /* crisp 1.5px line icons everywhere (Lucide) */
+  svg.lucide { stroke-width: 1.5; }
   /* honour reduced motion for older phones / accessibility */
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
@@ -218,13 +256,13 @@
 }
 
 /* ---------------------------------------------------------------- swaying tree */
-.jj-tree-trunk { fill: var(--primary); }
+.jj-tree-trunk { fill: var(--tree-trunk); }
 .jj-tree-ground { stroke: var(--border); }
 .jj-tree-leaf-1 { fill: var(--foliage-1); }
 .jj-tree-leaf-2 { fill: var(--foliage-2); }
 .jj-tree-leaf-3 { fill: var(--foliage-3); }
-.jj-tree-vein { stroke: var(--accent); opacity: 0.55; }
-.jj-tree-drift { fill: var(--accent); opacity: 0; }
+.jj-tree-vein { stroke: var(--background); opacity: 0.45; }
+.jj-tree-drift { fill: var(--live); opacity: 0; }
 .jj-tree-canopy {
   transform-box: fill-box;
   transform-origin: bottom center;
@@ -253,8 +291,15 @@
 
 /* ------------------------------------------------------ furniture preview */
 .jj-ground { stroke: var(--border); stroke-width: 1.2; }
-.jj-human { fill: var(--muted-foreground); opacity: 0.28; }
+.jj-human { fill: var(--muted-foreground); opacity: 0.3; }
 .jj-dim line { stroke: var(--muted-foreground); stroke-width: 0.8; }
 .jj-dim text, .jj-dim-text-muted { fill: var(--foreground); font-size: 8.5px; font-weight: 700; font-variant-numeric: tabular-nums; }
 .jj-dim-text-muted { fill: var(--muted-foreground); font-weight: 600; }
 .jj-arrow-head { fill: var(--muted-foreground); }
+
+/* ------------------------------------------------------- hero ambience */
+.jj-hero-glow { background: radial-gradient(closest-side, var(--hero-glow), transparent 70%); }
+/* stage tracker: active node pulse ring (stops under reduced motion) */
+/* box-shadow (not transform) so the ring never enlarges layout boxes / causes sideways scroll */
+@keyframes jj-pulse-ring { 0% { box-shadow: 0 0 0 0 rgba(196, 138, 90, 0.55); } 80%, 100% { box-shadow: 0 0 0 10px rgba(196, 138, 90, 0); } }
+.jj-pulse-ring { animation: jj-pulse-ring 2.2s cubic-bezier(0.2, 0.6, 0.3, 1) infinite; }

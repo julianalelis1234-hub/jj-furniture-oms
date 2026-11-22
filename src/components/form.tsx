@@ -40,7 +40,7 @@ export function Field({
 }
 
 const control =
-  "h-11 w-full rounded-lg border border-input bg-card px-3 text-base text-foreground outline-none focus-visible:ring-3 focus-visible:ring-ring/40 aria-invalid:border-destructive disabled:opacity-60";
+  "h-11 w-full rounded-xl border border-input bg-background px-3 text-base text-foreground outline-none transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/25 aria-invalid:border-destructive disabled:opacity-60";
 
 export function TextInput({ invalid, className, ...props }: ComponentProps<"input"> & { invalid?: boolean }) {
   return <input aria-invalid={invalid || undefined} className={cn(control, className)} {...props} />;

@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { switchDemoPersona } from "@/app/actions";
 import { DemoBar } from "@/components/demo-bar";
 import { DesignNote } from "@/components/design-note";
+import { Eyebrow, IconBadge } from "@/components/eyebrow";
 import { Logo } from "@/components/app-shell";
 import { LinkButton } from "@/components/link-button";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -26,25 +27,25 @@ export default async function Home() {
   return (
     <div className="flex min-h-dvh flex-col">
       {demo && <DemoBar current={actor?.role ?? null} />}
-      <header className="border-b bg-card">
+      <header className="dark border-b border-border bg-background text-foreground">
         <div className="mx-auto flex max-w-5xl items-center gap-3 px-4 py-3">
           <Logo />
           <div className="ml-auto"><ThemeToggle /></div>
         </div>
       </header>
       <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-8">
-        <div className="flex items-end gap-4 sm:gap-6">
-          <div className="min-w-0 flex-1">
-            <p className="text-xs font-semibold tracking-[0.18em] text-primary uppercase">Custom Mahogany &amp; Gmelina furniture</p>
-            <h1 className="mt-1 text-3xl font-extrabold tracking-tight text-balance sm:text-4xl">Order Monitoring System</h1>
-            <p className="mt-2 max-w-2xl text-base text-muted-foreground sm:text-lg">
-              Paper slips at the counter, one shared live record for the owner, store, workshop, drivers and customers. Works in any phone browser. Nothing to install.
-            </p>
-          </div>
-          <SwayingTree className="mb-1" />
-        </div>
-
-        <LinkButton href="/about" className="mt-4">About this project</LinkButton>
+        <section className="relative isolate flex flex-col items-center text-center" aria-labelledby="hero-title">
+          <div className="jj-hero-glow absolute top-0 left-1/2 -z-10 size-[22rem] -translate-x-1/2 sm:size-[28rem]" aria-hidden />
+          <Eyebrow>Custom handcrafted furniture • Valencia City</Eyebrow>
+          <SwayingTree className="mt-5 h-36 w-32 sm:h-44 sm:w-40" />
+          <p className="mt-2 font-serif text-lg tracking-[0.28em] text-muted-foreground lowercase italic sm:text-xl">modern • warm • luxurious</p>
+          <p className="mt-4 font-serif text-2xl font-semibold sm:text-3xl">JJ Furniture Shop and Enterprises</p>
+          <h1 id="hero-title" className="mt-1 text-4xl font-semibold text-balance sm:text-5xl">Order Monitoring System</h1>
+          <p className="mt-3 max-w-2xl text-base text-muted-foreground sm:text-lg">
+            Paper slips at the counter, one shared live record for the owner, store, workshop, drivers and customers. Works in any phone browser. Nothing to install.
+          </p>
+          <LinkButton href="/about" variant="outline" className="mt-5">About this project</LinkButton>
+        </section>
 
         {actor && (
           <div className="mt-6 flex flex-wrap items-center gap-3 rounded-xl border bg-card p-4">
@@ -54,8 +55,8 @@ export default async function Home() {
         )}
 
         <div className="mt-6 grid gap-3 sm:grid-cols-2">
-          <Link href="/customer/login" className="group flex items-start gap-4 rounded-2xl border-2 border-primary bg-card p-5 hover:bg-accent-soft sm:col-span-2">
-            <span className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground"><PackageSearch /></span>
+          <Link href="/customer/login" className="jj-surface group flex items-start gap-4 rounded-2xl border border-live bg-card p-5 transition-shadow hover:shadow-(--shadow-glow) sm:col-span-2">
+            <IconBadge className="size-12"><PackageSearch /></IconBadge>
             <span>
               <span className="block text-lg font-bold">Customers: log in to track your orders <span className="text-xs font-normal text-muted-foreground">CU-01</span></span>
               <span className="text-muted-foreground">Log in with your email and password — or customize a piece and request a quote.</span>
@@ -68,9 +69,9 @@ export default async function Home() {
               const info = ROLE_INFO[role];
               const people = SEED_PROFILES.filter((p) => p.role === role);
               return (
-                <div key={role} className="rounded-2xl border bg-card p-5">
+                <div key={role} className="jj-surface rounded-2xl border bg-card p-5">
                   <div className="flex items-center gap-3">
-                    <span className="flex size-10 items-center justify-center rounded-lg bg-secondary [&_svg]:size-5">{info.icon}</span>
+                    <IconBadge>{info.icon}</IconBadge>
                     <div>
                       <p className="font-bold">{info.title} <span className="text-xs font-normal text-muted-foreground">{info.code}</span></p>
                       <p className="text-sm text-muted-foreground">{info.blurb}</p>
@@ -79,7 +80,7 @@ export default async function Home() {
                   <div className="mt-3 flex flex-wrap gap-2">
                     {people.map((p) => (
                       <form key={p.id} action={switchDemoPersona.bind(null, p.id)}>
-                        <button type="submit" className="h-11 rounded-lg border px-3 text-sm font-semibold hover:border-primary hover:bg-accent-soft">
+                        <button type="submit" className="h-11 rounded-full border border-primary/60 bg-background px-4 text-sm font-semibold text-primary transition-colors hover:border-primary hover:bg-accent-soft">
                           Enter as {p.full_name}
                         </button>
                       </form>
@@ -90,7 +91,7 @@ export default async function Home() {
             })
           ) : (
             <Link href="/login" className="flex items-start gap-4 rounded-2xl border bg-card p-5 hover:bg-accent-soft sm:col-span-2">
-              <span className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-secondary"><ShieldCheck /></span>
+              <IconBadge className="size-12"><ShieldCheck /></IconBadge>
               <span>
                 <span className="block text-lg font-bold">Shop staff sign in</span>
                 <span className="text-muted-foreground">Owner, store assistants, craftsmen and drivers.</span>

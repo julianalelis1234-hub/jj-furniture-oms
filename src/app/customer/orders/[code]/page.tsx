@@ -86,9 +86,10 @@ export default async function CustomerOrderDetail({ params }: { params: Promise<
             </CardContent>
           </Card>
         )}
-        <Card data-testid="payment-summary">
-          <CardHeader><CardTitle>Payment summary</CardTitle></CardHeader>
-          <CardContent>
+        {/* two-tone ledger: Latte header, Cream body, Espresso figures */}
+        <Card data-testid="payment-summary" className="gap-0 py-0">
+          <CardHeader className="border-b bg-secondary py-3"><CardTitle>Payment summary</CardTitle></CardHeader>
+          <CardContent className="bg-background py-4">
             {p.furniture_price == null ? <p className="text-sm text-muted-foreground">No price yet — your quotation will be emailed to you.</p> : (
               <dl className="grid gap-1 text-sm">
                 <div className="flex justify-between"><dt>Furniture price</dt><dd className="font-semibold tabular-nums">{formatPeso(p.furniture_price)}</dd></div>

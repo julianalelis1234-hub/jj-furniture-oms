@@ -28,10 +28,10 @@ export function LoginForm({ demoName }: { demoName?: string }) {
         <TextInput id="password" name="password" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} />
       </Field>
       {shown && !shown.ok && <p role="alert" className="text-sm font-medium text-destructive" data-testid="login-error">{shown.message}</p>}
-      <Button type="submit" size="xl" disabled={pending || demoPending}>{pending ? <Loader2 className="animate-spin" aria-hidden /> : <LogIn aria-hidden />} Log in</Button>
+      <Button type="submit" size="xl" className="w-full rounded-full" disabled={pending || demoPending}>{pending ? <Loader2 className="animate-spin" aria-hidden /> : <LogIn aria-hidden />} Log In to Track My Orders</Button>
       <Link href="/customer/forgot-password" className="text-center text-sm text-primary underline">Forgot Password?</Link>
       {demoName && (
-        <Button type="button" variant="outline" size="xl" className="h-auto min-h-12 border-dashed py-2 whitespace-normal" disabled={pending || demoPending}
+        <Button type="button" variant="outline" size="xl" className="h-auto min-h-12 w-full rounded-full border-dashed py-2 whitespace-normal" disabled={pending || demoPending}
           data-testid="demo-customer-login"
           onClick={() => startDemo(async () => { setDemoState((await demoCustomerLoginAction()) ?? null); })}>
           {demoPending ? <Loader2 className="animate-spin" aria-hidden /> : <FlaskConical aria-hidden />} Demo Customer Login ({demoName})

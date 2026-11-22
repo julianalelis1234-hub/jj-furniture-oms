@@ -61,7 +61,7 @@ export default async function StaffPage() {
         </TabsList>
 
         <TabsContent value="today">
-          <div className="grid gap-x-6 lg:grid-cols-2">
+          <div className="grid grid-cols-1 gap-x-6 lg:grid-cols-2">
             <Section title="Customer quote requests (Option 2)" count={t.quoteRequests.length}>
               {t.quoteRequests.length === 0 ? <EmptyState title="No new design requests from the portal" /> : (
                 <ul className="grid gap-2">

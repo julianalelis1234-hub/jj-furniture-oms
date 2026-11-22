@@ -3,6 +3,7 @@
 import { ContactShadows, Edges, Line, OrbitControls } from "@react-three/drei";
 import { Canvas, useFrame } from "@react-three/fiber";
 import { Pause, Play, RotateCcw } from "lucide-react";
+import { useTheme } from "next-themes";
 import { useEffect, useMemo, useRef, useState, type ComponentRef, type ReactNode } from "react";
 import * as THREE from "three";
 import { buildFurnitureParts, HUMAN_HEIGHT_CM, type MatKey, type Part } from "@/lib/domain/furniture3d";
@@ -15,7 +16,12 @@ export const PREVIEW_3D_DISCLAIMER = "Illustrative 3D Preview — Reference Aid 
 /** 0.25 rad/s. OrbitControls' autoRotateSpeed 2.0 = one turn per 30 s (2π/30 rad/s). */
 const AUTO_ROTATE_SPEED = (0.25 * 30) / Math.PI;
 const RESUME_AFTER_MS = 2500;
-const BRASS = "#B8864B";
+const BRASS = "#B8864B"; // physical brass hardware (product material, not theme)
+/** Theme Caramel #C48A5A: studio rim light, turntable rings and dimension guides. */
+const CARAMEL = "#C48A5A";
+/** Theme Mocha #6B4A3A: the muted 165 cm scale figure. */
+const MOCHA = "#6B4A3A";
+const LATTE = "#E7D6C1";
 type OrbitControlsImpl = ComponentRef<typeof OrbitControls>;
 
 export interface Furniture3DSpec {
@@ -155,7 +161,7 @@ function useMaterials(wood: WoodType, finish: string): Record<MatKey, THREE.Mate
 // ---------------------------------------------------------------- meshes ----
 function PartMesh({ part, mats }: { part: Part; mats: Record<MatKey, THREE.Material> }) {
   const edges = (part.mat === "wood" || part.mat === "woodDeep" || part.mat === "glass");
-  const rim = edges ? <Edges threshold={25} color={BRASS} transparent opacity={0.55} /> : null;
+  const rim = edges ? <Edges threshold={25} color={CARAMEL} transparent opacity={0.55} /> : null;
   if (part.shape === "box") {
     const size = part.max.map((v, i) => v - part.min[i]) as [number, number, number];
     const pos = part.max.map((v, i) => (v + part.min[i]) / 2) as [number, number, number];
@@ -184,8 +190,8 @@ function PartMesh({ part, mats }: { part: Part; mats: Record<MatKey, THREE.Mater
 }
 
 /** 165 cm semi-transparent architectural figure — a separate object, never part of the furniture bounds. */
-function HumanReference({ x }: { x: number }) {
-  const mat = useMemo(() => new THREE.MeshStandardMaterial({ color: "#9b8f84", transparent: true, opacity: 0.38, roughness: 0.9, depthWrite: false }), []);
+function HumanReference({ x, color }: { x: number; color: string }) {
+  const mat = useMemo(() => new THREE.MeshStandardMaterial({ color, transparent: true, opacity: 0.32, roughness: 0.9, depthWrite: false }), [color]);
   useEffect(() => () => mat.dispose(), [mat]);
   const H = HUMAN_HEIGHT_CM / 100; // 1.65 units
   const headR = 0.105;
@@ -210,12 +216,12 @@ function Turntable({ radius }: { radius: number }) {
     <group rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.002, 0]}>
       <mesh>
         <circleGeometry args={[radius * 1.18, 64]} />
-        <meshBasicMaterial color={BRASS} transparent opacity={0.05} depthWrite={false} />
+        <meshBasicMaterial color={CARAMEL} transparent opacity={0.06} depthWrite={false} />
       </mesh>
       {[1, 1.09, 1.18].map((k, i) => (
         <mesh key={k}>
           <ringGeometry args={[radius * k - 0.004, radius * k, 96]} />
-          <meshBasicMaterial color={BRASS} transparent opacity={0.45 - i * 0.12} depthWrite={false} />
+          <meshBasicMaterial color={CARAMEL} transparent opacity={0.45 - i * 0.12} depthWrite={false} />
         </mesh>
       ))}
     </group>
@@ -276,8 +282,8 @@ function LabelProjector({ anchors, els }: { anchors: ReturnType<typeof labelAnch
   return null;
 }
 
-function Scene({ spec, autoRotate, onStart, onEnd, controlsRef, labelEls }: {
-  spec: Furniture3DSpec; autoRotate: boolean; onStart: () => void; onEnd: () => void; controlsRef: React.RefObject<OrbitControlsImpl | null>;
+function Scene({ spec, autoRotate, onStart, onEnd, controlsRef, labelEls, humanColor }: {
+  spec: Furniture3DSpec; autoRotate: boolean; humanColor: string; onStart: () => void; onEnd: () => void; controlsRef: React.RefObject<OrbitControlsImpl | null>;
   labelEls: React.RefObject<Record<string, HTMLSpanElement | null>>;
 }) {
   const mats = useMaterials(spec.wood_type, spec.color_finish);
@@ -289,20 +295,20 @@ function Scene({ spec, autoRotate, onStart, onEnd, controlsRef, labelEls }: {
   const frame = sceneFrame(spec);
   return (
     <>
-      <hemisphereLight args={["#fff7ea", "#6b5646", 0.9]} />
+      <hemisphereLight args={["#FAF6F0", "#6B4A3A", 0.9]} />
       <directionalLight position={[3, 5, 4]} intensity={1.6} castShadow shadow-mapSize={[1024, 1024]} />
-      <directionalLight position={[-4, 3, -2]} intensity={0.5} color="#ffe2bf" />
+      <directionalLight position={[-4, 3, -2]} intensity={0.5} color="#E7D6C1" />
       <Turntable radius={radius} />
       {/* the furniture alone: exact W × H × D (1 unit = 100 cm) */}
       {/* keyed by design + size: edge outlines are rebuilt for the new geometry instead of lingering */}
       <group key={`${spec.furniture_category}|${spec.design_variant}|${spec.width_cm}|${spec.height_cm}|${spec.depth_cm}`} scale={0.01} name="furniture">
         {parts.map((p, i) => <PartMesh key={i} part={p} mats={mats} />)}
       </group>
-      <HumanReference x={humanX} />
+      <HumanReference x={humanX} color={humanColor} />
       {/* W × H × D dimension lines with the entered values */}
-      <Line points={[[-W / 2, 0.003, D / 2 + off], [W / 2, 0.003, D / 2 + off]]} color={BRASS} lineWidth={1.2} />
-      <Line points={[[W / 2 + off, 0, D / 2], [W / 2 + off, H, D / 2]]} color={BRASS} lineWidth={1.2} />
-      <Line points={[[W / 2 + off, 0.003, -D / 2], [W / 2 + off, 0.003, D / 2]]} color={BRASS} lineWidth={1.2} />
+      <Line points={[[-W / 2, 0.003, D / 2 + off], [W / 2, 0.003, D / 2 + off]]} color={CARAMEL} lineWidth={1.2} />
+      <Line points={[[W / 2 + off, 0, D / 2], [W / 2 + off, H, D / 2]]} color={CARAMEL} lineWidth={1.2} />
+      <Line points={[[W / 2 + off, 0.003, -D / 2], [W / 2 + off, 0.003, D / 2]]} color={CARAMEL} lineWidth={1.2} />
       <LabelProjector anchors={labels} els={labelEls} />
       <ContactShadows position={[0, 0.001, 0]} scale={radius * 3} blur={2.4} opacity={0.35} far={Math.max(H, 1.65) + 0.2} />
       <OrbitControls
@@ -343,6 +349,9 @@ export default function Furniture3DPreview({ spec, className, footer, warning }:
   const resume = useRef<ReturnType<typeof setTimeout> | null>(null);
   const controls = useRef<OrbitControlsImpl | null>(null);
   const labelEls = useRef<Record<string, HTMLSpanElement | null>>({});
+  // muted scale figure: Mocha on the Latte stage (light), Latte on the Mocha stage (dark)
+  const { resolvedTheme } = useTheme();
+  const humanColor = resolvedTheme === "dark" ? LATTE : MOCHA;
   useEffect(() => () => { if (resume.current) clearTimeout(resume.current); }, []);
 
   const W = spec.width_cm / 100, H = spec.height_cm / 100, D = spec.depth_cm / 100;
@@ -360,12 +369,12 @@ export default function Furniture3DPreview({ spec, className, footer, warning }:
   };
 
   return (
-    <figure className={cn("overflow-hidden rounded-xl border bg-card", className)} aria-label="Interactive 3D furniture preview" data-testid="preview-3d">
-      <figcaption className="border-b bg-secondary/60 px-3 py-2 text-[0.7rem] leading-snug font-semibold text-muted-foreground">
+    <figure className={cn("jj-surface overflow-hidden rounded-2xl border border-live bg-secondary", className)} aria-label="Interactive 3D furniture preview" data-testid="preview-3d">
+      <figcaption className="border-b border-live/40 bg-background/70 px-3 py-2 text-[0.7rem] leading-snug font-semibold text-muted-foreground">
         {PREVIEW_3D_DISCLAIMER}
       </figcaption>
       {warning}
-      <div className="relative aspect-[340/250] w-full touch-none bg-gradient-to-b from-card to-secondary/40">
+      <div className="relative aspect-[340/250] w-full touch-none bg-[radial-gradient(ellipse_at_50%_35%,var(--background)_0%,var(--secondary)_75%)]">
         <Canvas
           shadows
           dpr={[1, 2]}
@@ -375,6 +384,7 @@ export default function Furniture3DPreview({ spec, className, footer, warning }:
         >
           <Scene
             spec={spec}
+            humanColor={humanColor}
             labelEls={labelEls}
             controlsRef={controls}
             autoRotate={spinOn && !dragging}
@@ -390,24 +400,24 @@ export default function Furniture3DPreview({ spec, className, footer, warning }:
               data-testid={`dim-${l.id}`}
               className={cn(
                 "absolute top-0 left-0 rounded px-1.5 py-0.5 text-[10px] whitespace-nowrap tabular-nums opacity-0",
-                l.id === "human" ? "bg-card/80 text-muted-foreground" : "border border-[#B8864B]/60 bg-card/90 font-bold text-foreground shadow-sm",
+                l.id === "human" ? "bg-background/80 text-muted-foreground" : "border border-live bg-background/90 font-bold text-foreground shadow-sm",
               )}
             >
               {l.text}
             </span>
           ))}
         </div>
-        <span className="pointer-events-none absolute top-2 left-2 rounded-full border bg-card/90 px-2 py-0.5 text-[0.7rem] font-bold">
+        <span className="pointer-events-none absolute top-2 left-2 rounded-full border border-live bg-background/90 px-2.5 py-0.5 text-[0.7rem] font-bold">
           {spec.wood_type} <span className="font-normal text-muted-foreground">· {spec.color_finish}</span>
         </span>
       </div>
-      <div className="flex flex-wrap items-center gap-1.5 border-t px-2 py-1.5">
+      <div className="flex flex-wrap items-center gap-1.5 border-t border-live/40 bg-background/70 px-2 py-1.5">
         <button type="button" onClick={() => setSpinOn((s) => !s)} aria-pressed={spinOn} data-testid="spin-toggle"
-          className="flex h-9 items-center gap-1 rounded-md border px-2.5 text-xs font-semibold hover:border-primary/50">
+          className="flex h-9 items-center gap-1 rounded-full border border-primary/50 bg-background px-3 text-xs font-semibold text-primary hover:border-primary hover:bg-accent-soft">
           {spinOn ? <Pause className="size-3.5" aria-hidden /> : <Play className="size-3.5" aria-hidden />}
           {spinOn ? "Pause Spin" : "3D Spin"}
         </button>
-        <button type="button" onClick={reset} className="flex h-9 items-center gap-1 rounded-md border px-2.5 text-xs font-semibold hover:border-primary/50">
+        <button type="button" onClick={reset} className="flex h-9 items-center gap-1 rounded-full border border-primary/50 bg-background px-3 text-xs font-semibold text-primary hover:border-primary hover:bg-accent-soft">
           <RotateCcw className="size-3.5" aria-hidden /> Reset View
         </button>
         <span className="ml-auto text-[0.7rem] text-muted-foreground">Drag to turn · pinch / scroll to zoom</span>
