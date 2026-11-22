@@ -1,0 +1,23 @@
+{
+  "name": "s8-customer",
+  "scale": 1,
+  "duration": 9.384,
+  "viewport": {
+    "width": 1920,
+    "height": 1080
+  },
+  "frames": 3,
+  "events": [
+    {
+      "t": 0.081,
+      "type": "focus",
+      "label": "delivered",
+      "box": {
+        "x": 448,
+        "y": 257,
+        "width": 1024,
+        "height": 224.796875
+      }
+    }
+  ]
+}

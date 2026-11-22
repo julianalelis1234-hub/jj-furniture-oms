@@ -1,0 +1,96 @@
+{
+  "name": "s4-staff",
+  "scale": 1,
+  "duration": 63.027,
+  "viewport": {
+    "width": 1920,
+    "height": 1080
+  },
+  "frames": 168,
+  "events": [
+    {
+      "t": 0.077,
+      "type": "focus",
+      "label": "kpis",
+      "box": {
+        "x": 400,
+        "y": 273,
+        "width": 1120,
+        "height": 114
+      }
+    },
+    {
+      "t": 7.906,
+      "type": "arrived"
+    },
+    {
+      "t": 34.644,
+      "type": "focus",
+      "label": "newrow",
+      "box": {
+        "x": 401,
+        "y": 556.5,
+        "width": 1118,
+        "height": 78.703125
+      }
+    },
+    {
+      "t": 41.06,
+      "type": "click",
+      "x": 960,
+      "y": 595.8515625,
+      "label": "row"
+    },
+    {
+      "t": 41.483,
+      "type": "drawer"
+    },
+    {
+      "t": 45.46,
+      "type": "click",
+      "x": 1440.5,
+      "y": 401
+    },
+    {
+      "t": 49.017,
+      "type": "click",
+      "x": 1085.4921875,
+      "y": 322
+    },
+    {
+      "t": 50.574,
+      "type": "focus",
+      "label": "quote-dialog",
+      "box": {
+        "x": 448,
+        "y": 43.203125,
+        "width": 1024,
+        "height": 993.59375
+      }
+    },
+    {
+      "t": 51.889,
+      "type": "click",
+      "x": 625.328125,
+      "y": 797.203125
+    },
+    {
+      "t": 54.381,
+      "type": "click",
+      "x": 1294.65625,
+      "y": 786.203125
+    },
+    {
+      "t": 57.528,
+      "type": "click",
+      "x": 1386.6328125,
+      "y": 999.203125,
+      "label": "send"
+    },
+    {
+      "t": 58.185,
+      "type": "chime",
+      "label": "quote-sent"
+    }
+  ]
+}

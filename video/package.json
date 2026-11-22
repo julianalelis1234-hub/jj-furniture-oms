@@ -1,0 +1,43 @@
+{
+  "name": "jj-furniture-pitch-video",
+  "version": "1.0.0",
+  "description": "JJ Furniture Management System — 3:30 pitch demo (Remotion + Playwright captures of the real app)",
+  "repository": {},
+  "license": "UNLICENSED",
+  "engines": {
+    "node": "^20.19.0 || ^22.13.0 || >=24"
+  },
+  "private": true,
+  "dependencies": {
+    "@remotion/cli": "4.0.545",
+    "@remotion/fonts": "4.0.545",
+    "@remotion/media": "4.0.545",
+    "@remotion/media-utils": "4.0.545",
+    "@remotion/transitions": "4.0.545",
+    "lucide-react": "0.511.0",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "remotion": "4.0.545"
+  },
+  "devDependencies": {
+    "@remotion/eslint-config-flat": "4.0.545",
+    "@types/react": "19.3.0",
+    "@types/web": "0.0.166",
+    "eslint": "10.12.0",
+    "prettier": "3.8.1",
+    "typescript": "5.9.3"
+  },
+  "scripts": {
+    "dev": "remotion studio",
+    "build": "remotion bundle",
+    "upgrade": "remotion upgrade",
+    "lint": "tsc",
+    "capture": "node capture/capture-all.mjs",
+    "audio": "python3 -I scripts/make-audio.py",
+    "vo": "node scripts/generate-vo.mjs && node scripts/vo-manifest.mjs",
+    "render": "remotion render PitchVideo out/jj-furniture-pitch-demo.mp4 --codec h264 --audio-codec aac --crf 18 --x264-preset medium --browser-executable=${REMOTION_BROWSER:-/opt/pw-browsers/chromium_headless_shell-1243/chrome-headless-shell-linux64/chrome-headless-shell}"
+  },
+  "allowScripts": {
+    "esbuild": false
+  }
+}

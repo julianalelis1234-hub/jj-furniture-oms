@@ -1,0 +1,82 @@
+{
+  "name": "s6-gate",
+  "scale": 1,
+  "duration": 20.969,
+  "viewport": {
+    "width": 1920,
+    "height": 1080
+  },
+  "frames": 196,
+  "events": [
+    {
+      "t": 1.751,
+      "type": "click",
+      "x": 1376,
+      "y": 481
+    },
+    {
+      "t": 3.806,
+      "type": "click",
+      "x": 960,
+      "y": 636.75,
+      "label": "row"
+    },
+    {
+      "t": 5.399,
+      "type": "click",
+      "x": 1742.8359375,
+      "y": 401
+    },
+    {
+      "t": 6.168,
+      "type": "focus",
+      "label": "gate-before",
+      "box": {
+        "x": 985,
+        "y": 445,
+        "width": 911,
+        "height": 474
+      }
+    },
+    {
+      "t": 9.173,
+      "type": "click",
+      "x": 1291.7265625,
+      "y": 322
+    },
+    {
+      "t": 11.003,
+      "type": "focus",
+      "label": "payment-dialog",
+      "box": {
+        "x": 736,
+        "y": 274.5,
+        "width": 448,
+        "height": 531
+      }
+    },
+    {
+      "t": 13.524,
+      "type": "click",
+      "x": 1102.34375,
+      "y": 767.5,
+      "label": "save-payment"
+    },
+    {
+      "t": 15.634,
+      "type": "chime",
+      "label": "gate-met"
+    },
+    {
+      "t": 15.667,
+      "type": "focus",
+      "label": "gate-after",
+      "box": {
+        "x": 985,
+        "y": 445,
+        "width": 911,
+        "height": 474
+      }
+    }
+  ]
+}

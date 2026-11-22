@@ -1,0 +1,70 @@
+{
+  "name": "s8-driver",
+  "scale": 2,
+  "duration": 15.512,
+  "viewport": {
+    "width": 390,
+    "height": 844
+  },
+  "frames": 94,
+  "events": [
+    {
+      "t": 0.071,
+      "type": "focus",
+      "label": "trip",
+      "box": {
+        "x": 16,
+        "y": 303,
+        "width": 358,
+        "height": 476
+      }
+    },
+    {
+      "t": 2.602,
+      "type": "click",
+      "x": 195,
+      "y": 681,
+      "label": "start-trip"
+    },
+    {
+      "t": 4.649,
+      "type": "chime",
+      "label": "out-for-delivery"
+    },
+    {
+      "t": 6.762,
+      "type": "click",
+      "x": 195,
+      "y": 668
+    },
+    {
+      "t": 9.414,
+      "type": "click",
+      "x": 195,
+      "y": 590.5,
+      "label": "delivered"
+    },
+    {
+      "t": 9.933,
+      "type": "chime",
+      "label": "delivered"
+    },
+    {
+      "t": 12.19,
+      "type": "click",
+      "x": 315.65625,
+      "y": 549
+    },
+    {
+      "t": 12.624,
+      "type": "focus",
+      "label": "done-card",
+      "box": {
+        "x": 16,
+        "y": 476,
+        "width": 358,
+        "height": 368
+      }
+    }
+  ]
+}

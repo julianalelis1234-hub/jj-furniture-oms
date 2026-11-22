@@ -1,0 +1,145 @@
+{
+  "name": "s5-accept",
+  "scale": 1,
+  "duration": 38.972,
+  "viewport": {
+    "width": 1920,
+    "height": 1080
+  },
+  "frames": 957,
+  "events": [
+    {
+      "t": 0.081,
+      "type": "focus",
+      "label": "quote-email",
+      "box": {
+        "x": 576,
+        "y": 463,
+        "width": 768,
+        "height": 326
+      }
+    },
+    {
+      "t": 3.518,
+      "type": "click",
+      "x": 646.2421875,
+      "y": 721.5,
+      "label": "review-link"
+    },
+    {
+      "t": 6.082,
+      "type": "click",
+      "x": 960,
+      "y": 394
+    },
+    {
+      "t": 11.265,
+      "type": "click",
+      "x": 960,
+      "y": 953
+    },
+    {
+      "t": 14.027,
+      "type": "click",
+      "x": 771.5,
+      "y": 508.5
+    },
+    {
+      "t": 15.78,
+      "type": "click",
+      "x": 771.5546875,
+      "y": 590.5
+    },
+    {
+      "t": 17.465,
+      "type": "click",
+      "x": 1070.7265625,
+      "y": 686.5,
+      "label": "accept"
+    },
+    {
+      "t": 18.09,
+      "type": "chime",
+      "label": "accepted"
+    },
+    {
+      "t": 18.202,
+      "type": "focus",
+      "label": "accepted",
+      "box": {
+        "x": 448,
+        "y": 380,
+        "width": 1024,
+        "height": 250
+      }
+    },
+    {
+      "t": 21.394,
+      "type": "flip"
+    },
+    {
+      "t": 22.61,
+      "type": "focus",
+      "label": "setup-email",
+      "box": {
+        "x": 576,
+        "y": 377,
+        "width": 768,
+        "height": 326
+      }
+    },
+    {
+      "t": 25.56,
+      "type": "click",
+      "x": 646.2421875,
+      "y": 635.5,
+      "label": "setup-link"
+    },
+    {
+      "t": 27.027,
+      "type": "focus",
+      "label": "password-form",
+      "box": {
+        "x": 793,
+        "y": 345.65625,
+        "width": 334,
+        "height": 324
+      }
+    },
+    {
+      "t": 27.95,
+      "type": "click",
+      "x": 960,
+      "y": 393.65625
+    },
+    {
+      "t": 31.083,
+      "type": "click",
+      "x": 960,
+      "y": 535.65625
+    },
+    {
+      "t": 34.177,
+      "type": "click",
+      "x": 960,
+      "y": 597.65625,
+      "label": "save"
+    },
+    {
+      "t": 34.599,
+      "type": "chime",
+      "label": "confirmed"
+    },
+    {
+      "t": 34.669,
+      "type": "focus",
+      "label": "orders",
+      "box": {
+        "x": 448,
+        "y": 309,
+        "width": 1024,
+        "height": 224.796875
+      }
+    }
+  ]
+}
