@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getActor, getStore } from "@/lib/server/context";
+import { withActorRole } from "@/lib/realtime/actor-context";
 import { applyDriverAction } from "@/lib/services/deliveries";
 
 const actionSchema = z.object({
@@ -26,7 +27,7 @@ export async function POST(req: Request) {
   const parsed = actionSchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Invalid action payload" }, { status: 400 });
   try {
-    const result = await applyDriverAction(await getStore(), actor, parsed.data);
+    const result = await withActorRole("driver", async () => applyDriverAction(await getStore(), actor, parsed.data));
     return NextResponse.json(result, { status: result.status === "conflict" ? 409 : 200 });
   } catch (e) {
     console.error("[driver-sync]", e);

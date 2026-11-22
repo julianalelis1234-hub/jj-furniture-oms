@@ -2,6 +2,7 @@ import { ChevronRight, Sofa } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AppShell, EmptyState } from "@/components/app-shell";
+import { LiveSync } from "@/components/live-sync";
 import { StageTracker, StatusBadge } from "@/components/status";
 import { formatDate } from "@/lib/domain/dates";
 import { formatPeso } from "@/lib/domain/finance";
@@ -19,7 +20,7 @@ export default async function CustomerOrdersPage({ searchParams }: { searchParam
   const welcome = (await searchParams).welcome === "1";
   const orders = await customerDashboard(await getCustomerStore(), customer.id);
   return (
-    <AppShell portal="customer" actor={null} headerExtra={<CustomerLogoutButton />}>
+    <AppShell portal="customer" actor={null} headerExtra={<CustomerLogoutButton />} live={<LiveSync />}>
       <div className="mx-auto grid max-w-5xl gap-4">
         <div>
           <p className="text-sm text-muted-foreground">Signed in as {customer.email}</p>

@@ -1,4 +1,5 @@
 import { AppShell, PageTitle } from "@/components/app-shell";
+import { LiveSync } from "@/components/live-sync";
 import { DesignNote } from "@/components/design-note";
 import { getStore, requireActor } from "@/lib/server/context";
 import { WorkshopBoard } from "./workshop-board";
@@ -21,7 +22,7 @@ export default async function CraftsmanPage() {
   jobs.sort((a, b) => a.priority_rank - b.priority_rank || (a.estimated_completion_date ?? "").localeCompare(b.estimated_completion_date ?? ""));
 
   return (
-    <AppShell portal="craftsman" actor={actor}>
+    <AppShell portal="craftsman" actor={actor} live={<LiveSync />}>
       <PageTitle title="Workshop jobs" description="Sorted by the owner's priority. Tap a button when you start or finish." />
       <DesignNote className="mb-4">
         Large cards and three verbs only (Start, Ready, Ask). Prices and customer contact details are never sent to this screen; the database view itself has no money columns.

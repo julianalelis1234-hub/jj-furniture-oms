@@ -35,3 +35,11 @@ begin
 end; $$;
 grant usage on schema tests to public;
 grant execute on function tests.accept(uuid, int, text, text, uuid, text) to public;
+
+-- Supabase creates this publication for Realtime; emulate it so migrations that
+-- add tables to it can be verified (local Postgres has no Realtime server).
+do $$ begin
+  if not exists (select 1 from pg_publication where pubname = 'supabase_realtime') then
+    create publication supabase_realtime;
+  end if;
+end $$;

@@ -1,6 +1,7 @@
 import { ArrowLeft } from "lucide-react";
 import { notFound, redirect } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
+import { LiveSync } from "@/components/live-sync";
 import { LinkButton } from "@/components/link-button";
 import { FurniturePreviewSlot } from "@/components/orders/preview-slot";
 import { StageTracker } from "@/components/status";
@@ -32,7 +33,7 @@ export default async function CustomerOrderDetail({ params }: { params: Promise<
   // the approved revision when there is one; otherwise the latest quotation
   const spec = (v.approved_revision_number && v.quote?.revision_number === v.approved_revision_number ? v.quote : v.quote ?? v.current)!;
   return (
-    <AppShell portal="customer" actor={null} headerExtra={<CustomerLogoutButton />}>
+    <AppShell portal="customer" actor={null} headerExtra={<CustomerLogoutButton />} live={<LiveSync orderIds={[data.order.id]} />}>
       <div className="mx-auto grid max-w-5xl gap-4">
         <LinkButton href="/customer/orders" variant="ghost" className="-ml-2 w-fit"><ArrowLeft aria-hidden /> My orders</LinkButton>
         <div>

@@ -1,6 +1,7 @@
 import "server-only";
 import type { PostgrestError, SupabaseClient } from "@supabase/supabase-js";
 import { DomainError, fromPostgresMessage } from "@/lib/domain/errors";
+import { LIVE_EVENT_COLUMNS, type LiveEvent } from "@/lib/realtime/events";
 import type {
   ConsumeReviewResult,
   CustomerAccount,
@@ -105,6 +106,20 @@ export class SupabaseStore implements DataStore {
     if (error) fail(error);
     return data ? normOrder(data as Order) : null;
   }
+  // ------------------------------------------------- live-sync feed (007)
+  // With the user's JWT the RLS policies on order_live_events decide visibility.
+  async listLiveEvents(afterId: number, limit: number) {
+    const { data, error } = await this.db.from("order_live_events").select(LIVE_EVENT_COLUMNS)
+      .gt("id", afterId).order("id", { ascending: true }).limit(limit);
+    if (error) fail(error);
+    return ((data ?? []) as LiveEvent[]).map((e) => ({ ...e, id: Number(e.id) }));
+  }
+  async latestLiveEventId() {
+    const { data, error } = await this.db.from("order_live_events").select("id").order("id", { ascending: false }).limit(1);
+    if (error) fail(error);
+    return Number(data?.[0]?.id ?? 0);
+  }
+
   async getOrderByCode(code: string) {
     const { data, error } = await this.db.from("orders").select("*").eq("order_code", code.trim().toUpperCase()).maybeSingle();
     if (error) fail(error);
