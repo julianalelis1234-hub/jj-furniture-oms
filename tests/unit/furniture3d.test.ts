@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildSeedTables } from "@/lib/data/seed";
+import { buildFixtureTables as buildSeedTables } from "@/lib/data/seed";
 import { CATALOG, FURNITURE_CATEGORIES } from "@/lib/domain/furniture";
 import { buildFurnitureParts, partsBounds, type Part } from "@/lib/domain/furniture3d";
 import { checkPlausibility } from "@/lib/domain/plausibility";

@@ -24,7 +24,8 @@ const LABEL: Record<LiveStatus, string> = {
  * the 3D turntable camera are never disturbed.
  */
 function busy() {
-  if (document.querySelector('[role="dialog"], [role="alertdialog"]')) return true;
+  // an open action dialog pauses live updates; the order drawer itself does not (it refreshes in place)
+  if (document.querySelector('[role="dialog"]:not([data-order-drawer]), [role="alertdialog"]')) return true;
   const a = document.activeElement as HTMLElement | null;
   return !!a && (a.tagName === "INPUT" || a.tagName === "TEXTAREA" || a.tagName === "SELECT" || a.isContentEditable);
 }

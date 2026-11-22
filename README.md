@@ -4,8 +4,8 @@ Mobile-first order monitoring for **JJ Furniture Shop and Enterprises** (Poblaci
 
 | Portal | Route | Persona | What it does |
 |---|---|---|---|
-| Owner `O-01` | `/owner` | Mr. Vincris Lelis | 8 live KPIs, *Needs Your Attention* (approve/reject exceptions, pass/fail inspection, answer spec questions, retry SMS, rank new jobs), production priority queue |
-| Store Assistant `S-01` | `/staff` | Gilbert Decena, Liza | New Order from paper slip, Today's Work queues, order detail, printable QR confirmation slip |
+| Owner `O-01` | `/owner` | Mr. Vincris Lelis | **Shop Overview & Approvals**: the same 3-zone workspace as Staff, plus *Awaiting your decision* (payment exceptions, proposals, quality inspection) and a collapsible Planning Board (production priority) |
+| Store Assistant `S-01` | `/staff` | Gilbert Decena, Liza | **Operations & Order Queue**: 4 computed metrics, stage filters + search, a 5-column queue (stacked list on phones), a slide-over order drawer with *Overview & 3D Spec* · *Quotation & Revisions* · *Payments & Gate* tabs (full-screen sheet on phones), a collapsed task inbox, New Walk-In / Phone Order, printable QR slip |
 | Craftsmen `C-01` | `/craftsman` | Nolito Remulta, Carlo, Dodong | Priority-sorted job cards (To Do / In Progress / For Revision / Done). **No financial data is fetched.** |
 | Delivery Driver `D-01` | `/driver` | Jesse Decena, Rey | Assigned trips only, COLLECT ON DELIVERY, works offline (IndexedDB queue + sync) |
 | Customer `CU-01` | `/customer/login` | email + password | **Option 1 · Log In to Track My Orders** → `/customer/orders` (own linked orders: stages, approved spec & quote, payments, post-confirmation change / repair requests). **Option 2 · Customize & Request a Quote** → `/customer/customize`. Quotations are accepted from the single-use emailed link `/customer/review?token=` (no login needed) |
@@ -96,6 +96,24 @@ Business flows never send mail inline. They **enqueue** a row in `notification_o
   * `POST /api/notifications/resend` — signed-in staff / owner only, for one order. Rate-limited per order and per user; audited via `requested_by_user_id`.
   * `POST /api/auth/request-setup-link` — public. Rate-limited per IP and per HMAC of the normalized email. It always returns *"If an eligible account exists for this email, a password setup link has been sent."* and never creates an account; delivery runs after the response.
 
+## Demo data
+
+Demo Mode (`NEXT_PUBLIC_APP_MODE=demo`, in-memory store) starts with **five curated orders** for JJ Furniture Shop and Enterprises, all fictional:
+
+| Order | Customer | Item | Stage | Money |
+|---|---|---|---|---|
+| JJ-2026-1001 | Juliana Lelis · verified account | Narra 6-Seater Dining Table, 200 × 76 × 95 cm, Natural Matte Varnish | In Production (*timber joinery complete; surface sanding underway*) | ₱38,500 · ₱15,000 verified (39%) · ₱23,500 remaining |
+| JJ-2026-1002 | Rea Caday · verified account | Solid Mahogany King Platform Bed, 190 × 110 × 210 cm, Warm Espresso Stain | Waiting for Confirmation (Rev 1 issued; review link in the Demo Inbox) | ₱44,000 · 30% due ₱13,200 |
+| JJ-2026-1003 | Julian Marte · verified account | Gmelina Modular Wardrobe Cabinet, 180 × 210 × 60 cm, Satin Caramel Finish | Quote Requested (Option 2 intake, before the 7 stages) | pending quotation |
+| JJ-2026-1004 | Riezbell Naquinez · verified account | Acacia L-Shaped Executive Study Desk, 160 × 75 × 140 cm, Natural Oil Finish | Ready for Delivery (Poblacion drop-off scheduled) | ₱24,800 · ₱10,000 verified (40%) · ₱14,800 remaining |
+| JJ-2026-1005 | Bon Ortizano · walk-in, unlinked | Molave Accent Lounge Chair Pair, 72 × 82 × 78 cm, Mocha Hand-Rubbed Finish | Confirmed (awaiting the 30% before release) | ₱19,600 · 30% due ₱5,880 |
+
+* **Demo Customer Login** signs in as Juliana Lelis (`juliana.lelis@example.com` / `Narra-Table-2026`).
+* **Geometry stand-ins.** The configurator catalog has no study desk or lounge chair, and its parametric 3D math was left untouched. So JJ-2026-1004 uses the rectangular table geometry and JJ-2026-1005 the curved-armrest set geometry; the item names, sizes and finishes are exact.
+* **Finish looks.** Descriptive finishes render with the nearest of the four 3D finish looks.
+* **Regression dataset.** The test suites start the server with `DEMO_DATASET=fixtures` (15 orders covering every edge case).
+* **Production** never uses either dataset. It reads the real database through RLS and is never capped.
+
 ## Offline driver sync
 
 `src/lib/offline/driver-db.ts` keeps `manifest`, `sync_queue` and `meta` stores in IndexedDB, one database per driver.
@@ -136,8 +154,10 @@ Business flows never send mail inline. They **enqueue** a row in `notification_o
 ```bash
 npm test           # Vitest: 209 unit tests (incl. outbox crypto / leases / retries / endpoint separation) (incl. live-sync dedup / ordering / verified-notification rules) (incl. no active PIN path, demo login refused outside Demo Mode, own-orders-only change requests) (incl. review-link, provisioning and access-control security tests) (incl. exact 3D bounds for every design at 6 sizes) (validation, state machine + roles, 30/70 finance, 30% gate, Option 2 requests, quote expiry, atomic/idempotent acceptance, privacy, offline sync)
 npm run test:db    # Postgres: 248 assertions (incl. migration 008: outbox envelope / lease / SKIP LOCKED / scrub / rate limits; migration 007: authorization audit, live-feed RLS per role, transition classification; migration 006: PIN endpoints dropped, PIN history kept, customer RLS = own orders only; migration 005: tokens, verified linking, RLS for customers, a two-session link race) on the real migrations (triggers, constraints, RLS per role, acceptance engine, append-only tables, row-lock concurrency, 003/004 on a copy of the live data) + seed cross-check
-npm run build && PORT=3100 npm start &
+npm run build && DEMO_DATASET=fixtures PORT=3100 npm start &     # the regression suites use the 15-order fixture dataset
 BASE_URL=http://localhost:3100 npm run test:e2e   # Playwright: all 5 portals end-to-end, mobile no-horizontal-scroll, dark mode
+# curated demo (default dataset): restart WITHOUT DEMO_DATASET, then
+BASE_URL=http://localhost:3100 npm run test:e2e:curated   # the 5 demo orders, KPIs, drawer gates, 390px sheets, role isolation
 ```
 
 `test:db` needs a local Postgres. Set `PGURL=postgres://user:pass@host:5432`. It runs the migration unchanged on top of `supabase/tests/00_supabase_stub.sql`, which emulates Supabase's `auth.uid()` and API roles.

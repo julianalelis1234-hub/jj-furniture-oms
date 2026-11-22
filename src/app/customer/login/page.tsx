@@ -4,7 +4,7 @@ import { AppShell } from "@/components/app-shell";
 import { Eyebrow } from "@/components/eyebrow";
 import { LinkButton } from "@/components/link-button";
 import { isDemoMode } from "@/lib/config";
-import { DEMO_CUSTOMER_LOGIN } from "@/lib/data/seed";
+import { demoCustomerLogin } from "@/lib/data/seed";
 import { getCustomer } from "@/lib/server/customer-auth";
 import { LoginForm } from "../auth-forms";
 
@@ -17,7 +17,7 @@ export const metadata = { title: "Customer portal" };
  */
 export default async function CustomerLoginPage() {
   if (await getCustomer()) redirect("/customer/orders");
-  const demo = isDemoMode() ? DEMO_CUSTOMER_LOGIN.name : undefined;
+  const demo = isDemoMode() ? demoCustomerLogin().name : undefined;
   return (
     <AppShell portal="customer" actor={null}>
       <div className="mx-auto grid max-w-5xl gap-4">

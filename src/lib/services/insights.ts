@@ -1,11 +1,12 @@
 import { addDays, daysBetween } from "@/lib/domain/dates";
-import { downPaymentShortfall, money } from "@/lib/domain/finance";
+import { downPaymentShortfall, furniturePaidFrom, money } from "@/lib/domain/finance";
 import { stageIndex } from "@/lib/domain/status";
 import type {
   DeliveryAssignment,
   NotificationLog,
   Order,
   OrderException,
+  OrderStatus,
   Payment,
 } from "@/lib/domain/types";
 import { PH_PHONE } from "@/lib/domain/validation";
@@ -127,5 +128,35 @@ export function staffTasks(
       .filter((x) => x.order),
     touchUps: exceptions.filter((e) => e.category === "On-Site Scratch Touch-Up / Repair" && e.status === "Pending"),
     failedSms: notifications.filter((n) => n.delivery_status === "Failed"),
+  };
+}
+
+// ------------------------------------------------ 3-zone office workspace ----
+/** Stage filters of the Staff / Owner order queue. "Quote Requested" is intake, never one of the 7 stages. */
+export const QUEUE_FILTERS = [
+  { key: "active", label: "All Active", statuses: ["Quote Requested", "Waiting for Confirmation", "Confirmed", "In Production", "Completed / For Inspection", "Ready for Delivery", "Out for Delivery"] },
+  { key: "needs_quote", label: "Needs Quote", statuses: ["Quote Requested"] },
+  { key: "waiting", label: "Waiting Confirmation", statuses: ["Waiting for Confirmation"] },
+  { key: "production", label: "In Production", statuses: ["Confirmed", "In Production", "Completed / For Inspection"] },
+  { key: "delivery", label: "Delivery", statuses: ["Ready for Delivery", "Out for Delivery"] },
+  { key: "delivered", label: "Delivered", statuses: ["Delivered"] },
+] as const satisfies readonly { key: string; label: string; statuses: readonly OrderStatus[] }[];
+export type QueueFilterKey = (typeof QUEUE_FILTERS)[number]["key"];
+
+/**
+ * The 4-metric strip, computed from the authorized order and payment rows the
+ * caller can see (never hardcoded). Collected deposits = VERIFIED furniture
+ * payments on active orders only: unverified driver / customer submissions and
+ * delivery-fee payments never count.
+ */
+export function workspaceMetrics(orders: Order[], payments: Payment[]) {
+  const count = (statuses: readonly OrderStatus[]) => orders.filter((o) => statuses.includes(o.status)).length;
+  const active = new Set(orders.filter((o) => o.status !== "Delivered").map((o) => o.id));
+  return {
+    needsQuoteOrAction: count(["Quote Requested", "Waiting for Confirmation"]),
+    inWorkshop: count(["Confirmed", "In Production", "Completed / For Inspection"]),
+    delivery: count(["Ready for Delivery", "Out for Delivery"]),
+    collectedDeposits: furniturePaidFrom(payments.filter((p) => active.has(p.order_id))),
+    filterCounts: Object.fromEntries(QUEUE_FILTERS.map((f) => [f.key, count(f.statuses)])) as Record<QueueFilterKey, number>,
   };
 }

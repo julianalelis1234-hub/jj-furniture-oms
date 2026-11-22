@@ -12,7 +12,8 @@
     "test:e2e": "node tests/e2e/run.mjs",
     "typecheck": "tsc --noEmit",
     "db:seed": "tsx scripts/seed-supabase.ts",
-    "tokens": "node scripts/export-tokens.mjs"
+    "tokens": "node scripts/export-tokens.mjs",
+    "test:e2e:curated": "node tests/e2e/curated.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.9.0",

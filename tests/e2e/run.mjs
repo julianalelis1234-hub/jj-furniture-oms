@@ -61,6 +61,16 @@ async function inboxLink(page, to, kind = "/customer/review") {
   await item.waitFor();
   return item.locator(`a[href^="${kind}"]`).first().getAttribute("href");
 }
+/** Office workspace: open an order's slide-over drawer from the queue. */
+async function openOrder(page, code, base = "/staff") {
+  if (!new URL(page.url()).pathname.startsWith(base)) await page.goto(base);
+  await page.getByTestId("queue-search").fill(code); // search spans every stage
+  await page.locator(`[data-testid="queue-row"][data-code="${code}"], [data-testid="queue-card"][data-code="${code}"]`).filter({ visible: true }).first().click();
+  const drawer = page.getByTestId("order-drawer");
+  await drawer.waitFor();
+  await drawer.getByRole("heading", { name: code }).waitFor();
+  return drawer;
+}
 async function openReview(page, href) {
   await page.goto(href);
   await page.getByRole("button", { name: "Open my quotation" }).click();
@@ -79,8 +89,27 @@ await step("staff: Today's Work lists task queues", async () => {
     expect(ok.status() === 200 && (await ok.json()).provider === "demo", `the scheduler's bearer secret runs the worker, got ${ok.status()}`);
   }
   expect(page.url().endsWith("/staff"), `expected /staff, got ${page.url()}`);
-  for (const h of ["Customer quote requests (Option 2)", "Release to workshop (30% verified)", "Record customer acceptance (spec + quote)", "Log 30% down payment", "Verify driver cash handover", "Failed SMS updates"])
-    expect(await page.getByRole("heading", { name: h }).isVisible(), `missing section ${h}`);
+  await page.getByRole("heading", { name: "Operations & Order Queue" }).waitFor();
+  for (const id of ["kpi-needs-quote", "kpi-workshop", "kpi-delivery", "kpi-deposits"]) expect(await page.getByTestId(id).isVisible(), `metric ${id}`);
+  for (const f of ["active", "needs_quote", "waiting", "production", "delivery"]) expect(await page.getByTestId(`filter-${f}`).isVisible(), `filter ${f}`);
+  expect((await page.getByTestId("queue-row").count()) > 0, "queue rows");
+  // the table shows no raw emails or street addresses (they appear in the drawer only)
+  expect(!/@example\.com|Purok/.test(await page.getByTestId("order-queue").innerText()), "no emails / addresses in the queue");
+  // filters + search
+  await page.getByTestId("filter-needs_quote").click();
+  expect((await page.getByTestId("queue-row").evaluateAll((rows) => rows.every((r) => r.textContent.includes("Quote Requested")))), "Needs Quote shows only intake requests");
+  await page.getByTestId("filter-active").click();
+  await page.getByTestId("queue-search").fill("0145");
+  expect((await page.getByTestId("queue-row").count()) === 1, "search by order ID");
+  await page.getByTestId("queue-search").fill("");
+  // the drawer: 3 tabs, the existing 3D/2D preview, closes back to the queue
+  const drawer = await openOrder(page, "JJ-2026-0145");
+  for (const t of ["Overview & 3D Spec", "Quotation & Revisions", "Payments & Gate"]) expect(await drawer.getByRole("tab", { name: t }).isVisible(), `tab ${t}`);
+  await drawer.getByRole("tab", { name: "Payments & Gate" }).click();
+  expect((await drawer.getByTestId("gate-status").innerText()).includes("gate is met"), "0145: 30% verified gate");
+  await page.screenshot({ path: `${SHOTS}/staff-drawer-desktop.png` });
+  await page.getByTestId("drawer-close").click();
+  await page.getByTestId("order-drawer").waitFor({ state: "detached" });
   await page.screenshot({ path: `${SHOTS}/staff-desktop.png`, fullPage: true });
   await ctx.close();
 });
@@ -126,7 +155,7 @@ await step("staff: new order form validates (email or walk-in) then saves a DR d
 
   // record acceptance (spec + quote) from the order page → JJ code + Confirmed
   await page.getByRole("link", { name: "Back to order" }).click();
-  await page.getByRole("button", { name: "Record acceptance" }).click();
+  await page.getByRole("button", { name: "Record acceptance" }).first().click();
   await page.getByRole("dialog").getByRole("button", { name: "Record acceptance" }).click();
   await page.getByText(/Specification \+ quotation of revision \d+ accepted/).first().waitFor();
   await page.waitForLoadState("networkidle");
@@ -135,14 +164,14 @@ await step("staff: new order form validates (email or walk-in) then saves a DR d
   newOrderCode = title.trim();
 
   // Confirmed is not authorization to cut wood: the release is refused until 30% is verified
-  await page.getByRole("button", { name: "Release to workshop" }).click();
+  await page.getByRole("button", { name: "Release to workshop" }).first().click();
   await page.getByRole("dialog").getByRole("button", { name: "Start production" }).click();
   await page.getByText(/verified 30% down payment .* is required before production/).first().waitFor();
   await page.keyboard.press("Escape");
   await page.getByRole("button", { name: "Log payment" }).first().click();
   await page.getByRole("dialog").getByRole("button", { name: "Save payment" }).click();
   await page.getByText("Payment recorded.").first().waitFor();
-  await page.getByRole("button", { name: "Release to workshop" }).click();
+  await page.getByRole("button", { name: "Release to workshop" }).first().click();
   expect((await page.getByRole("dialog").innerText()).includes("30% verified ✓"), "release dialog shows the verified gate");
   await page.getByRole("dialog").getByRole("button", { name: "Start production" }).click();
   await page.getByText("Released to the workshop.").first().waitFor();
@@ -153,8 +182,9 @@ await step("staff: new order form validates (email or walk-in) then saves a DR d
 await step("owner: KPIs, approve installment, pass inspection, reprioritise", async () => {
   const { page, ctx } = await asPersona("Mr. Vincris Lelis", desktop);
   expect(page.url().endsWith("/owner"), "owner portal");
-  for (const k of ["Active Orders", "Delayed / At Risk", "In Production", "Waiting Inspection", "Deliveries to Watch", "Balances Still to Collect", "Unpaid After Delivery", "Approvals Waiting"])
-    expect(await page.getByText(k, { exact: true }).first().isVisible(), `KPI ${k}`);
+  await page.getByRole("heading", { name: "Shop Overview & Approvals" }).waitFor();
+  for (const id of ["kpi-needs-quote", "kpi-workshop", "kpi-delivery", "kpi-deposits"]) expect(await page.getByTestId(id).isVisible(), `metric ${id}`);
+  await page.getByRole("heading", { name: "Awaiting your decision" }).waitFor();
   await page.screenshot({ path: `${SHOTS}/owner-desktop.png`, fullPage: true });
   const installment = page.locator("li", { hasText: "Installment Approval" }).first();
   await installment.getByRole("button", { name: "Approve" }).click();
@@ -164,7 +194,8 @@ await step("owner: KPIs, approve installment, pass inspection, reprioritise", as
   await insp.getByRole("button", { name: "Pass" }).click();
   await page.getByRole("button", { name: "Passed — ready for delivery" }).click();
   await page.getByText("Inspection passed").waitFor();
-  const queueItems = page.locator("section", { hasText: "Planning Board · production priority" }).locator("ol > li");
+  await page.getByTestId("planning-board").locator("summary").click();
+  const queueItems = page.getByTestId("planning-board").locator("ol > li");
   const second = (await queueItems.nth(1).locator("a").first().innerText()).trim();
   await queueItems.nth(1).getByRole("button", { name: "Move up" }).click();
   await page.waitForTimeout(800);
@@ -224,9 +255,13 @@ await step("driver: offline action is queued locally, then syncs when online", a
 
 await step("staff: driver cash appears as a handover to verify", async () => {
   const { page, ctx } = await asPersona("Gilbert Decena");
-  const row = page.locator("li", { hasText: "JJ-2026-0138" }).filter({ hasText: "Delivery Balance Collection" });
+  // phone: the queue is a stacked list and the drawer a full-screen sheet
+  const drawer = await openOrder(page, "JJ-2026-0138");
+  await noHorizontalScroll(page, "staff-drawer-mobile");
+  await drawer.getByRole("tab", { name: "Payments & Gate" }).click();
+  expect((await drawer.getByText("Unverified submissions (not counted)").count()) > 0, "unverified submissions shown separately");
   page.once("dialog", (d) => d.accept());
-  await row.getByRole("button", { name: /Verify ₱5,600/ }).click();
+  await drawer.getByRole("button", { name: /Verify ₱5,600/ }).click();
   await page.getByText("Cash handover verified").waitFor();
   await ctx.close();
 });
@@ -359,12 +394,11 @@ await step("customer: no Order ID + PIN lookup; Option 1 email login (demo butto
 
 await step("customer: staff resend link → propose changes in the review session → staff re-quote → new link → accept", async () => {
   const staff = await asPersona("Gilbert Decena", desktop);
-  await staff.page.getByRole("tab", { name: /All Orders/ }).click();
-  await staff.page.getByText("JJ-2026-0144").first().click();
-  await staff.page.waitForURL(/\/staff\/orders\//);
-  expect((await staff.page.getByTestId("customer-email-status").innerText()).includes("unverified"), "email shown as unverified");
+  const drawer = await openOrder(staff.page, "JJ-2026-0144");
+  expect((await drawer.getByTestId("customer-email-status").innerText()).includes("unverified"), "email shown as unverified");
+  await drawer.getByRole("tab", { name: "Quotation & Revisions" }).click();
   staff.page.once("dialog", (d) => d.accept());
-  await staff.page.getByRole("button", { name: "Resend review link" }).click();
+  await drawer.getByRole("button", { name: "Resend review link" }).click();
   await staff.page.getByText("A new single-use review link was emailed to the customer.").first().waitFor();
 
   const ctx = await browser.newContext({ ...mobile, baseURL: BASE });
@@ -386,10 +420,12 @@ await step("customer: staff resend link → propose changes in the review sessio
 
   // staff see the proposal with the exact diff and send a revised quote (emails a fresh link)
   await staff.page.goto("/staff");
-  await staff.page.getByRole("heading", { name: "Customer proposed specification changes" }).waitFor();
-  const card = staff.page.locator("li", { hasText: "JJ-2026-0144" }).first();
-  expect((await card.innerText()).includes("Wood: Gmelina -> Mahogany"), "staff card shows exact diff");
-  await card.getByRole("button", { name: /Review & send revised quote/ }).click();
+  // the task inbox points at it; the drawer's next step shows the proposal
+  await staff.page.getByTestId("task-inbox").locator("summary").click();
+  await staff.page.getByTestId("task-inbox").getByText("Review the customer's proposed changes").first().waitFor();
+  const card = await openOrder(staff.page, "JJ-2026-0144");
+  expect((await card.innerText()).includes("Wood: Gmelina -> Mahogany"), "drawer shows the exact diff");
+  await card.getByTestId("next-step").getByRole("button", { name: /Review & send revised quote/ }).click();
   await staff.page.fill("#q-price", "14500");
   await staff.page.fill("#q-note", "+₱3,500 for Mahogany and the wider hutch");
   await staff.page.getByRole("button", { name: "Send revised quote" }).click();
@@ -437,8 +473,8 @@ await step("Option 2: customer designs & requests → staff quotation → custom
 
   // staff issue the official quotation from the Option 2 queue
   const staff = await asPersona("Gilbert Decena", desktop);
-  const reqCard = staff.page.locator("li", { hasText: reqCode }).first();
-  await reqCard.getByRole("button", { name: "Issue quotation" }).click();
+  const reqDrawer = await openOrder(staff.page, reqCode);
+  await reqDrawer.getByTestId("next-step").getByRole("button", { name: "Issue quotation" }).click();
   await staff.page.fill("#q-price", "26000");
   await staff.page.fill("#q-fee", "800");
   await staff.page.fill("#q-slip", "0161");
@@ -501,12 +537,13 @@ await step("live sync: staff see a new quote request without reload; no false to
     await rctx.close();
     await staff.getByText("New quote request").first().waitFor({ timeout: 15000 });
     expect((await staff.locator("[data-sonner-toast]", { hasText: "New quote request" }).first().innerText()).includes(liveCode), "toast names the new request");
-    await staff.locator("li", { hasText: liveCode }).first().waitFor({ timeout: 10000 });
+    await staff.locator(`[data-testid="queue-row"][data-code="${liveCode}"]`).waitFor({ timeout: 10000 });
     expect((await staff.evaluate(() => window.__noReload)) === 1, "updated in place, no full page reload");
 
     // the owner makes an internal edit (re-prioritises): staff get no false "quotation accepted" toast
     const owner = await asPersona("Mr. Vincris Lelis", desktop);
-    await owner.page.locator("section", { hasText: "Planning Board · production priority" }).locator("ol > li").nth(1).getByRole("button", { name: "Move up" }).click();
+    await owner.page.getByTestId("planning-board").locator("summary").click();
+    await owner.page.getByTestId("planning-board").locator("ol > li").nth(1).getByRole("button", { name: "Move up" }).click();
     await owner.page.waitForLoadState("networkidle");
     await staff.waitForTimeout(6000);
     expect((await staff.getByText("Quotation accepted").count()) === 0, "an internal edit never announces a quotation acceptance");
