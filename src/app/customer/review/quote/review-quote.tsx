@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { CheckCircle2, Clock, FileClock, KeyRound, MailCheck, RotateCcw, Send } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
@@ -26,7 +27,7 @@ function Done({ result }: { result: (ProvisionResult & { demo_setup_path?: strin
       )}
       {result?.status === "linked" && (
         <p className="flex gap-2 text-sm" data-testid="order-linked"><KeyRound className="mt-0.5 size-4 shrink-0" aria-hidden />
-          This order was added to your existing JJ Furniture account. Log in with your usual password.</p>
+          This order was added to your existing JJ Furniture account. Log in with your usual password, or <Link href="/customer/forgot-password" className="font-semibold underline">reset it</Link> if you forgot it.</p>
       )}
       {result && !["setup_email_sent", "linked"].includes(result.status) && (
         <p className="text-sm">Your account details will follow by email. Your acceptance is saved either way.</p>
