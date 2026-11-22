@@ -1,5 +1,7 @@
 import "server-only";
 import { randomInt } from "node:crypto";
+import { isDemoMode } from "@/lib/config";
+import type { MemoryStore } from "@/lib/data/memory-store";
 import type { DataStore } from "@/lib/data/store";
 import type { OutboxKindName, OutboxRow } from "@/lib/domain/types";
 import type { CustomerAuthProvider } from "@/lib/services/customer-auth";
@@ -157,16 +159,24 @@ async function deliver(db: DataStore, row: OutboxRow, provider: MailProvider, de
     }
     const mail = renderEmail(row.kind, row.template_data as TemplateData, l.href);
     subject = mail.subject;
+    // DEMO MODE ONLY: keep a copy in the Demo Inbox even when a real provider is configured,
+    // so local testing never gets stuck behind a mail problem (once per row; production never does this)
+    if (isDemoMode() && provider.name !== "demo" && row.attempt_count === 1 && db.kind === "memory")
+      (db as MemoryStore).t.demo_mailbox.unshift({ id: crypto.randomUUID(), to: row.recipient_email, subject: `${mail.subject} (copy — also sent via ${provider.name})`,
+        text: mail.text, order_id: row.order_id, created_at: new Date().toISOString() });
     const out = await provider.send({ to: row.recipient_email, subject: mail.subject, html: mail.html, text: mail.text, idempotencyKey: row.idempotency_key });
     if (out.kind === "accepted") {
       if (await db.completeOutbox(row.id, lease, out.providerMessageId)) {
         sum.sent++;
+        console.info(`[outbox] ${row.kind} accepted by ${provider.name}`);
         await markSetupSent(db, row);
         await logHistory(db, row, mail.subject, "Sent", provider.name === "demo" ? "simulated — Demo Inbox, no email provider connected" : `accepted by ${provider.name}`);
       }
       return; // false: our lease expired and another worker owns the row — never overwrite it
     }
     const permanent = out.kind === "permanent" || row.attempt_count >= row.max_attempts;
+    // visible in the server terminal: kind, provider and the sanitized reason only (no address, link or token)
+    console.warn(`[outbox] ${row.kind} NOT sent via ${provider.name} (attempt ${row.attempt_count}/${row.max_attempts}${permanent ? ", giving up" : ", will retry"}): ${sanitizeError(out.error)}`);
     if (await db.failOutbox(row.id, lease, sanitizeError(out.error), out.kind === "permanent", backoffSeconds(row.attempt_count))) {
       if (permanent) { sum.failed++; await logHistory(db, row, mail.subject, "Failed", sanitizeError(out.error)); }
       else sum.retrying++;

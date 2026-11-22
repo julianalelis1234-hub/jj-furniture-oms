@@ -455,6 +455,14 @@ await step("Option 2: customer designs & requests → staff quotation → custom
   await page.getByRole("dialog").getByRole("button", { name: "Accept quote & confirm" }).click();
   await page.getByTestId("setup-email-sent").waitFor();
   await noHorizontalScroll(page, "customer-request-accepted-mobile");
+  // demo shortcut: straight from acceptance to creating a password, then log in
+  await page.getByTestId("demo-setup-shortcut").getByRole("link", { name: "Set your password now" }).click();
+  await page.waitForURL(/\/customer\/set-password/);
+  await page.waitForLoadState("networkidle");
+  await page.fill("#password", "Mahogany-Counter-2026");
+  await page.fill("#confirm", "Mahogany-Counter-2026");
+  await page.getByRole("button", { name: "Save password" }).click();
+  await page.waitForURL(/\/customer\/orders/);
   await ctx.close();
 });
 
