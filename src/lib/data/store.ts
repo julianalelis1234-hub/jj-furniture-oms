@@ -1,3 +1,4 @@
+import type { LiveEvent } from "@/lib/realtime/events";
 import type { FurnitureSpec } from "@/lib/domain/furniture";
 import type {
   ConsumeReviewResult,
@@ -102,6 +103,12 @@ export type Insert<T extends { id: string }> = Omit<T, "id"> & { id?: string };
  * state machine, versioning, uniqueness) are enforced identically by both.
  */
 export interface DataStore {
+  // ------------------------------------------------- live-sync feed (007)
+  /** Feed rows after `afterId` (ascending), as visible to this store's caller (RLS in production). */
+  listLiveEvents(afterId: number, limit: number): Promise<LiveEvent[]>;
+  /** Highest feed id visible to this store's caller (0 when empty). */
+  latestLiveEventId(): Promise<number>;
+
   readonly kind: "memory" | "supabase";
 
   listProfiles(): Promise<Profile[]>;

@@ -6,6 +6,8 @@ import { assertProductionGate, blockingItems, isQuoteExpired, specOrQuoteChanged
 import { assertTransition } from "@/lib/domain/status";
 import { money } from "@/lib/domain/finance";
 import { QUOTE_REVISION_TYPES } from "@/lib/domain/types";
+import { currentActorRole } from "@/lib/realtime/actor-context";
+import { classifyOrderChange, classifyPaymentChange, type LiveEvent, type LiveOp, type LiveSource } from "@/lib/realtime/events";
 import type {
   ConsumeReviewResult,
   CustomerAccount,
@@ -50,6 +52,8 @@ export interface MemoryTables {
   password_tokens: { token_hash: string; user_id: string; purpose: "setup" | "reset"; expires_at: string; used_at: string | null }[];
   /** demo-only simulated inbox: the full email (with links) so testers can click them; never exists in production */
   demo_mailbox: { id: string; to: string; subject: string; text: string; order_id: string | null; created_at: string }[];
+  /** mirrors public.order_live_events (migration 007) */
+  live_events: LiveEvent[];
 }
 
 export function emptyTables(): MemoryTables {
@@ -67,6 +71,7 @@ export function emptyTables(): MemoryTables {
     customer_accounts: [],
     password_tokens: [],
     demo_mailbox: [],
+    live_events: [],
   };
 }
 
@@ -99,6 +104,36 @@ export class MemoryStore implements DataStore {
     this.recompute(o);
     o.version += 1;
     o.updated_at = now();
+    this.emitOrder("UPDATE", o, o.status); // payments_after_change bumps the order
+  }
+
+  // ------------------------------------------- live feed (mirrors migration 007)
+  private emit(row: Omit<LiveEvent, "id" | "occurred_at" | "actor_role">) {
+    if (!this.t.live_events) this.t.live_events = [];
+    const last = this.t.live_events.at(-1);
+    this.t.live_events.push({ ...row, id: (last?.id ?? 0) + 1, actor_role: currentActorRole(), occurred_at: now() });
+    if (this.t.live_events.length > 2000) this.t.live_events.splice(0, this.t.live_events.length - 2000);
+  }
+  private emitOrder(op: LiveOp, o: Order, prev: Order["status"] | null) {
+    const hasConf = this.t.order_confirmations.some((c) => c.order_id === o.id && c.revision_number === o.approved_revision_number);
+    this.emit({
+      source: "orders", op, record_id: o.id, order_id: o.id, order_code: o.order_code, status: o.status,
+      prev_status: op === "INSERT" ? null : prev, transition: classifyOrderChange(op, prev, o.status, hasConf),
+      payment_verified: null, order_updated_at: o.updated_at,
+    });
+  }
+  private emitChild(source: Exclude<LiveSource, "orders">, op: LiveOp, recordId: string, orderId: string, extra: Partial<LiveEvent> = {}) {
+    const o = this.t.orders.find((x) => x.id === orderId);
+    this.emit({
+      source, op, record_id: recordId, order_id: orderId, order_code: o?.order_code ?? null, status: o?.status ?? null,
+      prev_status: null, transition: null, payment_verified: null, order_updated_at: o?.updated_at ?? null, ...extra,
+    });
+  }
+  async listLiveEvents(afterId: number, limit: number) {
+    return clone((this.t.live_events ?? []).filter((e) => e.id > afterId).slice(0, limit));
+  }
+  async latestLiveEventId() {
+    return this.t.live_events?.at(-1)?.id ?? 0;
   }
 
   private exceptionGate(order: Order) {
@@ -202,6 +237,7 @@ export class MemoryStore implements DataStore {
     this.recompute(order);
     this.t.orders.push(order);
     this.exceptionGate(order);
+    this.emitOrder("INSERT", order, null);
     return clone(order);
   }
 
@@ -258,10 +294,12 @@ export class MemoryStore implements DataStore {
       throw new DomainError("VALIDATION", "A quotation needs a price, a paper slip number and an estimated completion date.");
 
     const typeChanged = next.payment_exception_type !== current.payment_exception_type;
+    const prevStatus = current.status;
     next.version = current.version + 1;
     next.updated_at = now();
     Object.assign(current, next);
     if (typeChanged) this.exceptionGate(current);
+    this.emitOrder("UPDATE", current, prevStatus);
     return { ok: true, order: clone(current) };
   }
 
@@ -396,6 +434,8 @@ export class MemoryStore implements DataStore {
       created_by_role: input.created_by_role, created_by_id: input.created_by_id, created_at: now(),
     };
     this.t.order_specification_revisions.push(rev);
+    this.emitChild("order_specification_revisions", "INSERT", rev.revision_id, o.id);
+    const prevStatus = o.status;
     if (!shop) {
       Object.assign(o, { current_revision: num, specs_confirmed: false, approved_revision_number: null });
     } else {
@@ -411,6 +451,7 @@ export class MemoryStore implements DataStore {
     }
     o.version += 1;
     o.updated_at = now();
+    this.emitOrder("UPDATE", o, prevStatus);
     return { revision_id: rev.revision_id, revision_number: num, revision_type: input.type, changed_fields: diff, quoted_at: quotedAt, expires_at: expiresAt };
   }
 
@@ -457,8 +498,11 @@ export class MemoryStore implements DataStore {
     };
     const next: Order = { ...o, approved_revision_number: rev.revision_number, specs_confirmed: true, status: "Confirmed", order_code: input.new_order_code ?? o.order_code };
     assertProductionGate(next, this.t.order_specification_revisions, this.t.order_exceptions_and_repairs, o.status);
+    const prevStatus = o.status;
     this.t.order_confirmations.push(conf);
+    this.emitChild("order_confirmations", "INSERT", conf.id, o.id);
     Object.assign(o, next, { version: o.version + 1, updated_at: ts });
+    this.emitOrder("UPDATE", o, prevStatus);
     return { confirmation_id: conf.id, revision_id: rev.revision_id, revision_number: rev.revision_number, duplicate: false };
   }
 
@@ -479,6 +523,9 @@ export class MemoryStore implements DataStore {
     const p = { ...row, id: row.id ?? randomUUID() } as Payment;
     this.t.payments.push(p);
     this.touch(p.order_id);
+    this.emitChild("payments", "INSERT", p.id, p.order_id, {
+      payment_verified: p.verified_by_owner_or_staff, transition: classifyPaymentChange("INSERT", null, p.verified_by_owner_or_staff),
+    });
     return { payment: clone(p), duplicate: false };
   }
   async updatePayment(id: string, patch: Partial<Payment>) {
@@ -491,8 +538,12 @@ export class MemoryStore implements DataStore {
       throw new DomainError("IMMUTABLE_RECORD", "A verified payment cannot be un-verified.");
     if (p.notes && patch.notes !== undefined && !(patch.notes ?? "").startsWith(p.notes))
       throw new DomainError("IMMUTABLE_RECORD", "Payment notes can only be appended.");
+    const wasVerified = p.verified_by_owner_or_staff;
     Object.assign(p, patch, { id });
     this.touch(p.order_id);
+    this.emitChild("payments", "UPDATE", p.id, p.order_id, {
+      payment_verified: p.verified_by_owner_or_staff, transition: classifyPaymentChange("UPDATE", wasVerified, p.verified_by_owner_or_staff),
+    });
     return clone(p);
   }
 
@@ -531,11 +582,13 @@ export class MemoryStore implements DataStore {
       throw new DomainError("VALIDATION", "This order already has an active delivery assignment.");
     const d = { ...row, id: row.id ?? randomUUID(), updated_at: now() } as DeliveryAssignment;
     this.t.delivery_assignments.push(d);
+    this.emitChild("delivery_assignments", "INSERT", d.id, d.order_id);
     return clone(d);
   }
   async updateDelivery(id: string, patch: Partial<DeliveryAssignment>) {
     const d = this.find(this.t.delivery_assignments, id, "Delivery");
     Object.assign(d, patch, { id, updated_at: now() });
+    this.emitChild("delivery_assignments", "UPDATE", d.id, d.order_id);
     return clone(d);
   }
 
@@ -609,6 +662,7 @@ export class MemoryStore implements DataStore {
     o.email_verified_at ??= now();
     o.version += 1;
     o.updated_at = now();
+    this.emitOrder("UPDATE", o, o.status);
     return { ok: true, order_id: o.id, revision_id: t.revision_id, revision_number: rev.revision_number, email: t.sent_to_email };
   }
 
@@ -621,6 +675,7 @@ export class MemoryStore implements DataStore {
     if (o.customer_user_id === userId) return { linked: true, already: true };
     if (o.customer_user_id) throw new DomainError("FORBIDDEN", "Order is linked to another account.");
     Object.assign(o, { customer_user_id: userId, provisioning_status: "linked", version: o.version + 1, updated_at: now() });
+    this.emitOrder("UPDATE", o, o.status);
     return { linked: true, already: false };
   }
 

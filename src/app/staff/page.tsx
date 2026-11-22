@@ -1,5 +1,6 @@
 import { Plus } from "lucide-react";
 import { AppShell, EmptyState, PageTitle, Section } from "@/components/app-shell";
+import { LiveSync } from "@/components/live-sync";
 import { DesignNote } from "@/components/design-note";
 import { LinkButton } from "@/components/link-button";
 import {
@@ -43,7 +44,7 @@ export default async function StaffPage() {
     t.failedDeliveries.length + t.cashHandovers.length + t.touchUps.length + t.missingFields.length + t.failedSms.length;
 
   return (
-    <AppShell portal={actor.role === "owner" ? "owner" : "staff"} actor={actor}>
+    <AppShell portal={actor.role === "owner" ? "owner" : "staff"} actor={actor} live={<LiveSync />}>
       <PageTitle
         title={`Today's work · ${total}`}
         description="Every task below changes the shared order record that the owner, workshop, drivers and customers see."

@@ -12,6 +12,7 @@ import {
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { AppShell, EmptyState, PageTitle, Section } from "@/components/app-shell";
+import { LiveSync } from "@/components/live-sync";
 import { DesignNote } from "@/components/design-note";
 import { LinkButton } from "@/components/link-button";
 import {
@@ -69,7 +70,7 @@ export default async function OwnerPage() {
   const watch = data.deliveries.filter((d) => d.dispatch_status === "Failed / Reschedule" || d.dispatch_status === "Out for Delivery" || (d.dispatch_status === "Scheduled" && d.scheduled_date <= today));
 
   return (
-    <AppShell portal="owner" actor={actor}>
+    <AppShell portal="owner" actor={actor} live={<LiveSync />}>
       <PageTitle
         title={`Magandang araw, ${actor.full_name.replace(/^Mr\.\s*/, "").split(" ")[0]}`}
         description={`${formatDate(today)} · live figures from the shared order record`}

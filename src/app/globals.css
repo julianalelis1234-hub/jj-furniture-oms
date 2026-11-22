@@ -39,6 +39,7 @@
   --color-info-soft: var(--info-soft);
   --color-danger-soft: var(--danger-soft);
   --color-accent-soft: var(--accent-soft);
+  --color-live: var(--live);
   --color-wood-mahogany: var(--wood-mahogany);
   --color-wood-gmelina: var(--wood-gmelina);
   --color-wood-other: var(--wood-other);
@@ -89,6 +90,7 @@
   --accent: #b8864b;              /* brushed brass / warm varnish gold */
   --accent-foreground: #231a14;
   --accent-soft: #f6eddf;         /* brass wash for highlight boxes */
+  --live: #c48a5a;                /* Caramel: Live Sync Active indicator */
   --destructive: #a23b2a;
   --destructive-foreground: #ffffff;
   --success: #2f6b3a;
@@ -144,6 +146,7 @@
   --accent: #c9a06a;
   --accent-foreground: #14100d;
   --accent-soft: #2b2117;
+  --live: #c48a5a;
   --destructive: #e58a78;
   --destructive-foreground: #14100d;
   --success: #86c28b;

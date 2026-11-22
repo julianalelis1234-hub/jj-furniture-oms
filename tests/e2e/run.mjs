@@ -429,6 +429,115 @@ await step("Option 2: customer designs & requests → staff quotation → custom
   await ctx.close();
 });
 
+await step("live sync: staff see a new quote request without reload; no false toast on an internal edit; customer update keeps dialog, typed text and 3D view; offline -> reconcile once", async () => {
+  const gl = await chromium.launch({ args: ["--use-angle=swiftshader", "--enable-unsafe-swiftshader"], ...(process.env.PW_EXECUTABLE ? { executablePath: process.env.PW_EXECUTABLE } : {}) });
+  const live = (p) => p.locator('[data-testid="live-status"][data-status="live"]').first();
+  try {
+    // staff dashboard, connected
+    const sctx = await gl.newContext({ ...desktop, baseURL: BASE });
+    const staff = await sctx.newPage();
+    await staff.goto("/");
+    await staff.getByRole("button", { name: "Enter as Gilbert Decena" }).click();
+    await staff.waitForURL(/\/staff$/);
+    await live(staff).waitFor({ timeout: 15000 });
+    expect((await live(staff).innerText()).includes("Live Sync Active"), "Live Sync Active label");
+    const dot = await live(staff).evaluate((el) => getComputedStyle(el.querySelector("span")).backgroundColor);
+    expect(dot === "rgb(196, 138, 90)", `Caramel #C48A5A indicator, got ${dot}`);
+    await staff.evaluate(() => { window.__noReload = 1; });
+
+    // a customer sends a quote request from another browser
+    const rctx = await gl.newContext({ ...mobile, baseURL: BASE });
+    const rp = await rctx.newPage();
+    await rp.goto("/customer/customize");
+    await rp.getByTestId("cat-Kitchen / Wall Cabinet").click();
+    await rp.getByRole("radio", { name: "3-Door Base Counter" }).check({ force: true });
+    await rp.getByRole("button", { name: "150 × 85 × 55 cm" }).click();
+    await rp.getByTestId("wood-Mahogany").click();
+    await rp.getByTestId("finish-Walnut Stain").click();
+    await rp.fill("#customer_name", "Liza Live");
+    await rp.fill("#customer_email", "liza.live@example.com");
+    await rp.fill("#customer_phone", "0900 000 0777");
+    await rp.selectOption("#municipality", "Lantapan");
+    await rp.fill("#delivery_address", "Purok 3, Brgy. Songco");
+    await rp.getByRole("button", { name: "Send request for quotation" }).click();
+    const liveCode = (await rp.getByTestId("request-code").innerText()).trim();
+    await rctx.close();
+    await staff.getByText("New quote request").first().waitFor({ timeout: 15000 });
+    expect((await staff.locator("[data-sonner-toast]", { hasText: "New quote request" }).first().innerText()).includes(liveCode), "toast names the new request");
+    await staff.locator("li", { hasText: liveCode }).first().waitFor({ timeout: 10000 });
+    expect((await staff.evaluate(() => window.__noReload)) === 1, "updated in place, no full page reload");
+
+    // the owner makes an internal edit (re-prioritises): staff get no false "quotation accepted" toast
+    const owner = await asPersona("Mr. Vincris Lelis", desktop);
+    await owner.page.locator("section", { hasText: "Planning Board · production priority" }).locator("ol > li").nth(1).getByRole("button", { name: "Move up" }).click();
+    await owner.page.waitForLoadState("networkidle");
+    await staff.waitForTimeout(6000);
+    expect((await staff.getByText("Quotation accepted").count()) === 0, "an internal edit never announces a quotation acceptance");
+
+    // signed-in customer watching JJ-2026-0145 with the 3D preview and an open dialog with typed text
+    const cctx = await gl.newContext({ ...desktop, baseURL: BASE, reducedMotion: "reduce" });
+    const cust = await cctx.newPage();
+    await cust.goto("/customer/login");
+    await cust.getByTestId("demo-customer-login").click();
+    await cust.waitForURL(/\/customer\/orders/);
+    await cust.goto("/customer/orders/JJ-2026-0145");
+    await live(cust).waitFor({ timeout: 15000 });
+    const canvas = cust.locator('[data-testid="preview-3d"] canvas').first();
+    await canvas.waitFor({ timeout: 20000 });
+    await canvas.evaluate((c) => { c.dataset.liveMark = "kept"; });
+    const box = await canvas.boundingBox();
+    await cust.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await cust.mouse.down();
+    await cust.mouse.move(box.x + box.width / 2 + 120, box.y + box.height / 2, { steps: 8 }); // turn the turntable
+    await cust.mouse.up();
+    await cust.getByRole("button", { name: "Request Post-Confirmation Change / Repair" }).click();
+    await cust.fill("#description", "Please keep this unsaved text");
+
+    // meanwhile the craftsman finishes the build
+    const craft = await asPersona("Nolito Remulta");
+    await craft.page.getByRole("tab", { name: /In Progress/ }).click();
+    const job = craft.page.locator("li", { hasText: "JJ-2026-0145" }).first();
+    await job.getByRole("button", { name: "Mark Ready for Owner Inspection" }).click();
+    for (const b of await craft.page.getByRole("dialog").getByRole("checkbox").all()) await b.check();
+    await craft.page.getByRole("dialog").getByRole("button", { name: "Send to owner" }).click();
+    await craft.page.getByText("Moved to “Completed / For Inspection”").waitFor();
+    await craft.ctx.close();
+
+    await cust.getByText("JJ-2026-0145 is now Completed / For Inspection.").first().waitFor({ timeout: 15000 });
+    await cust.waitForTimeout(1500);
+    expect(await cust.getByRole("dialog").isVisible(), "the open dialog is not closed by a live update");
+    expect((await cust.inputValue("#description")) === "Please keep this unsaved text", "unsaved text is kept");
+    await cust.keyboard.press("Escape");
+    await cust.getByText("Building is done. The owner is checking the quality.").waitFor({ timeout: 10000 }); // applied once the dialog closed
+    expect((await canvas.evaluate((c) => c.dataset.liveMark)) === "kept", "the 3D canvas (and its camera) was not remounted");
+
+    // the customer's connection drops; the owner passes inspection meanwhile; on reconnect: reconcile, one toast
+    await cctx.setOffline(true);
+    await cust.locator('[data-testid="live-status"][data-status="offline"]').waitFor({ timeout: 10000 });
+    expect((await cust.getByTestId("live-status").innerText()).includes("Offline"), "Offline shown");
+    const insp = owner.page.locator("li", { hasText: "Quality inspection" }).filter({ hasText: "JJ-2026-0145" }).first();
+    await owner.page.reload();
+    await insp.getByRole("button", { name: "Pass" }).click();
+    await owner.page.getByRole("button", { name: "Passed — ready for delivery" }).click();
+    await owner.page.getByText("Inspection passed").waitFor();
+    await owner.ctx.close();
+    await cust.waitForTimeout(2000);
+    expect((await cust.getByText("Your furniture passed inspection").count()) === 0, "nothing changes while offline");
+    await cctx.setOffline(false);
+    await live(cust).waitFor({ timeout: 15000 });
+    await cust.getByText("JJ-2026-0145 is now Ready for Delivery.").first().waitFor({ timeout: 15000 });
+    await cust.getByText("Your furniture passed inspection and is ready for delivery.").waitFor({ timeout: 10000 });
+    await cust.waitForTimeout(5000); // a few more polls: the reconciled update must not be announced again
+    const n = await cust.evaluate(() => (window.__jjLiveToasts ?? []).filter((k) => k.includes(":Ready for Delivery:")).length);
+    expect(n === 1, `reconciled update announced exactly once, got ${n}`);
+    await cust.screenshot({ path: `${SHOTS}/live-sync-customer-desktop.png`, fullPage: false });
+    await sctx.close();
+    await cctx.close();
+  } finally {
+    await gl.close();
+  }
+});
+
 await step("3D turntable: exact W×H×D labels, non-blocking warning, NULL → 2D, no-WebGL → 2D, clean unmount", async () => {
   const gl = await chromium.launch({ args: ["--use-angle=swiftshader", "--enable-unsafe-swiftshader"], ...(process.env.PW_EXECUTABLE ? { executablePath: process.env.PW_EXECUTABLE } : {}) });
   const ctx = await gl.newContext({ viewport: { width: 1280, height: 900 }, baseURL: BASE, reducedMotion: "reduce" });

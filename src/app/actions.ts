@@ -13,6 +13,7 @@ import { ROLES } from "@/lib/domain/types";
 import { firstErrors } from "@/lib/domain/validation";
 import { authorize, DEMO_COOKIE, getPublicStore, getStore, PORTAL_FOR, setDemoSession } from "@/lib/server/context";
 import { resetMemoryStore } from "@/lib/server/memory";
+import { withActorRole } from "@/lib/realtime/actor-context";
 import { createUserClient } from "@/lib/server/supabase";
 import { issueReviewLink, provisionCustomerAccount } from "@/lib/services/customer-portal";
 import { getCustomerAuth } from "@/lib/server/customer-auth";
@@ -41,7 +42,7 @@ import { logPayment, verifyCashHandover } from "@/lib/services/payments";
 async function run<T>(roles: Role[] | null, fn: (actor: Actor) => Promise<T>, message?: string): Promise<ActionResult<T>> {
   try {
     const actor = roles ? await authorize(roles) : (null as unknown as Actor);
-    const data = await fn(actor);
+    const data = await withActorRole(actor?.role ?? "system", () => fn(actor));
     refresh();
     return { ok: true, message, data };
   } catch (e) {

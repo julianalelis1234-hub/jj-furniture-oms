@@ -47,6 +47,18 @@ run "$DB" supabase/migrations/005b_customer_email_auth.sql 2>/dev/null
 psql "$PGURL/$DB" -v ON_ERROR_STOP=1 -f supabase/tests/07_customer_email_auth.sql 2>&1 | grep -E "ok -|FAILED|ERROR|PASSED"
 run "$DB" supabase/migrations/006_remove_pin_customer_rls.sql
 psql "$PGURL/$DB" -v ON_ERROR_STOP=1 -f supabase/tests/09_remove_pin_customer_rls.sql 2>&1 | grep -E "ok -|FAILED|ERROR|PASSED"
+# Migration 007 (Realtime): grants and policies on every EXISTING table/function must be byte-identical before and after
+AUDIT="select 'grant', table_name, grantee, privilege_type from information_schema.role_table_grants where table_schema = 'public' and table_name <> 'order_live_events'
+ union all select 'policy', tablename, policyname, cmd || ' ' || coalesce(qual, '') || ' ' || coalesce(with_check, '') from pg_policies where schemaname = 'public' and tablename <> 'order_live_events'
+ union all select 'fn', p.oid::regprocedure::text, coalesce(array_to_string(p.proacl, ','), ''), '' from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+   where n.nspname in ('public', 'private') and p.proname not in ('is_order_customer', 'emit_order_live_event', 'prune_order_live_events')
+ union all select 'rls', relname, relrowsecurity::text, relforcerowsecurity::text from pg_class where relnamespace = 'public'::regnamespace and relkind = 'r' and relname <> 'order_live_events'
+ order by 1, 2, 3, 4"
+BEFORE=$(psql "$PGURL/$DB" -Atc "$AUDIT")
+run "$DB" supabase/migrations/007_enable_supabase_realtime.sql
+AFTER=$(psql "$PGURL/$DB" -Atc "$AUDIT")
+if [[ "$BEFORE" == "$AFTER" ]]; then echo "NOTICE:  ok - migration 007 adds no grant, policy, function privilege or RLS change to any existing table/function ($(echo "$BEFORE" | wc -l) entries compared)"; else echo "TEST FAILED: migration 007 changed existing authorization:"; diff <(echo "$BEFORE") <(echo "$AFTER") | head -20; exit 1; fi
+psql "$PGURL/$DB" -v ON_ERROR_STOP=1 -f supabase/tests/10_realtime_live_events.sql 2>&1 | grep -E "ok -|FAILED|ERROR|PASSED"
 
 # 1d. Race: two sessions open the same review link at the same moment ---------
 RORDER=$(psql "$PGURL/$DB" -Atc "insert into public.orders (order_code, paper_slip_number, customer_name, customer_phone, delivery_address, municipality, item_name, quantity, dimensions, wood_type, color_finish, furniture_price, estimated_completion_date, furniture_category, design_variant, width_cm, height_cm, depth_cm, customer_email) values ('DR-0710','S-710','C','09000000710','Purok 1, Poblacion','Valencia City','Door',1,'-','Mahogany','Natural Varnish',9000,current_date,'Panel Door','Classic 2-Panel',80,210,4.5,'race@example.com') returning id" | head -1)
@@ -92,6 +104,11 @@ run "$DB2" supabase/migrations/005b_customer_email_auth.sql 2>/dev/null
 psql "$PGURL/$DB2" -v ON_ERROR_STOP=1 -f supabase/tests/08_migration_005_legacy.sql 2>&1 | grep -E "ok -|FAILED|ERROR|PASSED"
 run "$DB2" supabase/migrations/006_remove_pin_customer_rls.sql
 run "$DB2" supabase/migrations/006_remove_pin_customer_rls.sql
+run "$DB2" supabase/migrations/007_enable_supabase_realtime.sql
+run "$DB2" supabase/migrations/007_enable_supabase_realtime.sql
+PUB=$(psql "$PGURL/$DB2" -Atc "select count(*) from pg_publication_tables where pubname = 'supabase_realtime' and tablename = 'order_live_events'")
+TRG=$(psql "$PGURL/$DB2" -Atc "select count(*) from pg_trigger where tgname like '%live_event%' and not tgisinternal")
+if [[ "$PUB" == "1" && "$TRG" == "6" ]]; then echo "NOTICE:  ok - migration 007 is idempotent on the live data (published once, 6 triggers, no duplicates)"; else echo "TEST FAILED: 007 re-run: publication=$PUB triggers=$TRG"; exit 1; fi
 HIST=$(psql "$PGURL/$DB2" -Atc "select count(*) filter (where pin_code_hash is not null) from public.orders")
 if [[ "$HIST" == "14" ]]; then echo "NOTICE:  ok - migration 006 on the live data keeps all 14 historical PIN hashes (data untouched)"; else echo "TEST FAILED: historical PIN hashes after 006: $HIST"; exit 1; fi
 

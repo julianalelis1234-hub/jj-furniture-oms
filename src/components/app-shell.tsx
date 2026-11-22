@@ -32,11 +32,14 @@ export function AppShell({
   portal,
   actor,
   headerExtra,
+  live,
   children,
 }: {
   portal: Role | "customer";
   actor: Actor | null;
   headerExtra?: ReactNode;
+  /** live-sync indicator + subscription for this page: pass <LiveSync /> (server component) */
+  live?: ReactNode;
   children: ReactNode;
 }) {
   const demo = isDemoMode();
@@ -52,6 +55,7 @@ export function AppShell({
             {actor && <p className="text-xs text-muted-foreground">{actor.full_name}</p>}
           </div>
           <div className="ml-auto flex items-center gap-2">
+            {live}
             {headerExtra}
             <ThemeToggle />
             {actor && (

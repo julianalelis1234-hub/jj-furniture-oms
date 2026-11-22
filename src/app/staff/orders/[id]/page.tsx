@@ -1,6 +1,7 @@
 import { ArrowLeft, Hammer, PackageCheck, Printer, Truck } from "lucide-react";
 import { notFound } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
+import { LiveSync } from "@/components/live-sync";
 import { DesignNote } from "@/components/design-note";
 import { LinkButton } from "@/components/link-button";
 import {
@@ -75,7 +76,7 @@ export default async function OrderDetailPage({ params }: PageProps<"/staff/orde
   const simulated = smsMode() === "simulated";
 
   return (
-    <AppShell portal={isOwner ? "owner" : "staff"} actor={actor}>
+    <AppShell portal={isOwner ? "owner" : "staff"} actor={actor} live={<LiveSync orderIds={[o.id]} />}>
       <div className="mb-3 flex flex-wrap gap-2">
         <LinkButton href={isOwner ? "/owner" : "/staff"} variant="ghost"><ArrowLeft aria-hidden /> Back</LinkButton>
         <LinkButton href={`/staff/orders/${o.id}/slip`} className="ml-auto"><Printer aria-hidden /> Print slip</LinkButton>

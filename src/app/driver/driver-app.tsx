@@ -15,6 +15,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { LIVE_DOM_EVENT } from "@/components/live-sync-client";
 import { toast } from "sonner";
 import { EmptyState } from "@/components/app-shell";
 import { DesignNote } from "@/components/design-note";
@@ -149,6 +150,13 @@ export function DriverApp({ driverId, initialManifest, serverTime }: { driverId:
     if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js", { scope: "/" }).catch(() => undefined);
     return () => { cancelled = true; };
   }, [driverId, initialManifest, serverTime, reload]);
+
+  // live sync: an authorized change to an assigned delivery -> re-download through the offline-safe path
+  useEffect(() => {
+    const onLive = () => { if (ready && onlineRef.current) void sync(true); };
+    window.addEventListener(LIVE_DOM_EVENT, onLive);
+    return () => window.removeEventListener(LIVE_DOM_EVENT, onLive);
+  }, [ready, sync]);
 
   // auto-sync whenever we (re)gain signal
   useEffect(() => {
