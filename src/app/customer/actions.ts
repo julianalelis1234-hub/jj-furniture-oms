@@ -7,6 +7,8 @@ import { clientIp } from "@/lib/server/request-meta";
 import { ZodError } from "zod";
 import type { ActionResult } from "@/lib/action-result";
 import { isDemoMode } from "@/lib/config";
+import type { DataStore } from "@/lib/data/store";
+import type { MemoryStore } from "@/lib/data/memory-store";
 import { DEMO_CUSTOMER_LOGIN } from "@/lib/data/seed";
 import { DomainError } from "@/lib/domain/errors";
 import { customerLoginSchema, firstErrors } from "@/lib/domain/validation";
@@ -53,15 +55,29 @@ export async function reviewAcceptAction(input: {
   client_idempotency_key: string;
   accept_specification: boolean;
   accept_quotation: boolean;
-}): Promise<ActionResult<ProvisionResult>> {
+}): Promise<ActionResult<ProvisionResult & { demo_setup_path?: string }>> {
   const scope = await getReviewSession();
   if (!scope) return { ok: false, message: "Your review session ended. Open the link from your email again, or ask the shop for a new one." };
   try {
-    const { provisioning } = await acceptFromReview(await getPublicStore(), await getCustomerAuth(), scope, input);
-    return { ok: true, data: provisioning, message: "Thank you! You accepted the specifications and the quotation." };
+    const store = await getPublicStore();
+    const { order, provisioning } = await acceptFromReview(store, await getCustomerAuth(), scope, input);
+    return { ok: true, data: { ...provisioning, demo_setup_path: await demoSetupPath(store, order.customer_email) }, message: "Thank you! You accepted the specifications and the quotation." };
   } catch (e) {
     return fail(e);
   }
+}
+
+/**
+ * DEMO MODE ONLY: the password set-up link that was just "emailed" (it sits in the
+ * in-memory Demo Inbox), so a tester can go straight from accepting to creating a
+ * password. In production this returns nothing: the link travels by email only,
+ * because receiving it is what proves the customer owns the address.
+ */
+async function demoSetupPath(store: DataStore, email: string | null): Promise<string | undefined> {
+  if (!isDemoMode() || !email || store.kind !== "memory") return undefined;
+  const mail = (store as MemoryStore).t.demo_mailbox.find((m) => m.to === email && m.text.includes("/customer/set-password?token="));
+  const m = mail?.text.match(/\/customer\/set-password\?token=[A-Za-z0-9_-]+/);
+  return m?.[0];
 }
 
 /** Submit Specification Changes for Review — limited to the review session's order. */

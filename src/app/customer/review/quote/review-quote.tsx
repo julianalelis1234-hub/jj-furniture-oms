@@ -15,7 +15,7 @@ import { formatPeso } from "@/lib/domain/finance";
 import type { ProvisionResult, ReviewView } from "@/lib/services/customer-portal";
 import { newUuid } from "@/lib/uuid";
 
-function Done({ result }: { result: ProvisionResult | null }) {
+function Done({ result }: { result: (ProvisionResult & { demo_setup_path?: string }) | null }) {
   return (
     <div className="grid gap-3 rounded-2xl border border-success bg-success-soft p-5" data-testid="review-accepted">
       <p className="flex items-center gap-2 text-lg font-bold"><CheckCircle2 className="size-6 text-success" aria-hidden /> Quotation accepted — your order is confirmed</p>
@@ -31,7 +31,14 @@ function Done({ result }: { result: ProvisionResult | null }) {
       {result && !["setup_email_sent", "linked"].includes(result.status) && (
         <p className="text-sm">Your account details will follow by email. Your acceptance is saved either way.</p>
       )}
-      <LinkButton href="/customer/login" variant="default" className="w-full sm:w-auto"><KeyRound aria-hidden /> Customer login</LinkButton>
+      {result?.demo_setup_path ? (
+        <div className="grid gap-1.5 rounded-xl border border-dashed border-live bg-background p-3" data-testid="demo-setup-shortcut">
+          <LinkButton href={result.demo_setup_path} variant="default" size="xl" className="w-full rounded-full"><KeyRound aria-hidden /> Set your password now</LinkButton>
+          <p className="text-xs text-muted-foreground">Demo Mode shortcut: this is the same single-use link that was emailed (also in the Demo Inbox). Real customers get it only by email.</p>
+        </div>
+      ) : (
+        <LinkButton href="/customer/login" variant="default" className="w-full sm:w-auto"><KeyRound aria-hidden /> Customer login</LinkButton>
+      )}
     </div>
   );
 }
@@ -40,7 +47,7 @@ function Done({ result }: { result: ProvisionResult | null }) {
 export function ReviewQuote({ view }: { view: ReviewView }) {
   const router = useRouter();
   const [key] = useState(() => newUuid());
-  const [result, setResult] = useState<ProvisionResult | null>(null);
+  const [result, setResult] = useState<(ProvisionResult & { demo_setup_path?: string }) | null>(null);
   const [accepted, setAccepted] = useState(view.accepted);
   const cur = view.order.current;
   const initial = useMemo<ConfigValue | null>(() => (cur ? configFromSpec(cur.spec) : null), [cur]);
