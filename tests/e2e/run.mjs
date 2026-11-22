@@ -246,7 +246,7 @@ await step("customer: no Order ID + PIN lookup; Option 1 email login (demo butto
   // wrong password: generic error (no account enumeration)
   await page.fill("#email", "maria.santos@example.com");
   await page.fill("#password", "wrong-password-123");
-  await page.getByRole("button", { name: "Log in", exact: true }).click();
+  await page.getByRole("button", { name: "Log In to Track My Orders" }).click();
   await page.getByTestId("login-error").waitFor();
   expect((await page.getByTestId("login-error").innerText()).includes("Email or password is incorrect"), "generic login error");
   // [Demo Customer Login (Maria Santos)] (demo mode only) → dashboard of her linked orders only
@@ -322,7 +322,7 @@ await step("customer: no Order ID + PIN lookup; Option 1 email login (demo butto
   await page.waitForURL(/\/customer\/login/);
   await page.fill("#email", "ramon.delacruz@example.com");
   await page.fill("#password", "Yakal-Chair-2027");
-  await page.getByRole("button", { name: "Log in", exact: true }).click();
+  await page.getByRole("button", { name: "Log In to Track My Orders" }).click();
   await page.waitForURL(/\/customer\/orders/);
   await page.getByTestId("customer-orders").waitFor();
   await ctx.close();
@@ -591,7 +591,7 @@ await step("theme: dark mode renders with prototype palette", async () => {
   const { page, ctx } = await asPersona("Mr. Vincris Lelis");
   await page.getByRole("button", { name: "Switch to Dark mode" }).click();
   const bg = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
-  expect(bg === "rgb(20, 16, 13)", `dark background expected #14100D, got ${bg}`);
+  expect(bg === "rgb(43, 29, 23)", `dark background expected Espresso #2B1D17, got ${bg}`);
   await page.screenshot({ path: `${SHOTS}/owner-dark-mobile.png`, fullPage: false });
   await ctx.close();
 });

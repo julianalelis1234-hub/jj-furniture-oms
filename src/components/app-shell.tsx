@@ -18,11 +18,12 @@ const PORTAL_LABEL: Record<Role | "customer", { title: string; code: string }> =
 
 export function Logo() {
   return (
-    <Link href="/" className="flex items-center gap-2 font-bold tracking-tight">
-      <span className="flex size-9 items-center justify-center rounded-lg bg-primary text-sm font-black text-primary-foreground">JJ</span>
-      <span className="leading-tight">
-        JJ Furniture
-        <span className="block text-[0.7rem] font-medium text-muted-foreground">Valencia City, Bukidnon</span>
+    <Link href="/" className="flex items-center gap-2.5" aria-label="JJ Furniture Shop and Enterprises — home">
+      <span className="flex size-9 items-center justify-center rounded-xl bg-primary font-serif text-base font-bold text-primary-foreground">JJ</span>
+      {/* serif wordmark: the only place the serif face is used besides the hero tagline */}
+      <span className="font-serif leading-none">
+        <span className="block text-[1.2rem] font-semibold tracking-tight">JJ Furniture</span>
+        <span className="block text-[0.78rem] font-medium tracking-[0.04em] text-muted-foreground">Shop and Enterprises</span>
       </span>
     </Link>
   );
@@ -47,7 +48,8 @@ export function AppShell({
   return (
     <div className="flex min-h-dvh flex-col">
       {demo && <DemoBar current={portal} />}
-      <header className="no-print sticky top-0 z-30 border-b bg-card/95 backdrop-blur">
+      {/* Espresso navigation anchor in both modes: the `dark` class scopes the dark tokens to the header */}
+      <header className="dark no-print sticky top-0 z-30 border-b border-border bg-background/95 text-foreground backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-2.5">
           <Logo />
           <div className="ml-1 hidden border-l pl-3 sm:block">

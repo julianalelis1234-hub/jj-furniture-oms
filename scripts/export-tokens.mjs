@@ -10,7 +10,7 @@ const block = (sel) => {
 const toSet = (vars) =>
   Object.fromEntries(
     Object.entries(vars)
-      .filter(([k]) => k !== "radius")
+      .filter(([, v]) => /^#[0-9a-f]{6}$/i.test(v)) // colours only (shadows / radius are not colour variables)
       .map(([k, v]) => [k, { $type: "color", $value: v }]),
   );
 const light = block(":root");
@@ -22,6 +22,8 @@ const tokens = {
     "touch-target-min": { $type: "dimension", $value: "44px" },
     "touch-target-primary": { $type: "dimension", $value: "56px" },
     "font-size-body": { $type: "dimension", $value: "16px" },
+    "shadow-surface-light": { $type: "boxShadow", $value: light["shadow-surface"] },
+    "shadow-surface-dark": { $type: "boxShadow", $value: block(".dark")["shadow-surface"] },
   },
   $themes: [
     { name: "Normal (Light)", selectedTokenSets: { "jj/light (Normal Mode)": "enabled", "jj/shape": "enabled" } },

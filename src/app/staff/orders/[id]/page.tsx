@@ -228,10 +228,10 @@ export default async function OrderDetailPage({ params }: PageProps<"/staff/orde
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader><CardTitle>Payment</CardTitle></CardHeader>
-          <CardContent className="grid gap-3">
-            <dl className="grid gap-1 rounded-lg bg-muted p-3 text-sm">
+        <Card className="gap-0 py-0">
+          <CardHeader className="border-b bg-secondary py-3"><CardTitle>Payment</CardTitle></CardHeader>
+          <CardContent className="grid gap-3 py-4">
+            <dl className="grid gap-1 rounded-xl border bg-background p-3 text-sm">
               <div className="flex justify-between"><dt>Furniture price</dt><dd className="font-semibold tabular-nums">{formatPeso(o.furniture_price)}</dd></div>
               <div className="flex justify-between"><dt>30% down payment due</dt><dd className="tabular-nums">{formatPeso(o.standard_down_payment_due)}</dd></div>
               <div className="flex justify-between"><dt>Verified furniture payments</dt><dd className="tabular-nums">− {formatPeso(furniturePaidFrom(payments))}</dd></div>

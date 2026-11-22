@@ -7,7 +7,7 @@ const TONE: Record<OrderStatus, string> = {
   "Quote Requested": "bg-secondary text-foreground border-dashed border-primary/50",
   "Waiting for Confirmation": "bg-warning-soft text-warning border-warning/40",
   Confirmed: "bg-info-soft text-info border-info/40",
-  "In Production": "bg-accent-soft text-primary border-accent/60",
+  "In Production": "bg-accent-soft text-foreground border-live/70",
   "Completed / For Inspection": "bg-info-soft text-info border-info/40",
   "Ready for Delivery": "bg-success-soft text-success border-success/40",
   "Out for Delivery": "bg-info-soft text-info border-info/40",
@@ -24,9 +24,9 @@ export function StatusBadge({ status, className }: { status: OrderStatus; classN
       )}
     >
       {status === "Quote Requested" ? (
-        <span className="opacity-70">Intake ·</span>
+        <span className="font-normal">Intake ·</span>
       ) : (
-        <span className="tabular-nums opacity-70">{stageIndex(status)}/7</span>
+        <span className="font-normal tabular-nums">{stageIndex(status)}/7</span>
       )}{" "}
       {STATUS_SHORT[status]}
     </span>
@@ -55,23 +55,37 @@ export function PriorityBadge({ label, rank }: { label: PriorityLabel; rank?: nu
  */
 export function StageTracker({ status, compact = false }: { status: OrderStatus; compact?: boolean }) {
   const current = stageIndex(status) - 1; // 0-based position in WORKSHOP_STAGES; -1 for Quote Requested
+  const last = WORKSHOP_STAGES.length - 1;
   return (
     <ol className={cn("grid gap-2", compact ? "grid-cols-7" : "sm:grid-cols-7")} aria-label="Order progress">
       {WORKSHOP_STAGES.map((s, i) => {
         const done = i < current || status === "Delivered";
         const active = i === current && status !== "Delivered";
+        const trackDone = i < current || status === "Delivered";
         return (
-          <li key={s} className={cn("flex items-center gap-3 sm:flex-col sm:items-center sm:gap-1.5 sm:text-center", compact && "flex-col gap-1 text-center")}>
-            <span
-              className={cn(
-                "flex size-8 shrink-0 items-center justify-center rounded-full border-2 text-sm font-bold",
-                done && "border-success bg-success text-success-foreground",
-                active && "border-primary bg-primary text-primary-foreground ring-4 ring-primary/20",
-                !done && !active && "border-border bg-card text-muted-foreground",
-              )}
-              aria-hidden
-            >
-              {done ? <Check className="size-4" /> : i + 1}
+          <li key={s} className={cn("relative flex items-center gap-3 sm:flex-col sm:items-center sm:gap-1.5 sm:text-center", compact && "flex-col gap-1 text-center")}>
+            {/* track to the next stage: Mocha when passed, Latte while pending */}
+            {i < last && (
+              <span
+                aria-hidden
+                className={cn(
+                  "absolute rounded-full",
+                  compact ? "top-[15px] left-[calc(50%+18px)] h-0.5 w-[calc(100%-36px+0.5rem)]" : "top-8 left-[15px] h-[calc(100%-24px)] w-0.5 sm:top-[15px] sm:left-[calc(50%+18px)] sm:h-0.5 sm:w-[calc(100%-36px+0.5rem)]",
+                  trackDone ? "bg-stage-done" : "bg-stage-track",
+                )}
+              />
+            )}
+            <span className="relative flex size-8 shrink-0 items-center justify-center" aria-hidden>
+              <span
+                className={cn(
+                  "relative flex size-8 items-center justify-center rounded-full border-2 text-sm font-bold tabular-nums",
+                  done && "border-stage-done bg-stage-done text-stage-done-foreground",
+                  active && "jj-pulse-ring border-live bg-live text-[#2b1d17]",
+                  !done && !active && "border-stage-track bg-background text-muted-foreground",
+                )}
+              >
+                {done ? <Check className="size-4" /> : i + 1}
+              </span>
             </span>
             <span
               className={cn(
