@@ -61,6 +61,41 @@ With no Supabase credentials, demo mode runs on an **in-memory database** seeded
 * **Legacy orders:** orders created before 003 keep their free-text `dimensions`; W/H/D stay NULL with `is_legacy_incomplete = true` (shown as *Dimensions Pending Clarification*) until staff issue a revised quote with exact centimetres. No dimensions are guessed.
 * **Codes:** new orders and portal requests get `DR-####` and are promoted to `JJ-YYYY-####` on acceptance, keeping the same sequence number.
 
+## Transactional email (migration 008)
+
+Business flows never send mail inline. They **enqueue** a row in `notification_outbox` after their own state is committed. The outbox then delivers the branded HTML + plain-text email: Espresso / Mocha / Caramel / Cream, with every value HTML-escaped.
+
+| Email | When | Button |
+|---|---|---|
+| `quote_review_ready` | a quotation is issued | **Review & Accept Quotation** → `/customer/review?token=…` |
+| `order_confirmed_new_customer` | acceptance + account provisioned and linked under the verified-email rules | **Set Your Password & Track Order** → `/auth/callback` → `/customer/set-password` |
+| `order_confirmed_returning_customer` | the verified email already has an account (password untouched, no duplicate account) | **Log In to Track Your Order** → `/customer/login` |
+| `account_setup_link` | "Forgot Password?" / `POST /api/auth/request-setup-link` | **Set Your Password** |
+
+* **Providers** (`src/lib/email/mailer.ts`):
+  * **Resend** (`RESEND_API_KEY` + `EMAIL_FROM`, recommended). Uses the row's `Idempotency-Key` on every automatic retry, and a fresh `resend:<uuid>` key on a manual resend. Verify the domain and publish **SPF, DKIM and DMARC**.
+  * **Gmail SMTP** (`GMAIL_SMTP_USER` + `GMAIL_SMTP_APP_PASSWORD`). Uses `smtp.gmail.com:465` with TLS and 15 s timeouts. *From* is always the Gmail account. Needs 2-Step Verification and a 16-character App Password.
+  * **Demo Mode:** the Demo Inbox.
+  * **No provider:** rows stay `pending`. Nothing is ever marked sent just because a function returned.
+* **`sent` means accepted by the provider** (`provider_message_id`), not guaranteed inbox delivery.
+  * A network timeout is *ambiguous*. The row is retried with exponential backoff and the same idempotency key, so Resend de-duplicates. SMTP is at-least-once.
+  * Permanent rejections (invalid address / 5xx bounce) stop after one attempt. Errors are sanitized: no links, tokens or addresses.
+* **Secrets in the queue are AES-256-GCM encrypted** (`src/lib/email/crypto.ts`). This covers the raw review token and the generated set-up link.
+  * Each row stores the envelope `{v, iv, tag, ct}`: key id, 12-byte random IV, 16-byte tag, ciphertext. The row's idempotency key is bound as AAD.
+  * `OUTBOX_TOKEN_ENCRYPTION_KEY` (base64, exactly 32 bytes) is required in production. A missing or malformed key **fails closed**. Rotate with `OUTBOX_TOKEN_ENCRYPTION_KEYS_PREVIOUS`.
+  * The database rejects any non-envelope payload. It also forbids a payload on a `sent` row, and scrubs the payload as soon as the review token is consumed, replaced or expired.
+  * The SHA-256 hash in `quote_review_tokens` stays the only validation: a queued token that no longer matches is never sent.
+* **Set-up links** come from `auth.admin.generateLink({ type: 'recovery', redirectTo })`, generated once per row at send time.
+  * The link is kept encrypted for identical retries. A new recovery link would invalidate the previous one, and Resend rejects a reused key with a different payload.
+  * `/auth/callback` verifies `token_hash` + `type=recovery` with `verifyOtp` (generated links cannot use PKCE). It only uses `exchangeCodeForSession` if a PKCE `code` arrives instead, and never calls both.
+  * The resulting session must belong to an active customer account. `/customer/set-password` saves via `supabase.auth.updateUser({ password })`. It requires at least 8 characters and matching fields, shows strength feedback and has show/hide toggles.
+* **Leases.** `claim_notification_outbox()` claims due rows with `FOR UPDATE SKIP LOCKED` and sets a fresh `processing_lease_token`, with a lease of request timeout + 30 s. It **commits before any network call**.
+  * Completion, failure, release and payload updates all require `id` + the current lease token. A stalled worker whose lease expired matches 0 rows and can never overwrite a newer worker's result.
+* **Endpoints:**
+  * `POST /api/notifications/process` — scheduler only. Requires `Authorization: Bearer ${CRON_SECRET}`, compared in constant time; any browser session gets 401.
+  * `POST /api/notifications/resend` — signed-in staff / owner only, for one order. Rate-limited per order and per user; audited via `requested_by_user_id`.
+  * `POST /api/auth/request-setup-link` — public. Rate-limited per IP and per HMAC of the normalized email. It always returns *"If an eligible account exists for this email, a password setup link has been sent."* and never creates an account; delivery runs after the response.
+
 ## Offline driver sync
 
 `src/lib/offline/driver-db.ts` keeps `manifest`, `sync_queue` and `meta` stores in IndexedDB, one database per driver.
@@ -99,8 +134,8 @@ With no Supabase credentials, demo mode runs on an **in-memory database** seeded
 ## Testing
 
 ```bash
-npm test           # Vitest: 189 unit tests (incl. live-sync dedup / ordering / verified-notification rules) (incl. no active PIN path, demo login refused outside Demo Mode, own-orders-only change requests) (incl. review-link, provisioning and access-control security tests) (incl. exact 3D bounds for every design at 6 sizes) (validation, state machine + roles, 30/70 finance, 30% gate, Option 2 requests, quote expiry, atomic/idempotent acceptance, privacy, offline sync)
-npm run test:db    # Postgres: 214 assertions (incl. migration 007: authorization audit, live-feed RLS per role, transition classification; migration 006: PIN endpoints dropped, PIN history kept, customer RLS = own orders only; migration 005: tokens, verified linking, RLS for customers, a two-session link race) on the real migrations (triggers, constraints, RLS per role, acceptance engine, append-only tables, row-lock concurrency, 003/004 on a copy of the live data) + seed cross-check
+npm test           # Vitest: 209 unit tests (incl. outbox crypto / leases / retries / endpoint separation) (incl. live-sync dedup / ordering / verified-notification rules) (incl. no active PIN path, demo login refused outside Demo Mode, own-orders-only change requests) (incl. review-link, provisioning and access-control security tests) (incl. exact 3D bounds for every design at 6 sizes) (validation, state machine + roles, 30/70 finance, 30% gate, Option 2 requests, quote expiry, atomic/idempotent acceptance, privacy, offline sync)
+npm run test:db    # Postgres: 248 assertions (incl. migration 008: outbox envelope / lease / SKIP LOCKED / scrub / rate limits; migration 007: authorization audit, live-feed RLS per role, transition classification; migration 006: PIN endpoints dropped, PIN history kept, customer RLS = own orders only; migration 005: tokens, verified linking, RLS for customers, a two-session link race) on the real migrations (triggers, constraints, RLS per role, acceptance engine, append-only tables, row-lock concurrency, 003/004 on a copy of the live data) + seed cross-check
 npm run build && PORT=3100 npm start &
 BASE_URL=http://localhost:3100 npm run test:e2e   # Playwright: all 5 portals end-to-end, mobile no-horizontal-scroll, dark mode
 ```

@@ -361,3 +361,35 @@ export interface QuoteReviewToken {
 export type ConsumeReviewResult =
   | { ok: true; order_id: string; revision_id: string; revision_number: number; email: string }
   | { ok: false; reason: "invalid" | "used" | "replaced" | "expired" | "email_changed" };
+
+// --------------------------------------------------- email outbox (008) ----
+export const OUTBOX_STATUSES = ["pending", "processing", "sent", "failed"] as const;
+export type OutboxStatus = (typeof OUTBOX_STATUSES)[number];
+export type OutboxKindName = "quote_review_ready" | "order_confirmed_new_customer" | "order_confirmed_returning_customer" | "account_setup_link";
+
+/** One queued transactional email. `encrypted_payload` is an AES-256-GCM envelope or null — never plaintext. */
+export interface OutboxRow {
+  id: string;
+  kind: OutboxKindName;
+  order_id: string | null;
+  recipient_email: string;
+  customer_user_id: string | null;
+  review_token_id: string | null;
+  template_data: Record<string, string | null>;
+  idempotency_key: string;
+  delivery_status: OutboxStatus;
+  encrypted_payload: string | null;
+  processing_lease_token: string | null;
+  processing_lease_until: string | null;
+  next_retry_at: string;
+  attempt_count: number;
+  max_attempts: number;
+  is_permanent_failure: boolean;
+  provider_message_id: string | null;
+  last_sanitized_error: string | null;
+  requested_by_user_id: string | null;
+  created_at: string;
+  updated_at: string;
+  sent_at: string | null;
+}
+export type NewOutboxRow = Pick<OutboxRow, "kind" | "order_id" | "recipient_email" | "customer_user_id" | "review_token_id" | "template_data" | "idempotency_key" | "encrypted_payload" | "requested_by_user_id"> & { max_attempts?: number };

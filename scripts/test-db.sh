@@ -59,6 +59,32 @@ run "$DB" supabase/migrations/007_enable_supabase_realtime.sql
 AFTER=$(psql "$PGURL/$DB" -Atc "$AUDIT")
 if [[ "$BEFORE" == "$AFTER" ]]; then echo "NOTICE:  ok - migration 007 adds no grant, policy, function privilege or RLS change to any existing table/function ($(echo "$BEFORE" | wc -l) entries compared)"; else echo "TEST FAILED: migration 007 changed existing authorization:"; diff <(echo "$BEFORE") <(echo "$AFTER") | head -20; exit 1; fi
 psql "$PGURL/$DB" -v ON_ERROR_STOP=1 -f supabase/tests/10_realtime_live_events.sql 2>&1 | grep -E "ok -|FAILED|ERROR|PASSED"
+run "$DB" supabase/migrations/008_harden_notification_outbox.sql
+psql "$PGURL/$DB" -v ON_ERROR_STOP=1 -f supabase/tests/11_notification_outbox.sql 2>&1 | grep -E "ok -|FAILED|ERROR|PASSED"
+# Outbox concurrency: worker 1 holds its claim transaction open; worker 2 must skip the locked row, not block or double-claim it
+psql "$PGURL/$DB" -qAt -c "insert into public.notification_outbox (id, kind, recipient_email, idempotency_key) values
+  ('82000000-0000-0000-0000-000000000001','account_setup_link','w1@example.com','skip:1'),
+  ('82000000-0000-0000-0000-000000000002','account_setup_link','w2@example.com','skip:2')" >/dev/null
+( psql "$PGURL/$DB" -qAt -v ON_ERROR_STOP=1 > /tmp/jj_w1_$$ <<SQL
+begin;
+select id from public.claim_notification_outbox(1, 60, '82000000-0000-0000-0000-000000000001');
+select pg_sleep(2);
+commit;
+SQL
+) &
+W1=$!
+sleep 0.7
+T0=$(date +%s%N)
+W2=$(psql "$PGURL/$DB" -qAt -c "select string_agg(id::text, ',') from public.claim_notification_outbox(10, 60) where id::text like '82000000%'")
+T1=$(date +%s%N)
+wait $W1
+W1OUT=$(grep -c 82000000-0000-0000-0000-000000000001 /tmp/jj_w1_$$ || true); rm -f /tmp/jj_w1_$$
+MS=$(( (T1 - T0) / 1000000 ))
+if [[ "$W1OUT" == "1" && "$W2" == "82000000-0000-0000-0000-000000000002" && $MS -lt 1500 ]]; then
+  echo "NOTICE:  ok - concurrent claims: worker 2 skipped worker 1's locked row without waiting (${MS} ms) and nothing was claimed twice"
+else
+  echo "TEST FAILED: SKIP LOCKED claim (w1=$W1OUT w2=$W2 ${MS}ms)"; exit 1
+fi
 
 # 1d. Race: two sessions open the same review link at the same moment ---------
 RORDER=$(psql "$PGURL/$DB" -Atc "insert into public.orders (order_code, paper_slip_number, customer_name, customer_phone, delivery_address, municipality, item_name, quantity, dimensions, wood_type, color_finish, furniture_price, estimated_completion_date, furniture_category, design_variant, width_cm, height_cm, depth_cm, customer_email) values ('DR-0710','S-710','C','09000000710','Purok 1, Poblacion','Valencia City','Door',1,'-','Mahogany','Natural Varnish',9000,current_date,'Panel Door','Classic 2-Panel',80,210,4.5,'race@example.com') returning id" | head -1)
@@ -106,6 +132,10 @@ run "$DB2" supabase/migrations/006_remove_pin_customer_rls.sql
 run "$DB2" supabase/migrations/006_remove_pin_customer_rls.sql
 run "$DB2" supabase/migrations/007_enable_supabase_realtime.sql
 run "$DB2" supabase/migrations/007_enable_supabase_realtime.sql
+run "$DB2" supabase/migrations/008_harden_notification_outbox.sql
+run "$DB2" supabase/migrations/008_harden_notification_outbox.sql
+OB=$(psql "$PGURL/$DB2" -Atc "select count(*) from pg_constraint where conrelid = 'public.notification_outbox'::regclass and contype = 'c'")
+if [[ "$OB" == "8" ]]; then echo "NOTICE:  ok - migration 008 is idempotent on the live data (8 outbox checks, no duplicates)"; else echo "TEST FAILED: 008 re-run checks=$OB"; exit 1; fi
 PUB=$(psql "$PGURL/$DB2" -Atc "select count(*) from pg_publication_tables where pubname = 'supabase_realtime' and tablename = 'order_live_events'")
 TRG=$(psql "$PGURL/$DB2" -Atc "select count(*) from pg_trigger where tgname like '%live_event%' and not tgisinternal")
 if [[ "$PUB" == "1" && "$TRG" == "6" ]]; then echo "NOTICE:  ok - migration 007 is idempotent on the live data (published once, 6 triggers, no duplicates)"; else echo "TEST FAILED: 007 re-run: publication=$PUB triggers=$TRG"; exit 1; fi

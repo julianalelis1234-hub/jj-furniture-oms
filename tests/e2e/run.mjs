@@ -70,6 +70,14 @@ async function openReview(page, href) {
 let newOrderCode = "";
 await step("staff: Today's Work lists task queues", async () => {
   const { page, ctx } = await asPersona("Gilbert Decena", desktop);
+  const cron = await page.request.post("/api/notifications/process");
+  expect([401, 503].includes(cron.status()), `a staff session must not run the queue worker, got ${cron.status()}`);
+  const cronBad = await page.request.post("/api/notifications/process", { headers: { authorization: "Bearer not-the-secret" } });
+  expect([401, 503].includes(cronBad.status()), `a wrong bearer must be refused, got ${cronBad.status()}`);
+  if (process.env.CRON_SECRET) {
+    const ok = await page.request.post("/api/notifications/process", { headers: { authorization: `Bearer ${process.env.CRON_SECRET}` } });
+    expect(ok.status() === 200 && (await ok.json()).provider === "demo", `the scheduler's bearer secret runs the worker, got ${ok.status()}`);
+  }
   expect(page.url().endsWith("/staff"), `expected /staff, got ${page.url()}`);
   for (const h of ["Customer quote requests (Option 2)", "Release to workshop (30% verified)", "Record customer acceptance (spec + quote)", "Log 30% down payment", "Verify driver cash handover", "Failed SMS updates"])
     expect(await page.getByRole("heading", { name: h }).isVisible(), `missing section ${h}`);
@@ -290,11 +298,22 @@ await step("customer: no Order ID + PIN lookup; Option 1 email login (demo butto
   await page.goto("/customer/review?token=not-a-real-token-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA");
   await page.getByRole("button", { name: "Open my quotation" }).click();
   await page.getByTestId("review-error").waitFor();
-  const setup = await inboxLink(page, "ramon.delacruz@example.com", "/customer/setup-password");
+  const setup = await inboxLink(page, "ramon.delacruz@example.com", "/customer/set-password");
   await page.goto(setup);
+  const save = page.getByRole("button", { name: "Save password" });
   await page.fill("#password", "short");
   await page.fill("#confirm", "short");
-  await page.getByRole("button", { name: "Save password" }).click();
+  expect(await save.isDisabled(), "Save stays disabled under 8 characters");
+  expect((await page.getByTestId("password-strength").innerText()).includes("more characters needed"), "strength feedback explains the minimum");
+  await page.fill("#password", "Kamagong-Bed-2026");
+  await page.fill("#confirm", "Kamagong-Bed-2025");
+  expect(await save.isDisabled(), "Save stays disabled until both passwords match");
+  await page.getByTestId("toggle-password").click();
+  expect((await page.getAttribute("#password", "type")) === "text", "show / hide password");
+  // the server still validates (here: the email name inside the password)
+  await page.fill("#password", "ramon.delacruz-2026");
+  await page.fill("#confirm", "ramon.delacruz-2026");
+  await save.click();
   await page.getByTestId("setup-error").waitFor();
   await page.fill("#password", "Kamagong-Bed-2026");
   await page.fill("#confirm", "Kamagong-Bed-2026");
@@ -311,7 +330,7 @@ await step("customer: no Order ID + PIN lookup; Option 1 email login (demo butto
   await page.fill("#email", "ramon.delacruz@example.com");
   await page.getByRole("button", { name: "Send reset link" }).click();
   await page.getByTestId("forgot-result").waitFor();
-  const reset = await inboxLink(page, "ramon.delacruz@example.com", "/customer/setup-password");
+  const reset = await inboxLink(page, "ramon.delacruz@example.com", "/customer/set-password");
   expect(reset !== setup, "a fresh reset link was emailed");
   await page.goto(reset);
   await page.fill("#password", "Yakal-Chair-2027");
@@ -324,6 +343,16 @@ await step("customer: no Order ID + PIN lookup; Option 1 email login (demo butto
   await page.fill("#password", "Yakal-Chair-2027");
   await page.getByRole("button", { name: "Log In to Track My Orders" }).click();
   await page.waitForURL(/\/customer\/orders/);
+  // a signed-in CUSTOMER cannot use the staff resend endpoint or the cron worker
+  const asCustomer = await page.request.post("/api/notifications/resend", { data: { order_id: "00000000-0000-4000-8000-000000000000", kind: "quote_review" } });
+  expect(asCustomer.status() === 401, `customer → resend must be 401, got ${asCustomer.status()}`);
+  const cronAsCustomer = await page.request.post("/api/notifications/process");
+  expect([401, 503].includes(cronAsCustomer.status()), `customer → process must be refused, got ${cronAsCustomer.status()}`);
+  // public set-up link endpoint: identical generic answer for a registered and an unknown address
+  const known = await page.request.post("/api/auth/request-setup-link", { data: { email: "maria.santos@example.com" } });
+  const unknown = await page.request.post("/api/auth/request-setup-link", { data: { email: "no.such.person@example.com" } });
+  expect(known.status() === 200 && unknown.status() === 200, "both 200");
+  expect(JSON.stringify(await known.json()) === JSON.stringify(await unknown.json()), "identical response bodies (no enumeration)");
   await page.getByTestId("customer-orders").waitFor();
   await ctx.close();
 });
@@ -336,7 +365,7 @@ await step("customer: staff resend link → propose changes in the review sessio
   expect((await staff.page.getByTestId("customer-email-status").innerText()).includes("unverified"), "email shown as unverified");
   staff.page.once("dialog", (d) => d.accept());
   await staff.page.getByRole("button", { name: "Resend review link" }).click();
-  await staff.page.getByText("A new review link was issued").first().waitFor();
+  await staff.page.getByText("A new single-use review link was emailed to the customer.").first().waitFor();
 
   const ctx = await browser.newContext({ ...mobile, baseURL: BASE });
   const page = await ctx.newPage();

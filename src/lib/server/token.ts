@@ -40,3 +40,8 @@ export function verifyToken<T extends Record<string, unknown>>(token: string | u
     return null;
   }
 }
+
+/** Privacy-preserving identifier (e.g. a rate-limit bucket for an email): HMAC-SHA256 under the server secret. */
+export function hmacId(purpose: string, value: string): string {
+  return createHmac("sha256", secret()).update(`${purpose}\u0000${value}`).digest("hex").slice(0, 40);
+}

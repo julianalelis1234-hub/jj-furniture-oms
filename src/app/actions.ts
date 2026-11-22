@@ -15,7 +15,7 @@ import { authorize, DEMO_COOKIE, getPublicStore, getStore, PORTAL_FOR, setDemoSe
 import { resetMemoryStore } from "@/lib/server/memory";
 import { withActorRole } from "@/lib/realtime/actor-context";
 import { createUserClient } from "@/lib/server/supabase";
-import { issueReviewLink, provisionCustomerAccount } from "@/lib/services/customer-portal";
+import { resendForOrder } from "@/lib/email/requests";
 import { getCustomerAuth } from "@/lib/server/customer-auth";
 import { createCustomerRequest } from "@/lib/services/customer";
 import { scheduleDelivery } from "@/lib/services/deliveries";
@@ -39,12 +39,12 @@ import { logPayment, verifyCashHandover } from "@/lib/services/payments";
 
 
 /** Uniform wrapper: server-side authorization, domain errors -> friendly results, UI refresh. */
-async function run<T>(roles: Role[] | null, fn: (actor: Actor) => Promise<T>, message?: string): Promise<ActionResult<T>> {
+async function run<T>(roles: Role[] | null, fn: (actor: Actor) => Promise<T>, message?: string | ((data: T) => string)): Promise<ActionResult<T>> {
   try {
     const actor = roles ? await authorize(roles) : (null as unknown as Actor);
     const data = await withActorRole(actor?.role ?? "system", () => fn(actor));
     refresh();
-    return { ok: true, message, data };
+    return { ok: true, message: typeof message === "function" ? message(data) : message, data };
   } catch (e) {
     if (e instanceof DomainError) {
       const fieldErrors = e.details instanceof ZodError ? firstErrors(e.details) : undefined;
@@ -119,17 +119,19 @@ export async function createOrderAction(_: unknown, fd: FormData): Promise<Actio
 
 /** Staff: send a fresh single-use review link for the current quotation (older links stop working). */
 export async function resendReviewLinkAction(orderId: string) {
-  return run(["owner", "staff"], async () => {
-    const r = await issueReviewLink(await getStore(), orderId);
-    return { status: r.status };
-  }, "A new review link was issued to the customer's email.");
+  return run(["owner", "staff"], async (a) => {
+    const r = await resendForOrder(await getStore(), await getCustomerAuth(), a, orderId, "quote_review");
+    return { status: r.delivery };
+  }, (d) => d.status === "sent" ? "A new single-use review link was emailed to the customer."
+    : d.status === "failed" ? "A new review link was issued, but the email provider rejected it — check the customer's email address."
+    : "A new review link is queued; it will be emailed as soon as the email provider accepts it.");
 }
 
 /** Staff: retry the post-acceptance account set-up (idempotent; never touches the acceptance). */
 export async function retryProvisioningAction(orderId: string) {
-  return run(["owner", "staff"], async () => {
-    const r = await provisionCustomerAccount(await getStore(), await getCustomerAuth(), orderId);
-    return { status: r.status, detail: r.detail };
+  return run(["owner", "staff"], async (a) => {
+    const r = await resendForOrder(await getStore(), await getCustomerAuth(), a, orderId, "account_setup");
+    return { status: r.provisioning, delivery: r.delivery };
   }, "Account set-up re-checked.");
 }
 

@@ -21,6 +21,9 @@ const nextConfig: NextConfig = {
       { source: "/track/request", destination: "/customer/customize", permanent: false },
       { source: "/track/:path*", destination: "/customer/login", permanent: false },
       { source: "/customer", destination: "/customer/login", permanent: false },
+      // links already emailed before the set-up flow moved (query strings are carried over)
+      { source: "/customer/setup-password", destination: "/customer/set-password", permanent: false },
+      { source: "/customer/auth/confirm", destination: "/auth/callback", permanent: false },
     ];
   },
   async headers() {

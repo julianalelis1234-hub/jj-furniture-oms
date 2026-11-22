@@ -11,7 +11,7 @@ import {
   passwordProblem,
   type CustomerAuthProvider,
 } from "@/lib/services/customer-auth";
-import { sendEmail, siteUrl } from "@/lib/services/email";
+import { siteUrl } from "@/lib/services/email";
 import { getPublicStore } from "./context";
 import { SupabaseStore } from "@/lib/data/supabase-store";
 import { isHttpsRequest } from "./request";
@@ -46,10 +46,21 @@ export function supabaseCustomerAuth(store: DataStore): CustomerAuthProvider {
       return data.user.id;
     },
     async passwordLink(_userId, email) {
-      const { data, error } = await admin.auth.admin.generateLink({ type: "recovery", email });
+      // Generated server-side at send time, delivered by OUR mailer (not Supabase's rate-limited one).
+      // The link targets our /auth/callback, which verifies the token hash server-side (verifyOtp) and
+      // sets the session cookies; it is never stored in plaintext.
+      const { data, error } = await admin.auth.admin.generateLink({
+        type: "recovery",
+        email: email.trim().toLowerCase(),
+        options: { redirectTo: `${siteUrl()}/auth/callback?next=/customer/set-password` },
+      });
       const hashed = data?.properties?.hashed_token;
-      if (error || !hashed) throw new DomainError("BACKEND", error?.message ?? "Could not create the password link.");
-      return `${siteUrl()}/customer/auth/confirm?token_hash=${hashed}&type=recovery&next=/customer/setup-password`;
+      if (error || !hashed) throw new DomainError("BACKEND", "Could not create the password link.");
+      return `${siteUrl()}/auth/callback?token_hash=${encodeURIComponent(hashed)}&type=recovery&next=/customer/set-password`;
+    },
+    async emailVerified(userId) {
+      const { data } = await admin.auth.admin.getUserById(userId);
+      return !!data.user?.email_confirmed_at;
     },
     async hasPassword(userId) {
       const { data } = await admin.auth.admin.getUserById(userId);
@@ -133,24 +144,11 @@ export async function customerSignOut() {
   (await cookies()).delete({ name: CUSTOMER_AUTH_COOKIE, path: "/" });
 }
 
-/** Always answers the same way so the form cannot reveal which emails have accounts. */
-export async function customerRequestReset(email: string) {
-  const store = await getPublicStore();
-  const acct = await store.elevated().findCustomerAccountByEmail(email);
-  if (!acct?.is_active) return;
-  const link = await (await getCustomerAuth()).passwordLink(acct.id, acct.email, "reset");
-  await sendEmail(store, {
-    order_id: null,
-    to: acct.email,
-    subject: "Reset your JJ Furniture password",
-    text: `Hello ${acct.full_name},\n\nUse this link to choose a new password (works once, expires in 24 hours):\n${link}\n\nIf you did not ask for this, ignore this email; your password stays the same.`,
-  });
-}
 
 /**
  * Sets the password from a set-up / reset link.
  *  - demo: the one-time token from the link
- *  - production: the recovery session created by /customer/auth/confirm
+ *  - production: the recovery session created by /auth/callback (verifyOtp)
  */
 export async function customerSetPassword(token: string | null, password: string) {
   const store = await getPublicStore();

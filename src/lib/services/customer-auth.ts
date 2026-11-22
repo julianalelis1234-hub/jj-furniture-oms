@@ -17,13 +17,15 @@ export interface CustomerAuthProvider {
   passwordLink(userId: string, email: string, purpose: "setup" | "reset"): Promise<string>;
   /** Whether the account has ever set a password (returning customers are not sent a new set-up link). */
   hasPassword(userId: string): Promise<boolean>;
+  /** Whether the auth system marks the account's email as verified. */
+  emailVerified(userId: string): Promise<boolean>;
 }
 
 export const sha256 = (s: string) => createHash("sha256").update(s).digest("hex");
 export const newSecret = () => randomBytes(32).toString("base64url");
 
 export const PASSWORD_LINK_TTL_MS = 24 * 3600_000;
-export const MIN_PASSWORD = 10;
+export const MIN_PASSWORD = 8;
 
 export function passwordProblem(pw: string, email?: string): string | null {
   if (pw.length < MIN_PASSWORD) return `Use at least ${MIN_PASSWORD} characters.`;
@@ -47,10 +49,14 @@ export function demoCustomerAuth(store: DataStore): CustomerAuthProvider {
       // one live link per account and purpose
       for (const x of t.password_tokens) if (x.user_id === userId && !x.used_at) x.used_at = new Date().toISOString();
       t.password_tokens.push({ token_hash: sha256(raw), user_id: userId, purpose, expires_at: new Date(Date.now() + PASSWORD_LINK_TTL_MS).toISOString(), used_at: null });
-      return `${siteUrl()}/customer/setup-password?token=${raw}`;
+      return `${siteUrl()}/customer/set-password?token=${raw}`;
     },
     async hasPassword(userId) {
       return !!t.customer_accounts.find((a) => a.id === userId)?.password_hash;
+    },
+    async emailVerified(userId) {
+      // demo accounts are only ever created after the review link proved the inbox
+      return !!t.customer_accounts.find((a) => a.id === userId);
     },
   };
 }

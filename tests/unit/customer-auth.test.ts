@@ -51,10 +51,13 @@ describe("Step 1 — email capture and scoped review links", () => {
     expect(rows).toHaveLength(1);
     expect(rows[0].token_hash).toBe(sha256(raw));
     expect(JSON.stringify(store.t.quote_review_tokens)).not.toContain(raw);
-    const log = (await store.listNotifications(order.id)).filter((n) => n.channel === "Email");
+    const all = (await store.listNotifications(order.id)).filter((n) => n.channel === "Email");
+    expect(all.map((n) => n.delivery_status).sort()).toEqual(["Pending", "Sent"]); // queued, then accepted
+    for (const n of all) expect(n.message_body).not.toContain(raw);
+    const log = all.filter((n) => n.delivery_status === "Sent");
     expect(log.length).toBe(1);
     expect(log[0].message_body).not.toContain(raw);
-    expect(log[0].message_body).toContain("secure one-time link");
+    expect(log[0].message_body).toContain("[secure link — not stored]");
     expect((await store.getOrder(order.id))!.email_verified_at).toBeNull(); // unverified until the link is opened
   });
 
@@ -130,7 +133,7 @@ describe("Step 2 — acceptance first, then recoverable provisioning", () => {
     expect(o.customer_user_id).toBe(acct.id);
     expect(o.provisioning_status).toBe("setup_email_sent");
     // the set-up link works once and sets a bcrypt password
-    const setup = linkIn(mailbox(store, email)[0].text, "/customer/setup-password");
+    const setup = linkIn(mailbox(store, email)[0].text, "/customer/set-password");
     expect(store.t.password_tokens.some((t) => t.token_hash === sha256(setup))).toBe(true);
     expect((await err(demoCompletePassword(store, setup, "short"))).code).toBe("VALIDATION");
     await demoCompletePassword(store, setup, "Mahogany-Chair-77");
@@ -166,7 +169,7 @@ describe("Step 2 — acceptance first, then recoverable provisioning", () => {
     expect(store.t.customer_accounts.filter((a) => a.email === DEMO_CUSTOMER_LOGIN.email)).toHaveLength(1);
     expect(maria.password_hash).toBe(before);
     expect(store.t.password_tokens.filter((t) => t.user_id === maria.id)).toHaveLength(0);
-    expect(mailbox(store, DEMO_CUSTOMER_LOGIN.email)[0].text).toMatch(/Log in with your existing password/);
+    expect(mailbox(store, DEMO_CUSTOMER_LOGIN.email)[0].text).toMatch(/Your password was not changed/);
     const codes = (await customerDashboard(store, maria.id)).map((d) => d.view.order_code);
     expect(codes).toContain("JJ-2026-0145");
     expect(codes).toContain((await store.getOrder(order.id))!.order_code);
@@ -179,6 +182,7 @@ describe("Step 2 — acceptance first, then recoverable provisioning", () => {
       createAccount: async () => { throw new Error("auth service down"); },
       passwordLink: async () => { throw new Error("auth service down"); },
       hasPassword: async () => false,
+      emailVerified: async () => true,
     };
     const { order: accepted, provisioning } = await acceptFromReview(store, broken, scope, acceptInput());
     expect(accepted.status).toBe("Confirmed");

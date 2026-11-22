@@ -7,7 +7,10 @@ import { QUOTE_REVISION_TYPES, type ConsumeReviewResult, type Order, type Provis
 import { customerAcceptQuote, customerOrderView, customerProposeChanges, customerRequestRepair, type CustomerOrderView } from "./customer";
 import type { CustomerAuthProvider } from "./customer-auth";
 import { newSecret, sha256 } from "./customer-auth";
-import { sendEmail, siteUrl } from "./email";
+import { loadKeyring } from "@/lib/email/crypto";
+import { enqueueEmail, kickOutbox } from "@/lib/email/outbox";
+import type { TemplateData } from "@/lib/email/templates";
+import type { SpecRevision } from "@/lib/domain/types";
 
 export const normalizeEmail = (e: string) => e.trim().toLowerCase();
 
@@ -24,12 +27,32 @@ export interface ReviewScope {
 }
 
 // ------------------------------------------------------------ review links ----
+/** Non-secret summary shown in emails (stored as outbox template data). */
+export function orderTemplateData(o: Order, rev?: SpecRevision | null): TemplateData {
+  const price = rev?.quoted_furniture_price ?? o.furniture_price ?? 0;
+  const fee = rev?.quoted_delivery_fee ?? o.delivery_fee ?? 0;
+  return {
+    customer_name: o.customer_name,
+    order_code: o.order_code,
+    item_summary: `${o.quantity} × ${o.item_name} · ${o.dimensions} · ${o.wood_type}, ${o.color_finish}`,
+    total: formatPeso(price + fee),
+    down_payment: formatPeso(o.standard_down_payment_due || Math.round(price * 30) / 100),
+    quote_expires: rev?.expires_at ? formatDate(rev.expires_at.slice(0, 10)) : null,
+  };
+}
+
+export type EmailDelivery = "sent" | "pending" | "failed";
+const deliveryOf = (s: string): EmailDelivery => (s === "sent" ? "sent" : s === "failed" ? "failed" : "pending");
+
 /**
  * Issues a single-use review link for the order's CURRENT shop quotation and
- * emails it to orders.customer_email. Only the SHA-256 hash is stored; any
- * older open link for the order stops working. Throws on invalid state.
+ * queues the "quotation ready" email. Only the SHA-256 hash is stored in
+ * quote_review_tokens; the raw token waits in the outbox AES-256-GCM encrypted
+ * and is scrubbed once sent, consumed or replaced. Older open links for the
+ * order stop working. `manual` = an explicit staff resend (new idempotency key,
+ * audited requester). Throws on invalid state.
  */
-export async function issueReviewLink(publicStore: DataStore, orderId: string) {
+export async function issueReviewLink(publicStore: DataStore, orderId: string, opts: { requestedBy?: string | null } = {}) {
   const store = publicStore.elevated();
   const o = await store.getOrder(orderId);
   if (!o) throw new DomainError("NOT_FOUND", "Order not found.");
@@ -37,22 +60,28 @@ export async function issueReviewLink(publicStore: DataStore, orderId: string) {
   const rev = (await store.listRevisions(orderId)).find((r) => r.revision_number === o.current_revision);
   if (!rev || !QUOTE_REVISION_TYPES.includes(rev.revision_type))
     throw new DomainError("PENDING_REVIEW", "There is no issued quotation to review yet.");
-  const raw = newSecret(); // crypto.randomBytes(32), base64url
-  const { expires_at, sent_to_email } = await store.issueReviewToken({
+  // fail closed BEFORE issuing: a new token invalidates older links, so never issue one we cannot queue
+  try {
+    loadKeyring();
+  } catch {
+    throw new DomainError("BACKEND", "Email encryption key is not configured — no review link was issued (previous links still work).");
+  }
+  const raw = newSecret(); // crypto.randomBytes(32), base64url — never stored in plaintext
+  const { token_id, expires_at, sent_to_email } = await store.issueReviewToken({
     order_id: orderId, revision_id: rev.revision_id, token_hash: sha256(raw), ttl_hours: reviewLinkTtlHours(),
   });
-  const link = `${siteUrl()}/customer/review?token=${raw}`;
-  const quoteValid = rev.expires_at ? ` The quotation is valid until ${formatDate(rev.expires_at.slice(0, 10))}.` : "";
-  const sent = await sendEmail(store, {
+  const { row } = await enqueueEmail(store, {
+    kind: "quote_review_ready",
     order_id: orderId,
-    to: sent_to_email,
-    subject: `JJ Furniture quotation for ${o.order_code} — please review`,
-    text:
-      `Hello ${o.customer_name},\n\nYour quotation for ${o.item_name} is ready: ${formatPeso(rev.quoted_furniture_price)} furniture price` +
-      ` + ${formatPeso(rev.quoted_delivery_fee)} delivery.${quoteValid}\n\nReview the exact specification and accept it here (single-use link, ` +
-      `expires ${formatDate(expires_at.slice(0, 10))}):\n${link}\n\nIf you did not order from JJ Furniture, ignore this email.`,
+    recipient_email: sent_to_email,
+    review_token_id: token_id,
+    template_data: { ...orderTemplateData(o, rev), link_expires: formatDate(expires_at.slice(0, 10)) },
+    idempotency_key: opts.requestedBy ? `resend:${crypto.randomUUID()}` : `quote_review:${token_id}`,
+    requested_by_user_id: opts.requestedBy ?? null,
+    secret: { token: raw },
   });
-  return { status: sent.status, expires_at, sent_to: sent_to_email };
+  const status = deliveryOf(await kickOutbox(store, row.id));
+  return { status, expires_at, sent_to: sent_to_email, outbox_id: row.id };
 }
 
 /**
@@ -66,6 +95,13 @@ export async function afterQuoteIssued(store: DataStore, orderId: string) {
     return await issueReviewLink(store, orderId);
   } catch (e) {
     console.warn("[review link] not issued:", e instanceof Error ? e.message : e);
+    try {
+      // make the problem visible to staff on the order (no link, no secret)
+      await store.elevated().insertNotification({
+        order_id: orderId, recipient_phone: null, channel: "Email", delivery_status: "Failed", created_at: new Date().toISOString(),
+        message_body: `Quotation review email not queued: ${e instanceof DomainError ? e.message : "server error"}`,
+      });
+    } catch { /* ignore */ }
     return null;
   }
 }
@@ -166,7 +202,12 @@ async function setStatus(store: DataStore, orderId: string, status: Provisioning
  *  - new customer              -> create a login WITHOUT a password, link, email a
  *                                 time-limited password set-up link
  */
-export async function provisionCustomerAccount(publicStore: DataStore, auth: CustomerAuthProvider, orderId: string): Promise<ProvisionResult> {
+export async function provisionCustomerAccount(
+  publicStore: DataStore,
+  auth: CustomerAuthProvider,
+  orderId: string,
+  opts: { requestedBy?: string | null } = {},
+): Promise<ProvisionResult> {
   const store = publicStore.elevated();
   try {
     const o = await store.getOrder(orderId);
@@ -198,30 +239,28 @@ export async function provisionCustomerAccount(publicStore: DataStore, auth: Cus
     if (o.customer_user_id !== account.id) await store.linkCustomerAccount(orderId, account.id);
 
     const fresh = (await store.getOrder(orderId))!;
+    const tpl = orderTemplateData(fresh, (await store.listRevisions(orderId)).find((r) => r.revision_number === fresh.approved_revision_number));
+    // explicit staff resends get a fresh, audited idempotency key; automatic flows stay idempotent
+    const key = (auto: string) => (opts.requestedBy ? `resend:${crypto.randomUUID()}` : auto);
     const returning = !isNew && (await auth.hasPassword(account.id));
     if (returning && fresh.provisioning_status === "linked") {
-      if (o.customer_user_id === account.id) return { status: "linked", new_account: false }; // already done: no repeat email
-      await sendEmail(store, {
-        order_id: orderId,
-        to: email,
-        subject: `JJ Furniture order ${fresh.order_code} is confirmed`,
-        text: `Hello ${fresh.customer_name},\n\nThank you — ${fresh.order_code} (${fresh.item_name}) is confirmed and has been added to your account.\n` +
-          `Production starts once your 30% down payment of ${formatPeso(fresh.standard_down_payment_due)} is verified.\n\n` +
-          `Log in with your existing password to follow it: ${siteUrl()}/customer/login`,
+      if (o.customer_user_id === account.id && !opts.requestedBy) return { status: "linked", new_account: false }; // already done: no repeat email
+      const { row } = await enqueueEmail(store, {
+        kind: "order_confirmed_returning_customer", order_id: orderId, recipient_email: email, customer_user_id: account.id,
+        template_data: tpl, idempotency_key: key(`order_confirmed_returning:${orderId}:${account.id}`), requested_by_user_id: opts.requestedBy ?? null,
       });
+      await kickOutbox(store, row.id, { auth });
       return { status: "linked", new_account: false };
     }
     // new account, an account that never set a password, or a retry of a pending set-up email
-    if (fresh.provisioning_status === "setup_email_sent" && o.customer_user_id === account.id) return { status: "setup_email_sent", new_account: true };
-    const link = await auth.passwordLink(account.id, email, "setup");
-    const sent = await sendEmail(store, {
-      order_id: orderId,
-      to: email,
-      subject: "Set your JJ Furniture password",
-      text: `Hello ${fresh.customer_name},\n\nThank you — ${fresh.order_code} is confirmed. Create your password to follow all your JJ Furniture orders ` +
-        `(this link works once and expires in 24 hours):\n${link}\n\nAfterwards, log in at ${siteUrl()}/customer/login`,
+    if (fresh.provisioning_status === "setup_email_sent" && o.customer_user_id === account.id && !opts.requestedBy) return { status: "setup_email_sent", new_account: true };
+    // the set-up link itself is generated by the outbox at send time (Supabase recovery link), never stored in plaintext
+    const { row } = await enqueueEmail(store, {
+      kind: "order_confirmed_new_customer", order_id: orderId, recipient_email: email, customer_user_id: account.id,
+      template_data: tpl, idempotency_key: key(`order_confirmed_new:${orderId}:${account.id}`), requested_by_user_id: opts.requestedBy ?? null,
     });
-    const status: ProvisioningStatus = sent.status === "Sent" ? "setup_email_sent" : "setup_email_pending";
+    const delivered = await kickOutbox(store, row.id, { auth });
+    const status: ProvisioningStatus = delivered === "sent" ? "setup_email_sent" : "setup_email_pending";
     await setStatus(store, orderId, status);
     return { status, new_account: true };
   } catch (e) {
