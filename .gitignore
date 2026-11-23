@@ -52,3 +52,6 @@ design/portals.html
 /video/node_modules
 /video/out
 /video/capture/raw
+
+# Marketing: large intermediate PNG renders stay local (JPG/PDF deliverables are committed)
+/marketing/out/*.png
