@@ -1,0 +1,54 @@
+{
+  "name": "s6-owner",
+  "scale": 1,
+  "duration": 14.269,
+  "viewport": {
+    "width": 1920,
+    "height": 1080
+  },
+  "frames": 216,
+  "events": [
+    {
+      "t": 1.754,
+      "type": "click",
+      "x": 1376,
+      "y": 595
+    },
+    {
+      "t": 3.732,
+      "type": "click",
+      "x": 960,
+      "y": 750.75,
+      "label": "row"
+    },
+    {
+      "t": 6.243,
+      "type": "click",
+      "x": 1104.921875,
+      "y": 322
+    },
+    {
+      "t": 9.178,
+      "type": "click",
+      "x": 1095.0625,
+      "y": 726,
+      "label": "release"
+    },
+    {
+      "t": 9.831,
+      "type": "chime",
+      "label": "in-production"
+    },
+    {
+      "t": 9.967,
+      "type": "focus",
+      "label": "stage",
+      "box": {
+        "x": 985,
+        "y": 85,
+        "width": 131.625,
+        "height": 32
+      }
+    }
+  ]
+}

@@ -1,0 +1,46 @@
+{
+  "name": "s7-owner",
+  "scale": 1,
+  "duration": 37.475,
+  "viewport": {
+    "width": 1920,
+    "height": 1080
+  },
+  "frames": 80,
+  "events": [
+    {
+      "t": 18.852,
+      "type": "chime",
+      "label": "inspection-arrived"
+    },
+    {
+      "t": 19.08,
+      "type": "focus",
+      "label": "inspection",
+      "box": {
+        "x": 400,
+        "y": 447,
+        "width": 556,
+        "height": 180
+      }
+    },
+    {
+      "t": 22.56,
+      "type": "click",
+      "x": 467.046875,
+      "y": 588
+    },
+    {
+      "t": 24.32,
+      "type": "click",
+      "x": 1054.796875,
+      "y": 627.5,
+      "label": "pass"
+    },
+    {
+      "t": 24.893,
+      "type": "chime",
+      "label": "ready-for-delivery"
+    }
+  ]
+}

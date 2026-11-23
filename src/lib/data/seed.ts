@@ -597,10 +597,12 @@ async function buildCuratedTables(): Promise<MemoryTables> {
     ["JJ-2026-1003", "c0000000-0000-4000-8000-000000001003", "Julian Marte", 0],
     ["JJ-2026-1004", "c0000000-0000-4000-8000-000000001004", "Riezbell Naquinez", 23],
   ];
+  // Only the Demo Customer Login (Juliana) has a password already. The others are verified and linked but have
+  // never chosen one, so accepting a quotation (e.g. JJ-2026-1002) walks through "create your password".
   const pw = bcrypt.hashSync(DEMO_PASSWORD, 6);
   for (const [code, id, name, daysAgo] of accounts) {
     const o = byCode(code);
-    t.customer_accounts.push({ id, email: o.customer_email!, full_name: name, is_active: true, created_at: ts(daysAgo + 1), password_hash: pw });
+    t.customer_accounts.push({ id, email: o.customer_email!, full_name: name, is_active: true, created_at: ts(daysAgo + 1), password_hash: code === "JJ-2026-1001" ? pw : null });
     Object.assign(o, { email_verified_at: ts(daysAgo), customer_user_id: id, provisioning_status: "linked" });
   }
 

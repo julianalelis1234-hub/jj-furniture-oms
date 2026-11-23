@@ -1,0 +1,134 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>JJ Furniture booth — 3D render</title>
+<style>html,body{margin:0;background:#1a110d;overflow:hidden} canvas{display:block}</style>
+<script type="importmap">{ "imports": { "three": "/node_modules/three/build/three.module.js", "three/addons/": "/node_modules/three/examples/jsm/" } }</script>
+</head>
+<body>
+<script type="module">
+// 3 m x 3 m booth concept (units = metres). Real artwork + real app screenshots as textures.
+import * as THREE from "three";
+import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
+import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
+
+const W = innerWidth, H = innerHeight;
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+renderer.setPixelRatio(devicePixelRatio);
+renderer.setSize(W, H);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color("#140d0a");
+scene.fog = new THREE.Fog("#140d0a", 9, 18);
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+scene.environmentIntensity = 0.35;
+
+const camera = new THREE.PerspectiveCamera(36, W / H, 0.1, 50);
+camera.position.set(-2.4, 1.7, 6.0);
+camera.lookAt(-0.3, 1.1, 0);
+
+const loader = new THREE.TextureLoader();
+const tex = (url) => new Promise((res) => loader.load(url, (t) => { t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; res(t); }));
+const [backdropT, posterT, rollupT, counterT, staffT, configT, craftT, driverT, custT, ownerT] = await Promise.all([
+  tex("../out/booth-backdrop-3000x2400mm.png"), tex("../out/jj-poster-24x36.png"), tex("../out/booth-rollup-850x2000mm.png"), tex("../out/booth-counter-wrap-2000x1000mm.png"),
+  tex("../shots/staff-queue.png"), tex("../shots/configurator.png"), tex("../shots/craftsman-phone.png"), tex("../shots/driver-phone.png"), tex("../shots/customer-phone.png"), tex("../shots/owner.png"),
+]);
+
+const mat = (o) => new THREE.MeshStandardMaterial(o);
+const screenMat = (t) => new THREE.MeshBasicMaterial({ map: t, toneMapped: false });
+const add = (mesh, x, y, z, cast = true, recv = true) => { mesh.position.set(x, y, z); mesh.castShadow = cast; mesh.receiveShadow = recv; scene.add(mesh); return mesh; };
+const C = { espresso: "#2B1D17", card: "#36251E", mocha: "#6B4A3A", caramel: "#C48A5A", latte: "#E7D6C1" };
+
+// hall floor + booth carpet (3 x 3 m)
+add(new THREE.Mesh(new THREE.PlaneGeometry(30, 30), mat({ color: "#2a2522", roughness: 0.9 })), 0, 0, 0, false).rotation.x = -Math.PI / 2;
+add(new THREE.Mesh(new THREE.BoxGeometry(3, 0.03, 3), mat({ color: "#4a3228", roughness: 0.95 })), 0, 0.015, 0, false);
+// caramel edge trim on the carpet
+for (const [w, d, x, z] of [[3, 0.03, 0, 1.5], [0.03, 3, -1.5, 0]]) add(new THREE.Mesh(new THREE.BoxGeometry(w, 0.035, d), mat({ color: C.caramel, roughness: 0.4, metalness: 0.3 })), x, 0.018, z, false);
+
+// back wall 3.0 x 2.4 m (printed tension fabric) on a 6 cm frame
+const back = add(new THREE.Mesh(new THREE.BoxGeometry(3.0, 2.4, 0.06), [mat({ color: C.espresso }), mat({ color: C.espresso }), mat({ color: C.espresso }), mat({ color: C.espresso }), mat({ map: backdropT, roughness: 0.85 }), mat({ color: C.espresso })]), 0, 1.2, -1.5 + 0.03);
+// right side wall 1.5 m deep with the 24x36 in poster
+add(new THREE.Mesh(new THREE.BoxGeometry(0.06, 2.4, 1.5), mat({ color: "#33241d", roughness: 0.85 })), 1.47, 1.2, -0.75);
+add(new THREE.Mesh(new THREE.PlaneGeometry(0.61, 0.915), mat({ map: posterT, roughness: 0.6 })), 1.435, 1.45, -0.7, false).rotation.y = -Math.PI / 2;
+// header light bar on top of the back wall
+add(new THREE.Mesh(new THREE.BoxGeometry(3.0, 0.05, 0.25), mat({ color: "#1a110d", metalness: 0.4, roughness: 0.4 })), 0, 2.43, -1.38, false);
+
+// TV (43") on the back wall, left of centre, looping the pitch video (customer tracker frame)
+add(new THREE.Mesh(new THREE.BoxGeometry(0.98, 0.58, 0.05), mat({ color: "#0d0907", roughness: 0.3, metalness: 0.5 })), -0.82, 1.25, -1.43);
+add(new THREE.Mesh(new THREE.PlaneGeometry(0.94, 0.53), screenMat(ownerT)), -0.82, 1.25, -1.404, false);
+
+// front counter 2.0 x 0.6 x 1.0 m, wrapped front, wood top
+const counter = add(new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.96, 0.6), [mat({ color: C.card }), mat({ color: C.card }), mat({ color: C.card }), mat({ color: C.card }), mat({ map: counterT, roughness: 0.6 }), mat({ color: C.card })]), -0.1, 0.48, 0.45);
+add(new THREE.Mesh(new RoundedBoxGeometry(2.08, 0.045, 0.68, 3, 0.012), mat({ color: "#7a4a2c", roughness: 0.45, metalness: 0.05 })), -0.1, 0.982, 0.45);
+// warm LED strip under the top edge
+add(new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.012, 0.01), new THREE.MeshBasicMaterial({ color: "#ffb86b" })), -0.1, 0.95, 0.756, false);
+
+// station 2: laptop (Staff / Owner workspace)
+const lap = new THREE.Group();
+lap.add(Object.assign(new THREE.Mesh(new RoundedBoxGeometry(0.36, 0.014, 0.25, 2, 0.006), mat({ color: "#2c2a2a", metalness: 0.6, roughness: 0.35 })), { castShadow: true }));
+const lid = new THREE.Group(); lid.position.set(0, 0.007, -0.125); lid.rotation.x = -0.32;
+const lidBody = new THREE.Mesh(new RoundedBoxGeometry(0.36, 0.23, 0.01, 2, 0.005), mat({ color: "#2c2a2a", metalness: 0.6, roughness: 0.35 })); lidBody.position.set(0, 0.115, 0); lidBody.castShadow = true; lid.add(lidBody);
+const lapScreen = new THREE.Mesh(new THREE.PlaneGeometry(0.34, 0.2125), screenMat(staffT)); lapScreen.position.set(0, 0.115, 0.0056); lid.add(lapScreen);
+lap.add(lid); lap.position.set(0.05, 1.012, 0.42); lap.rotation.y = -0.2; scene.add(lap);
+
+// station 1: customer kiosk — 24" monitor on a stand with the 3D configurator
+const mon = new THREE.Group();
+const panel = new THREE.Mesh(new RoundedBoxGeometry(0.56, 0.34, 0.03, 2, 0.01), mat({ color: "#111", metalness: 0.4, roughness: 0.3 })); panel.position.y = 0.36; panel.castShadow = true; mon.add(panel);
+const monScreen = new THREE.Mesh(new THREE.PlaneGeometry(0.54, 0.3375), screenMat(configT)); monScreen.position.set(0, 0.36, 0.016); mon.add(monScreen);
+const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 0.2), mat({ color: "#222", metalness: 0.7 })); neck.position.y = 0.1; mon.add(neck);
+const foot = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.12, 0.012, 32), mat({ color: "#222", metalness: 0.7 })); mon.add(foot);
+mon.position.set(-0.75, 1.01, 0.36); mon.rotation.y = 0.25; scene.add(mon);
+
+// station 3: two phones on stands (Craftsman, Driver) + customer phone lying flat
+const phone = (t, x, z, ry) => {
+  const g = new THREE.Group();
+  const body = new THREE.Mesh(new RoundedBoxGeometry(0.075, 0.16, 0.009, 2, 0.008), mat({ color: "#1a1a1a", metalness: 0.5, roughness: 0.3 })); body.castShadow = true; g.add(body);
+  const s = new THREE.Mesh(new THREE.PlaneGeometry(0.068, 0.147), screenMat(t)); s.position.z = 0.0051; g.add(s);
+  const stand = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.008, 0.07), mat({ color: C.caramel, metalness: 0.3, roughness: 0.4 })); stand.position.set(0, -0.08, -0.02); g.add(stand);
+  g.rotation.set(-0.25, ry, 0); g.position.set(x, 1.09, z); scene.add(g);
+};
+phone(craftT, 0.55, 0.5, -0.35); phone(driverT, 0.7, 0.5, -0.45);
+const flat = new THREE.Mesh(new THREE.PlaneGeometry(0.068, 0.147), screenMat(custT)); flat.rotation.set(-Math.PI / 2, 0, 0.3); add(flat, 0.82, 1.008, 0.32, false);
+// wood swatch tray (Mahogany, Gmelina, Narra)
+["#7a3b22", "#d9b98a", "#a65f35"].forEach((c, i) => add(new THREE.Mesh(new RoundedBoxGeometry(0.1, 0.015, 0.06, 2, 0.004), mat({ color: c, roughness: 0.55 })), -0.38 + i * 0.12, 1.012, 0.62));
+
+// roll-up banner 0.85 x 2.0 m, front-left
+const banner = new THREE.Group();
+const bp = new THREE.Mesh(new THREE.PlaneGeometry(0.85, 2.0), mat({ map: rollupT, roughness: 0.8, side: THREE.DoubleSide })); bp.position.y = 1.06; bp.castShadow = true; banner.add(bp);
+const base = new THREE.Mesh(new RoundedBoxGeometry(0.88, 0.07, 0.2, 2, 0.02), mat({ color: "#bfbfbf", metalness: 0.8, roughness: 0.3 })); base.position.y = 0.035; banner.add(base);
+banner.position.set(-2.35, 0, 1.45); banner.rotation.y = 0.3; scene.add(banner);
+
+// furniture sample: a small solid-wood side table (the shop's craft, physically present)
+const wood = mat({ color: "#8a4b2a", roughness: 0.5 });
+const tbl = new THREE.Group();
+const top = new THREE.Mesh(new RoundedBoxGeometry(0.6, 0.04, 0.45, 3, 0.01), wood); top.position.y = 0.6; top.castShadow = true; tbl.add(top);
+for (const [x, z] of [[-0.26, -0.18], [0.26, -0.18], [-0.26, 0.18], [0.26, 0.18]]) { const l = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.58, 0.04), wood); l.position.set(x, 0.29, z); l.castShadow = true; tbl.add(l); }
+const shelf = new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.02, 0.37), wood); shelf.position.y = 0.18; tbl.add(shelf);
+tbl.position.set(1.0, 0, 0.75); tbl.rotation.y = -0.4; scene.add(tbl);
+// a tag on the table
+add(new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.002, 0.1), mat({ color: C.latte })), 1.02, 0.622, 0.78, false).rotation.y = -0.4;
+
+// lighting: warm spots from the header bar + soft fill
+scene.add(new THREE.HemisphereLight("#ffe7cf", "#2b1d17", 0.35));
+const spot = (x, tx, tz, intensity) => {
+  const s = new THREE.SpotLight("#ffd2a0", intensity, 8, 0.65, 0.6, 1.4);
+  s.position.set(x, 2.6, -1.0); s.target.position.set(tx, 0.9, tz); s.castShadow = true; s.shadow.mapSize.set(1024, 1024); s.shadow.bias = -0.0005;
+  scene.add(s, s.target);
+};
+spot(-0.9, -0.9, -1.4, 26); spot(0.9, 0.9, -1.4, 26); spot(0, 0, 0.5, 18);
+const key = new THREE.DirectionalLight("#ffe2c4", 0.9); key.position.set(-3, 5, 4); key.castShadow = true; key.shadow.mapSize.set(2048, 2048);
+Object.assign(key.shadow.camera, { left: -3, right: 3, top: 3, bottom: -3 }); scene.add(key);
+
+renderer.render(scene, camera);
+requestAnimationFrame(() => { renderer.render(scene, camera); window.__ready = true; });
+</script>
+</body>
+</html>

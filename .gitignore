@@ -47,3 +47,11 @@ next-env.d.ts
 test-results/
 playwright-report/
 design/portals.html
+
+# Remotion pitch video: dependencies, raw captures and renders stay local
+/video/node_modules
+/video/out
+/video/capture/raw
+
+# Marketing: large intermediate PNG renders stay local (JPG/PDF deliverables are committed)
+/marketing/out/*.png

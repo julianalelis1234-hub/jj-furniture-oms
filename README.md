@@ -108,7 +108,7 @@ Demo Mode (`NEXT_PUBLIC_APP_MODE=demo`, in-memory store) starts with **five cura
 | JJ-2026-1004 | Riezbell Naquinez · verified account | Acacia L-Shaped Executive Study Desk, 160 × 75 × 140 cm, Natural Oil Finish | Ready for Delivery (Poblacion drop-off scheduled) | ₱24,800 · ₱10,000 verified (40%) · ₱14,800 remaining |
 | JJ-2026-1005 | Bon Ortizano · walk-in, unlinked | Molave Accent Lounge Chair Pair, 72 × 82 × 78 cm, Mocha Hand-Rubbed Finish | Confirmed (awaiting the 30% before release) | ₱19,600 · 30% due ₱5,880 |
 
-* **Demo Customer Login** signs in as Juliana Lelis (`juliana.lelis@example.com` / `Narra-Table-2026`).
+* **Demo Customer Login** signs in as Juliana Lelis (`juliana.lelis@example.com` / `Narra-Table-2026`). Rea, Julian and Riezbell have verified accounts but have not chosen a password yet: accept JJ-2026-1002 from the Demo Inbox link and you will create Rea's password.
 * **Geometry stand-ins.** The configurator catalog has no study desk or lounge chair, and its parametric 3D math was left untouched. So JJ-2026-1004 uses the rectangular table geometry and JJ-2026-1005 the curved-armrest set geometry; the item names, sizes and finishes are exact.
 * **Finish looks.** Descriptive finishes render with the nearest of the four 3D finish looks.
 * **Regression dataset.** The test suites start the server with `DEMO_DATASET=fixtures` (15 orders covering every edge case).

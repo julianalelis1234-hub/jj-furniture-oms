@@ -12,6 +12,9 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // the Remotion pitch video is a separate package with its own lint setup
+    "video/**",
+    "marketing/**",
   ]),
 ]);
 

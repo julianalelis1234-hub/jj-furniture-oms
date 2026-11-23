@@ -92,6 +92,31 @@ await step("Demo Customer Login (Juliana Lelis) sees only her own order", async 
   await ctx.close();
 });
 
+await step("Rea Caday accepts JJ-2026-1002 from the emailed link, creates her password, then logs in", async () => {
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, baseURL: BASE, reducedMotion: "reduce" });
+  const page = await ctx.newPage();
+  await page.goto("/demo/inbox");
+  const item = page.getByTestId("inbox-item").filter({ hasText: "rea.caday@example.com" }).filter({ has: page.locator('a[href^="/customer/review"]') }).first();
+  await page.goto(await item.locator('a[href^="/customer/review"]').first().getAttribute("href"));
+  await page.getByRole("button", { name: "Open my quotation" }).click();
+  await page.waitForURL(/\/customer\/review\/quote/);
+  await page.getByRole("button", { name: "Accept Quote & Confirm Specifications" }).click();
+  await page.getByTestId("accept-specification").check();
+  await page.getByTestId("accept-quotation").check();
+  await page.getByRole("dialog").getByRole("button", { name: "Accept quote & confirm" }).click();
+  await page.getByTestId("setup-email-sent").waitFor(); // never "log in with your usual password"
+  expect(await page.getByTestId("order-linked").count() === 0, "an account without a password must get the create-password flow");
+  await page.getByTestId("demo-setup-shortcut").getByRole("link", { name: "Set your password now" }).click();
+  await page.waitForURL(/\/customer\/set-password/);
+  await page.waitForLoadState("networkidle");
+  await page.fill("#password", "Mahogany-Bed-2026");
+  await page.fill("#confirm", "Mahogany-Bed-2026");
+  await page.getByRole("button", { name: "Save password" }).click();
+  await page.waitForURL(/\/customer\/orders/);
+  expect((await page.getByTestId("customer-orders").innerText()).includes("JJ-2026-1002"), "Rea sees her order");
+  await ctx.close();
+});
+
 await browser.close();
 console.log(results.join("\n"));
 console.log(failures ? `\n${failures} CURATED STEP(S) FAILED` : "\nALL CURATED DEMO CHECKS PASSED");
