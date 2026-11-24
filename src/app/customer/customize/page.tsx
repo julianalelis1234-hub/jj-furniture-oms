@@ -4,7 +4,7 @@ import { AppShell } from "@/components/app-shell";
 import { PageHeading } from "@/components/dashboard";
 import { LinkButton } from "@/components/link-button";
 import { PortalShell } from "@/components/portal-shell";
-import { getCustomer } from "@/lib/server/customer-auth";
+import { getCustomerSafe } from "@/lib/server/customer-auth";
 import { CustomerLogoutButton } from "../logout-button";
 import { RequestForm } from "./request-form";
 
@@ -15,7 +15,7 @@ export const metadata = { title: "Design your piece" };
  * No login needed. A signed-in customer sees it inside their portal (sidebar); a guest sees the plain page.
  */
 export default async function CustomizePage() {
-  const customer = await getCustomer();
+  const customer = await getCustomerSafe();
   const intro = "Build it in 3D, then submit. You get your Order ID and slip right away. The shop confirms your order, then sends the official quotation; nothing is charged until you accept it.";
   const body: ReactNode = <RequestForm />;
   if (customer) {
