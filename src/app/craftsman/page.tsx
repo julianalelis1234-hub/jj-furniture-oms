@@ -1,4 +1,5 @@
 import { CalendarClock, CircleHelp, Hammer, Hourglass, PackageCheck } from "lucide-react";
+import Link from "next/link";
 import { DesignNote } from "@/components/design-note";
 import {
   CardSection, DarkCard, DarkFigure, DarkStats, DashboardHeader, darkPrimary, dashCard, KpiCard, KpiRow,
@@ -9,7 +10,8 @@ import { PriorityBadge } from "@/components/status";
 import { addDays, formatDate, todayISO } from "@/lib/domain/dates";
 import { formatDims } from "@/lib/domain/furniture";
 import type { WorkshopOrder } from "@/lib/domain/types";
-import { getStore, requireActor } from "@/lib/server/context";
+import { requireActor } from "@/lib/server/context";
+import { loadWorkshop } from "./data";
 import { cn } from "@/lib/utils";
 import { WorkshopBoard } from "./workshop-board";
 
@@ -20,18 +22,7 @@ const weekday = (iso: string) => new Intl.DateTimeFormat("en-PH", { weekday: "sh
 /** C-01 — dashboard: greeting, job counts, the next job beside the week card, then the job board. No money, no customer contacts. */
 export default async function CraftsmanPage() {
   const actor = await requireActor(["craftsman"]);
-  const store = await getStore();
-  // Only the money-free workshop projection is fetched for this portal.
-  const [jobs, profiles, questions] = await Promise.all([
-    store.listWorkshopOrders(),
-    store.listProfiles(),
-    store.listExceptions(),
-  ]);
-  const names = Object.fromEntries(profiles.map((p) => [p.id, p.full_name]));
-  const openQuestions = questions
-    .filter((q) => q.category === "Spec Clarification")
-    .map((q) => ({ id: q.id, order_id: q.order_id, description: q.description, status: q.status, requested_by: q.requested_by }));
-  jobs.sort((a, b) => a.priority_rank - b.priority_rank || (a.estimated_completion_date ?? "").localeCompare(b.estimated_completion_date ?? ""));
+  const { jobs, names, questions: openQuestions, badges } = await loadWorkshop(actor);
 
   const now = new Date();
   const today = todayISO(now);
@@ -53,7 +44,7 @@ export default async function CraftsmanPage() {
     : next ? `Next for you: ${next.quantity} × ${next.item_name} (${next.order_code}).` : "No jobs waiting. The office will release the next one.";
 
   return (
-    <PortalShell portal="craftsman" actor={actor}>
+    <PortalShell portal="craftsman" actor={actor} badges={badges}>
       <DashboardHeader name={actor.full_name} now={now}
         summary={mine.length ? `${mine.length} ${mine.length === 1 ? "job" : "jobs"} assigned to you` : "no jobs assigned to you yet"} />
 
@@ -103,7 +94,7 @@ export default async function CraftsmanPage() {
           ]} />
           <p className="rounded-xl bg-white/[0.07] p-3 text-sm leading-snug">{tip}</p>
           <div className="mt-auto flex gap-2">
-            <a href="#jobs" className={darkPrimary}><CalendarClock className="size-4" aria-hidden /> Go to my jobs</a>
+            <Link href="/craftsman/jobs" className={darkPrimary}><CalendarClock className="size-4" aria-hidden /> Go to my jobs</Link>
           </div>
         </DarkCard>
       </div>

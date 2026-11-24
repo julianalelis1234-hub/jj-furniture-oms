@@ -5,7 +5,7 @@ import Image from "next/image";
 import { useState } from "react";
 import { parseRequest, type AssistantResult } from "@/lib/domain/assistant";
 import { Button } from "@/components/ui/button";
-import type { ConfigValue } from "./FurnitureConfigurator";
+import { PREVIEW_UPDATED_EVENT, type ConfigValue } from "./FurnitureConfigurator";
 
 const EXAMPLES = [
   "6 seater narra dining table, 2 meters long, dark finish",
@@ -39,6 +39,7 @@ export function CustomizationAssistant({ value, onChange, onUsePhoto, onNotes }:
     if (Object.keys(r.patch).length === 0) return;
     setBefore(value);
     onChange({ ...value, ...r.patch });
+    window.dispatchEvent(new Event(PREVIEW_UPDATED_EVENT)); // the 3D view highlights the change (and opens on phones)
   };
 
   return (
@@ -47,7 +48,7 @@ export function CustomizationAssistant({ value, onChange, onUsePhoto, onNotes }:
         <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground" aria-hidden><Sparkles className="size-4" /></span>
         <div className="min-w-0">
           <h2 id="assistant-title" className="text-lg">Describe it, we set it up</h2>
-          <p className="text-sm text-muted-foreground">Type what you have in mind. The type, size, wood and finish are filled in below; you can still change anything.</p>
+          <p className="text-sm text-muted-foreground">Type what you have in mind and press Apply. The 3D model and the choices below update at once; you can still change anything.</p>
         </div>
       </div>
       {/* not a <form>: the assistant sits inside the order form, and forms cannot nest */}
@@ -62,7 +63,7 @@ export function CustomizationAssistant({ value, onChange, onUsePhoto, onNotes }:
             <Sparkles aria-hidden /> Apply to my design
           </Button>
           {before && (
-            <Button type="button" size="touch" variant="outline" className="rounded-full" onClick={() => { onChange(before); setBefore(null); setResult(null); }}>
+            <Button type="button" size="touch" variant="outline" className="rounded-full" onClick={() => { onChange(before); setBefore(null); setResult(null); window.dispatchEvent(new Event(PREVIEW_UPDATED_EVENT)); }}>
               <Undo2 aria-hidden /> Undo
             </Button>
           )}

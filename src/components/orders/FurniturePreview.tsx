@@ -13,6 +13,8 @@ export interface PreviewSpec {
   depth_cm: number | null;
   wood_type: WoodType;
   color_finish: string;
+  /** the customer's own wood name when the wood is "Other" (e.g. Narra); shown instead of "Other" */
+  wood_label?: string | null;
 }
 
 export const PREVIEW_DISCLAIMER = "Illustrative Visual Preview — Reference Aid Only (Not a Manufacturing or Engineering Drawing)";
@@ -326,7 +328,7 @@ export function FurniturePreview({
         )}
         <span className="absolute top-2 left-2 inline-flex items-center gap-1.5 rounded-full border bg-card/90 px-2 py-0.5 text-[0.7rem] font-bold">
           <span className="size-2.5 rounded-full border" style={{ background: WOOD_HEX[spec.wood_type] }} aria-hidden />
-          {spec.wood_type}
+          {spec.wood_label || spec.wood_type}
           <span className="font-normal text-muted-foreground">· {spec.color_finish}</span>
         </span>
       </div>

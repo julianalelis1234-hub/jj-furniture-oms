@@ -18,9 +18,9 @@ const NAV: Record<Role | "customer", NavConfig> = {
     right: [{ href: "/customer/orders", label: "My orders", icon: ListOrdered, match: (p) => p.startsWith("/customer/orders") }],
   },
   staff: {
-    left: [{ href: "/staff", label: "Queue", icon: ClipboardList, match: (p) => p === "/staff" || p.startsWith("/staff/orders") }],
+    left: [{ href: "/staff/orders", label: "Queue", icon: ClipboardList, match: (p) => p.startsWith("/staff/orders") }],
     action: { href: "/staff/new", label: "New walk-in order" },
-    right: [{ href: "/staff#task-inbox", label: "Tasks", icon: Inbox, match: () => false }],
+    right: [{ href: "/staff/tasks", label: "Tasks", icon: Inbox, match: (p) => p.startsWith("/staff/tasks") }],
   },
   owner: {
     left: [{ href: "/owner", label: "Overview", icon: LayoutDashboard, match: (p) => p.startsWith("/owner") && !p.startsWith("/owner/orders") }],

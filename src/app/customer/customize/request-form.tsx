@@ -43,9 +43,9 @@ export function RequestForm() {
       {/* flat sections, no card: a clipping wrapper would stop the 3D view from staying in place */}
       <section aria-labelledby="step-design" className="grid gap-4">
         <h2 id="step-design" className="text-2xl">Design your furniture</h2>
-          <CustomizationAssistant value={config} onChange={setConfig} onUsePhoto={setPhotoUrl}
-            onNotes={(t) => setNotes((n) => (n.includes(t) ? n : [n, t].filter(Boolean).join("\n")))} />
-          <FurnitureConfigurator value={config} onChange={setConfig} errors={errors} showQuantity />
+          <FurnitureConfigurator value={config} onChange={setConfig} errors={errors} showQuantity
+            intro={<CustomizationAssistant value={config} onChange={setConfig} onUsePhoto={setPhotoUrl}
+              onNotes={(t) => setNotes((n) => (n.includes(t) ? n : [n, t].filter(Boolean).join("\n")))} />} />
           <div className="grid gap-3 sm:grid-cols-2">
             <Field label="Notes for the shop (optional)" htmlFor="special_instructions" className="sm:col-span-2"
               hint="e.g. number of drawers, handle style, where it will stand.">

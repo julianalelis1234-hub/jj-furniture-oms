@@ -27,7 +27,7 @@ export default async function OwnerStaff() {
   return (
     <OwnerShell actor={actor} badges={badges}>
       <OwnerHeading title="Staff" description="The office team and the work waiting in their shared task inbox."
-        actions={<Link href="/staff#task-inbox" className={headerSecondary}><Inbox className="size-4 text-primary" aria-hidden /> Open the staff task inbox</Link>} />
+        actions={<Link href="/staff/tasks" className={headerSecondary}><Inbox className="size-4 text-primary" aria-hidden /> Open the staff task inbox</Link>} />
 
       <KpiRow>
         <KpiCard label="Orders to confirm" value={t.toConfirm.length} icon={<ClipboardList />} sub="new online and walk-in orders" tone={t.toConfirm.length ? "warning" : "muted"} />
@@ -56,7 +56,7 @@ export default async function OwnerStaff() {
             { label: "Questions", value: t.specQuestions.length },
             { label: "Proposals", value: t.specProposals.length },
           ]} />
-          <div className="mt-auto flex gap-2"><Link href="/staff#task-inbox" className={darkPrimary}>Open the task inbox</Link></div>
+          <div className="mt-auto flex gap-2"><Link href="/staff/tasks" className={darkPrimary}>Open the task inbox</Link></div>
         </DarkCard>
       </div>
 

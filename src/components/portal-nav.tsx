@@ -1,8 +1,8 @@
 "use client";
 
 import {
-  BarChart3, ClipboardList, Hammer, House, Inbox, Layers, LayoutDashboard, ListOrdered, Wrench,
-  PencilRuler, Plus, ShieldCheck, Truck, Users,
+  BarChart3, ClipboardList, Hammer, House, Inbox, Layers, LayoutDashboard, ListOrdered, MessageCircleQuestion,
+  PencilRuler, Plus, ShieldCheck, Truck, Users, Wallet,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -27,14 +27,16 @@ export const PORTAL_SECTIONS: Record<Portal, Section[]> = {
   ],
   staff: [
     { href: "/staff", label: "Dashboard", icon: LayoutDashboard, exact: true },
-    { href: "/staff#queue", label: "Order queue", icon: ClipboardList },
-    { href: "/staff#task-inbox", label: "Task inbox", icon: Inbox },
+    { href: "/staff/orders", label: "Order queue", icon: ClipboardList },
+    { href: "/staff/tasks", label: "Task inbox", icon: Inbox },
+    { href: "/staff/payments", label: "Payments to verify", icon: Wallet },
+    { href: "/staff/deliveries", label: "Deliveries", icon: Truck },
     { href: "/staff/new", label: "New walk-in order", icon: Plus },
   ],
   craftsman: [
     { href: "/craftsman", label: "Dashboard", icon: LayoutDashboard, exact: true },
-    { href: "/craftsman#next-up", label: "Next up for me", icon: Wrench },
-    { href: "/craftsman#jobs", label: "Workshop jobs", icon: Hammer },
+    { href: "/craftsman/jobs", label: "Workshop jobs", icon: Hammer },
+    { href: "/craftsman/questions", label: "My questions", icon: MessageCircleQuestion },
   ],
   driver: [
     { href: "/driver", label: "Dashboard", icon: LayoutDashboard, exact: true },
@@ -42,6 +44,7 @@ export const PORTAL_SECTIONS: Record<Portal, Section[]> = {
   ],
   customer: [
     { href: "/customer/orders", label: "My orders", icon: ListOrdered },
+    { href: "/customer/payments", label: "Payments", icon: Wallet },
     { href: "/customer/customize", label: "New custom order", icon: PencilRuler },
     { href: "/", label: "JJ Enterprises home", icon: House, exact: true },
   ],

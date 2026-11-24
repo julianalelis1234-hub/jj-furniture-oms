@@ -16,6 +16,9 @@ import { cn } from "@/lib/utils";
 import { finishLook, type PreviewSpec } from "./FurniturePreview";
 import { FeasibilityWarning, FurniturePreviewSlot, useMinWidth } from "./preview-slot";
 
+/** Fired by the customization assistant after it applies a description, so the 3D view can show the change. */
+export const PREVIEW_UPDATED_EVENT = "jj:preview-updated";
+
 /** Form state (inputs keep strings so people can type freely). */
 export interface ConfigValue {
   furniture_category: FurnitureCategory | "";
@@ -68,6 +71,7 @@ export function configToPreview(v: ConfigValue): PreviewSpec {
     depth_cm: num(v.depth_cm),
     wood_type: v.wood_type,
     color_finish: v.color_finish,
+    wood_label: v.wood_type === "Other" ? v.custom_wood_note.trim() || null : null,
   };
 }
 
@@ -159,6 +163,7 @@ export function FurnitureConfigurator({
   previewFooter,
   legacyDimensions,
   inDialog = false,
+  intro,
 }: {
   value: ConfigValue;
   onChange: (v: ConfigValue) => void;
@@ -170,6 +175,8 @@ export function FurnitureConfigurator({
   legacyDimensions?: string | null;
   /** inside a scrolling dialog: stick to the dialog top, leave page scroll padding alone */
   inDialog?: boolean;
+  /** shown first in the controls column (e.g. the customization assistant), so the 3D view sits right beside it */
+  intro?: ReactNode;
 }) {
   const set = (patch: Partial<ConfigValue>) => onChange({ ...value, ...patch });
   const cat = value.furniture_category ? CATALOG[value.furniture_category] : null;
@@ -179,6 +186,18 @@ export function FurnitureConfigurator({
   const [open, setOpen] = useState(!inDialog && !readOnly);
   const barRef = useRef<HTMLDivElement>(null);
   const [top, setTop] = useState(0);
+  // the assistant announces an applied description: open the 3D view and highlight it for a moment
+  const [flash, setFlash] = useState(0);
+  useEffect(() => {
+    const on = () => { setOpen(true); setFlash((n) => n + 1); };
+    window.addEventListener(PREVIEW_UPDATED_EVENT, on);
+    return () => window.removeEventListener(PREVIEW_UPDATED_EVENT, on);
+  }, []);
+  useEffect(() => {
+    if (!flash) return;
+    const t = setTimeout(() => setFlash(0), 2600);
+    return () => clearTimeout(t);
+  }, [flash]);
 
   // Mobile: keep the compact bar under the sticky app header and reserve
   // scroll padding so focused fields never hide underneath it.
@@ -203,7 +222,7 @@ export function FurnitureConfigurator({
     };
   }, [inDialog]);
 
-  const summary = [value.design_variant || "Choose a design", dims, value.wood_type, value.color_finish].filter(Boolean).join(" · ");
+  const summary = [value.design_variant || "Choose a design", dims, preview.wood_label || value.wood_type, value.color_finish].filter(Boolean).join(" · ");
   const look = finishLook(value.wood_type, value.color_finish);
   const pick = (c: FurnitureCategory) => {
     const def = CATALOG[c];
@@ -220,8 +239,17 @@ export function FurnitureConfigurator({
 
   // one preview instance at a time (one WebGL context): desktop sticky card OR the mobile expandable panel
   const isDesktop = useMinWidth(1024);
+  const flashRing = flash ? "rounded-2xl ring-4 ring-primary/50 transition-shadow" : "";
+  const badge = (pos: string) => flash ? (
+    <span role="status" className={cn("pointer-events-none absolute z-10", pos)}><span className="block rounded-full bg-primary px-2.5 py-1 text-[11px] font-bold text-primary-foreground shadow motion-safe:animate-pulse" data-testid="preview-updated">
+      Updated from your description
+    </span></span>
+  ) : null;
   const previewCard = (
-    <FurniturePreviewSlot spec={preview} legacyDimensions={legacyDimensions} footer={previewFooter} />
+    <div className={cn("relative", flashRing)}>
+      {badge("top-[4.75rem] right-3")}
+      <FurniturePreviewSlot spec={preview} legacyDimensions={legacyDimensions} footer={previewFooter} />
+    </div>
   );
 
   return (
@@ -246,13 +274,14 @@ export function FurnitureConfigurator({
           </button>
         </div>
         {/* pinned 3D view: part of the sticky block, so scroll padding keeps focused inputs below it */}
-        {open && !isDesktop && <div className="px-2 pb-2" data-testid="pinned-preview"><FurniturePreviewSlot spec={preview} legacyDimensions={legacyDimensions} compact /></div>}
+        {open && !isDesktop && <div className={cn("relative mx-2 mb-2", flashRing)} data-testid="pinned-preview">{badge("top-2 right-2")}<FurniturePreviewSlot spec={preview} legacyDimensions={legacyDimensions} compact /></div>}
       </div>
       {/* the size hint is too tall for the pinned view: on phones it sits in the page instead */}
       {!isDesktop && <div className="-mt-2 lg:hidden"><FeasibilityWarning spec={preview} /></div>}
 
       {/* --------------------------------------------------------- controls */}
       <div className="grid min-w-0 grid-cols-1 gap-5">
+        {intro}
         {readOnly && (
           <p className="flex items-center gap-2 rounded-lg border border-success/40 bg-success-soft p-3 text-sm font-semibold text-success">
             <Lock className="size-4" aria-hidden /> {lockedLabel ?? "Locked for production — the specification can no longer change"}

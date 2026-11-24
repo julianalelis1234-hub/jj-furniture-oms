@@ -516,6 +516,7 @@ await step("online order: design → order slip → staff confirm → create pas
   // the customization assistant fills the designer from a plain description (and can be undone)
   await page.fill("#assistant-text", "3 door kitchen base counter, 150 x 85 x 55 cm, mahogany, walnut, needed before Christmas");
   await page.getByTestId("assistant-apply").click();
+  await page.getByTestId("preview-updated").first().waitFor({ timeout: 5000 }); // the 3D view highlights what the description changed
   const understood = await page.getByTestId("assistant-result").innerText();
   expect(/Kitchen \/ Wall Cabinet/.test(understood) && understood.includes("150 × 85 × 55 cm") && understood.includes("Mahogany") && understood.includes("Walnut Stain"), `assistant result: ${understood}`);
   expect((await page.inputValue('input[name="width_cm"]')) === "150" && (await page.inputValue('input[name="depth_cm"]')) === "55", "assistant filled the size");

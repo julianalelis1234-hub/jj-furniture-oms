@@ -126,3 +126,16 @@ export function PersonCard({ name, line, chips, className }: { name: string; lin
 }
 
 export const chip = "rounded-full bg-secondary px-2 py-0.5 text-[11px] font-bold tabular-nums sm:px-2.5 sm:text-xs";
+
+/** Section page heading (every portal): title, one line, actions on the right. */
+export function PageHeading({ title, description, actions }: { title: string; description?: ReactNode; actions?: ReactNode }) {
+  return (
+    <header className="mb-4 flex flex-wrap items-center gap-2 sm:mb-6 sm:gap-3">
+      <div className="min-w-0 flex-1 basis-72">
+        <h1 className="text-xl font-bold tracking-[-0.02em] sm:text-3xl">{title}</h1>
+        {description && <p className="mt-0.5 text-xs text-muted-foreground sm:mt-1 sm:text-sm">{description}</p>}
+      </div>
+      {actions}
+    </header>
+  );
+}
