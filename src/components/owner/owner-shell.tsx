@@ -1,19 +1,10 @@
 import type { ReactNode } from "react";
-import { AppShell } from "@/components/app-shell";
-import { LiveSync } from "@/components/live-sync";
+import { PortalShell } from "@/components/portal-shell";
 import type { Actor } from "@/lib/domain/types";
-import { OwnerNav } from "./owner-nav";
 
-/** Every owner page: the shared app shell (wide) with the section sidebar. */
+/** Every owner page: the shared portal shell with the owner's sections and live counts. */
 export function OwnerShell({ actor, badges, children }: { actor: Actor; badges?: Partial<Record<string, number>>; children: ReactNode }) {
-  return (
-    <AppShell portal="owner" actor={actor} live={<LiveSync />} wide>
-      <div className="lg:grid lg:grid-cols-[14rem_minmax(0,1fr)] lg:gap-8">
-        <OwnerNav badges={badges} />
-        <div className="min-w-0">{children}</div>
-      </div>
-    </AppShell>
-  );
+  return <PortalShell portal="owner" actor={actor} badges={badges}>{children}</PortalShell>;
 }
 
 /** Page heading used by the owner sections. */

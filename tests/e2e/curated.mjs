@@ -23,7 +23,7 @@ await step("staff queue shows exactly the 5 curated orders with computed metrics
   await page.goto("/staff");
   const codes = await page.getByTestId("queue-row").evaluateAll((r) => r.map((x) => x.dataset.code).sort());
   expect(codes.join() === "JJ-2026-1001,JJ-2026-1002,JJ-2026-1003,JJ-2026-1004,JJ-2026-1005", `rows ${codes}`);
-  const kpi = async (id) => (await page.getByTestId(id).innerText()).replace(/\s+/g, " ");
+  const kpi = async (id) => ` ${(await page.getByTestId(id).innerText()).replace(/\s+/g, " ")} `;
   expect((await kpi("kpi-to-confirm")).includes(" 1 "), "to confirm 1");
   expect((await kpi("kpi-quote-payment")).includes(" 2 "), "quotation & payment 2");
   expect((await kpi("kpi-workshop")).includes(" 1 "), "workshop 1");
@@ -161,7 +161,7 @@ await step("six demo accounts: wrong password refused; fixed role accounts get n
 await step("all six demo accounts on desktop (1440) and phone (390): right portal, own content, no sideways scroll, phone nav, no access elsewhere", async () => {
   const ACCOUNTS = [
     { label: "Demo (all roles)", home: /^\/owner$/, anchor: (p) => p.getByRole("navigation", { name: "Switch demo role" }), nav: true },
-    { label: "Owner", home: /^\/owner$/, anchor: (p) => p.getByRole("heading", { level: 1, name: "Dashboard" }), nav: true, denied: ["/craftsman", "/driver"] },
+    { label: "Owner", home: /^\/owner$/, anchor: (p) => p.getByRole("heading", { level: 1, name: /^Good (morning|afternoon|evening), / }), nav: true, denied: ["/craftsman", "/driver"] },
     { label: "Staff", home: /^\/staff$/, anchor: (p) => p.getByRole("heading", { name: "Operations & Order Queue" }), nav: true, denied: ["/owner", "/owner/inventory", "/craftsman"] },
     { label: "Craftsman", home: /^\/craftsman$/, anchor: (p) => p.getByRole("tablist", { name: "Job status" }), nav: false, denied: ["/owner", "/staff", "/driver"] },
     { label: "Delivery Rider", home: /^\/driver$/, anchor: (p) => p.getByText("Online • Synced"), nav: false, denied: ["/owner", "/staff", "/craftsman"] },

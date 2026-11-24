@@ -39,6 +39,7 @@ export async function AppShell({
   headerExtra,
   live,
   wide = false,
+  sidebar,
   children,
 }: {
   portal: Role | "customer";
@@ -48,16 +49,15 @@ export async function AppShell({
   headerExtra?: ReactNode;
   /** live-sync indicator + subscription for this page: pass <LiveSync /> (server component) */
   live?: ReactNode;
+  /** full-height left sidebar on wide screens (owner portal); the top bar then shows on phones and tablets only */
+  sidebar?: ReactNode;
   children: ReactNode;
 }) {
   const demo = isDemoMode();
   const switcher = await demoSwitcherAllowed(); // role-switcher bar: the all-roles Demo account only
   const p = PORTAL_LABEL[portal];
-  return (
-    <div className="flex min-h-dvh flex-col">
-      {switcher && <DemoBar current={portal} />}
-      {/* Espresso navigation anchor in both modes: the `dark` class scopes the dark tokens to the header */}
-      <header className="dark no-print sticky top-0 z-30 border-b border-border bg-background/95 text-foreground backdrop-blur">
+  const header = (
+      <header className={cn("dark no-print sticky top-0 z-30 border-b border-border bg-background/95 text-foreground backdrop-blur", sidebar && "lg:hidden")}>
         <div className={cn("mx-auto flex items-center gap-3 px-4 py-2.5", wide ? "max-w-[90rem]" : "max-w-6xl")}>
           <Logo />
           <div className="ml-1 hidden border-l pl-3 sm:block">
@@ -84,6 +84,27 @@ export async function AppShell({
           </p>
         </div>
       </header>
+  );
+  if (sidebar) {
+    return (
+      <div className="min-h-dvh bg-muted/40">
+        {switcher && <DemoBar current={portal} />}
+        <div className="lg:grid lg:grid-cols-[16rem_minmax(0,1fr)]">
+          <aside className="no-print sticky top-0 hidden h-dvh flex-col border-r border-border bg-card lg:flex" aria-label="Sidebar">{sidebar}</aside>
+          <div className="flex min-h-dvh min-w-0 flex-col">
+            {header}
+            <main className="mx-auto w-full max-w-[84rem] flex-1 px-4 pt-4 pb-28 sm:pt-6 md:pb-6 lg:px-8 lg:pt-8">{children}</main>
+            <MobileNav portal={portal} />
+          </div>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="flex min-h-dvh flex-col">
+      {switcher && <DemoBar current={portal} />}
+      {/* Espresso navigation anchor in both modes: the `dark` class scopes the dark tokens to the header */}
+      {header}
       {/* bottom padding on phones keeps content clear of the floating nav */}
       <main className={cn("mx-auto w-full flex-1 px-4 pt-4 pb-28 sm:pt-6 md:pb-6", wide ? "max-w-[90rem]" : "max-w-6xl")}>{children}</main>
       <footer className="no-print border-t py-4 pb-28 text-center text-xs text-muted-foreground md:pb-4">
