@@ -1,8 +1,8 @@
-import { ArrowRight, BadgePercent, Box, ListChecks, LogIn, PencilRuler, Truck } from "lucide-react";
+import { ArrowRight, LogIn, PencilRuler } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { Logo } from "@/components/app-shell";
-import { CardSection, DarkCard, darkPrimary, darkSecondary, dashCard, KpiCard, KpiRow } from "@/components/dashboard";
+import { CardSection, DarkCard, darkPrimary, darkSecondary, dashCard } from "@/components/dashboard";
 import { DemoBar } from "@/components/demo-bar";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { isDemoMode } from "@/lib/config";
@@ -98,14 +98,6 @@ export default async function Home() {
             <figcaption className="absolute bottom-2 left-2 rounded-full bg-[#2B1D17]/80 px-2.5 py-1 text-[11px] font-semibold text-[#FAF6F0] lg:hidden">Carved panel door · our workshop</figcaption>
           </figure>
         </section>
-
-        {/* why order here: the dashboard's KPI cards */}
-        <KpiRow>
-          <KpiCard label="Design first" value="3D" icon={<Box />} sub="see it to scale before you order" />
-          <KpiCard label="Tracked stages" value="7" icon={<ListChecks />} sub="from confirmation to your door" tone="good" />
-          <KpiCard label="To start" value="30%" icon={<BadgePercent />} sub="down payment, or installment" />
-          <KpiCard label="Valencia City" value="Free" icon={<Truck />} sub="delivery; provincial per trip" tone="good" />
-        </KpiRow>
 
         {/* sample work: a swipeable strip on phones, a grid on wider screens */}
         <CardSection id="sample-work" title="Sample work" chip="Real photos from our shop"
