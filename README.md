@@ -1,14 +1,17 @@
-# JJ Furniture OMS — Hybrid Order Coordination System
+# JJ Enterprises OMS — Order Coordination System
 
-Mobile-first order monitoring for **JJ Furniture Shop and Enterprises** (Poblacion, Valencia City, Bukidnon). Handwritten paper slips stay at the counter. A zero-install phone-browser app gives the owner, store assistants, craftsmen, drivers and customers **one shared live order record** (HCI Design Phase II, Concept 3).
+Mobile-first order system for **JJ Enterprises — Furniture and Lumber Dealer** (Poblacion, Valencia City, Bukidnon). Customers design a piece in 3D and order online; walk-ins keep their paper slip. The owner, office staff, craftsmen, delivery riders and customers share **one live order record** from any phone browser, with nothing to install.
 
-| Portal | Route | Persona | What it does |
+| Portal | Route | Who | What it does |
 |---|---|---|---|
-| Owner `O-01` | `/owner` | Mr. Vincris Lelis | **Shop Overview & Approvals**: the same 3-zone workspace as Staff, plus *Awaiting your decision* (payment exceptions, proposals, quality inspection) and a collapsible Planning Board (production priority) |
-| Store Assistant `S-01` | `/staff` | Gilbert Decena, Liza | **Operations & Order Queue**: 4 computed metrics, stage filters + search, a 5-column queue (stacked list on phones), a slide-over order drawer with *Overview & 3D Spec* · *Quotation & Revisions* · *Payments & Gate* tabs (full-screen sheet on phones), a collapsed task inbox, New Walk-In / Phone Order, printable QR slip |
-| Craftsmen `C-01` | `/craftsman` | Nolito Remulta, Carlo, Dodong | Priority-sorted job cards (To Do / In Progress / For Revision / Done). **No financial data is fetched.** |
-| Delivery Driver `D-01` | `/driver` | Jesse Decena, Rey | Assigned trips only, COLLECT ON DELIVERY, works offline (IndexedDB queue + sync) |
-| Customer `CU-01` | `/customer/login` | email + password | **Option 1 · Log In to Track My Orders** → `/customer/orders` (own linked orders: stages, approved spec & quote, payments, post-confirmation change / repair requests). **Option 2 · Customize & Request a Quote** → `/customer/customize`. Quotations are accepted from the single-use emailed link `/customer/review?token=` (no login needed) |
+| Landing | `/` | everyone | Hero, sample work, how ordering works, about us, **Login / Demo access** |
+| Owner | `/owner` | Mr. Vincris Lelis | Sidebar dashboard: **Dashboard**, **Orders & Quotations**, **Staff**, **Craftsmen** (assignment + priority), **Deliveries**, **Lumber & Inventory**, **Reports**, **Roles & Access** |
+| Staff | `/staff` | Gilbert Decena, Liza | **Operations & Order Queue**: KPIs, *To confirm / Quotation & payment / In production / Delivery* filters, the order drawer (confirm, issue quotation, record acceptance, verify / reject payments, release to the workshop), task inbox, walk-in orders with a printable slip |
+| Craftsman | `/craftsman` | Nolito Remulta, Carlo, Dodong | Priority-sorted job rows (Up Next / In Progress / For Revision / Done). **No prices or phone numbers are fetched.** Only accepted jobs appear. |
+| Delivery rider | `/driver` | Jesse Decena, Rey | Trip rows with *On process / In transit / Delivered* pills → stop detail, cash to collect, works offline (IndexedDB queue + sync) |
+| Customer | `/customer/customize`, `/login`, `/customer/orders` | email + password | Design in 3D (with the customization assistant) → order slip → after the shop confirms, create a password → accept the quotation with 30% / installment / full terms → pay by GCash / Maya or bank transfer with a receipt → follow every stage |
+
+All six **demo accounts** (`/login`, password `JJ-Demo-2026`, Demo Mode only): **Demo (all roles)** with a role-switcher bar, **Owner**, **Staff**, **Craftsman**, **Delivery Rider** and **Customer**. The redesign is summarised phase by phase in **[docs/REDESIGN.md](docs/REDESIGN.md)**.
 
 ## Video demonstration
 
@@ -172,12 +175,12 @@ Demo Mode (`NEXT_PUBLIC_APP_MODE=demo`, in-memory store) starts with **five cura
 ## Testing
 
 ```bash
-npm test           # Vitest: 209 unit tests (incl. outbox crypto / leases / retries / endpoint separation) (incl. live-sync dedup / ordering / verified-notification rules) (incl. no active PIN path, demo login refused outside Demo Mode, own-orders-only change requests) (incl. review-link, provisioning and access-control security tests) (incl. exact 3D bounds for every design at 6 sizes) (validation, state machine + roles, 30/70 finance, 30% gate, Option 2 requests, quote expiry, atomic/idempotent acceptance, privacy, offline sync)
+npm test           # Vitest: 243 unit tests (incl. the customer email trail across the whole order flow, the customization assistant, lumber inventory + craftsman assignment, confirm → quotation → accept → pay) (incl. outbox crypto / leases / retries / endpoint separation) (incl. live-sync dedup / ordering / verified-notification rules) (incl. no active PIN path, demo login refused outside Demo Mode, own-orders-only change requests) (incl. review-link, provisioning and access-control security tests) (incl. exact 3D bounds for every design at 6 sizes) (validation, state machine + roles, 30/70 finance, 30% gate, Option 2 requests, quote expiry, atomic/idempotent acceptance, privacy, offline sync)
 npm run test:db    # Postgres: 305 assertions (incl. migration 010: lumber ledger, no negative stock, owner-only items, office-only RLS, seed replay; migration 009: confirm → quotation → accept + terms → customer payments, reject/verify, production lock, safe account claiming; migration 008: outbox envelope / lease / SKIP LOCKED / scrub / rate limits; migration 007: authorization audit, live-feed RLS per role, transition classification; migration 006: PIN endpoints dropped, PIN history kept, customer RLS = own orders only; migration 005: tokens, verified linking, RLS for customers, a two-session link race) on the real migrations (triggers, constraints, RLS per role, acceptance engine, append-only tables, row-lock concurrency, 003/004 on a copy of the live data) + seed cross-check
 npm run build && DEMO_DATASET=fixtures PORT=3100 npm start &     # the regression suites use the 15-order fixture dataset
-BASE_URL=http://localhost:3100 npm run test:e2e   # Playwright: all 5 portals end-to-end, mobile no-horizontal-scroll, dark mode
+BASE_URL=http://localhost:3100 npm run test:e2e   # Playwright: every portal end-to-end (order flow, payments + receipts, production lock, assistant, pinned 3D, owner sections, lumber, rider rows, offline sync, live sync), mobile no-horizontal-scroll, dark mode
 # curated demo (default dataset): restart WITHOUT DEMO_DATASET, then
-BASE_URL=http://localhost:3100 npm run test:e2e:curated   # the 5 demo orders, KPIs, drawer gates, 390px sheets, role isolation
+BASE_URL=http://localhost:3100 npm run test:e2e:curated   # the 5 demo orders, KPIs, drawer gates, 390px sheets, all six demo accounts at 1440 and 390 (portal, content, no sideways scroll, phone nav, denied pages), Demo Inbox emails, landing page
 ```
 
 `test:db` needs a local Postgres. Set `PGURL=postgres://user:pass@host:5432`. It runs the migration unchanged on top of `supabase/tests/00_supabase_stub.sql`, which emulates Supabase's `auth.uid()` and API roles.
@@ -189,7 +192,7 @@ BASE_URL=http://localhost:3100 npm run test:e2e:curated   # the 5 demo orders, K
   * **Dark ("Smoked Espresso Atelier"):** Espresso canvas, `#36251E` cards with a soft Caramel rim-glow, Cream text, Latte secondary text, Caramel primary actions.
   * **Shared:** the header is an Espresso navigation bar in both modes (the `dark` class scopes the dark tokens to it).
   * **Accessibility:** Caramel is never text on Cream or white (2.7:1); it is used only for borders, fills, glows and decorative icons, with Espresso text on Caramel fills (5.5:1). Every text pairing meets WCAG AA (the token block lists the ratios), and an in-browser audit of all portals in both modes and both viewports found no text below AA.
-  * **Type:** EB Garamond serif for page and section headings (h1/h2, lining figures), the uppercase eyebrow labels and the hero lines. Nunito Sans for body text, buttons, forms and card titles, with tabular numerals for ₱, %, cm and Order IDs. The rounded Nunito is used only for the *JJ Furniture* wordmark. Lucide line icons use a 1.5 px stroke.
+  * **Type:** Plus Jakarta Sans for everything (tight, heavy headings; tabular numerals for ₱, %, cm, board feet and Order IDs); sentence-case labels, no all-caps eyebrows. Lucide line icons. Lists are flat full-width rows separated by hairlines, not boxed cards; statuses are pill badges with an icon or word, never colour alone.
 * `npm run tokens` exports them to `design/tokens.json` (Tokens Studio / Figma Variables format, both modes). Import that file into Figma so the design and the code use the same token names.
 * **Figma file:** [JJ Furniture OMS — Design System & Portals](https://www.figma.com/design/9vS0YZSE2kE4a34plawO3P). It contains the variable collections `JJ OMS / Color · Normal (Light)`, `JJ OMS / Color · Dark` (44 tokens each, with `var(--…)` code syntax) and `JJ OMS / Shape`. Light and Dark are separate collections because the Figma Starter plan allows only one mode per collection; on a paid plan they can be merged into one two-mode collection. The *Portals (mobile 390)* page holds 8 screens captured from the running app before the wooden redesign.
 * **Figma file (add-on v2, wooden configurator):** [JJ Furniture OMS — Wooden Configurator (v2)](https://www.figma.com/design/at2SQOOa9fvGQOtZEXezpf). A separate file, so the original file above is not overwritten. It holds the wooden variable collections `JJ OMS / Color · Wooden · Light` and `… · Wooden · Dark` (43 tokens each, `var(--…)` code syntax), `JJ OMS / Shape`, and 12 reviewed screens: hero tree, configurator per category, the four finishes, mobile preview bar, dark mode, and customer scenarios 1–3 plus the legacy view. The screens are screenshots from the tested build, not editable components.

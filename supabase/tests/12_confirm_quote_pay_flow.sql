@@ -69,12 +69,17 @@ from public.orders where id = '90000000-0000-0000-0000-000000000001';
 select pg_temp.expect_error($q$select pg_temp.accept('90000000-0000-0000-0000-000000000001', 'weekly')$q$,
   'VALIDATION', 'an unknown payment plan is rejected');
 
+select pg_temp.check(not exists (select 1 from public.workshop_orders() w where w.id = '90000000-0000-0000-0000-000000000001'),
+  'craftsmen do not see a confirmed order while its quotation is still open');
+
 -- ------------------------------------------------------ accept + plan ----
 select pg_temp.accept('90000000-0000-0000-0000-000000000001', 'down_30', 'Online Payment (GCash / Maya)');
 select pg_temp.check(status = 'Confirmed' and specs_confirmed and approved_revision_number = 2 and payment_plan = 'down_30'
                      and preferred_payment_method = 'Online Payment (GCash / Maya)',
   'accepting the quotation records the plan and channel and does not change the status')
 from public.orders where id = '90000000-0000-0000-0000-000000000001';
+select pg_temp.check(exists (select 1 from public.workshop_orders() w where w.id = '90000000-0000-0000-0000-000000000001'),
+  'once the quotation is accepted the job appears in the workshop list (Up next)');
 select pg_temp.check((confirmed_specs_snapshot ->> 'payment_plan') = 'down_30',
   'the immutable acceptance snapshot includes the chosen payment plan')
 from public.order_confirmations where order_id = '90000000-0000-0000-0000-000000000001';

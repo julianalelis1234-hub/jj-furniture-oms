@@ -117,7 +117,9 @@ describe("quotation -> accept with payment terms", () => {
     // someone else's account cannot accept it
     const maria = store.t.customer_accounts.find((a) => a.email === DEMO_CUSTOMER_LOGIN.email)!;
     expect((await err(customerOwnedAccept(store, maria.id, order.order_code, input))).code).toBe("NOT_FOUND");
+    expect((await store.listWorkshopOrders()).some((w) => w.id === order.id)).toBe(false); // craftsmen do not see an open quotation
     const accepted = await customerOwnedAccept(store, acct.id, order.order_code, input);
+    expect((await store.listWorkshopOrders()).some((w) => w.id === order.id)).toBe(true); // accepted: "Up next" in the workshop
     expect(accepted.status).toBe("Confirmed");
     expect(accepted.payment_plan).toBe("installment");
     expect(accepted.preferred_payment_method).toBe("Bank Transfer");

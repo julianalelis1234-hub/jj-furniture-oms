@@ -158,6 +158,57 @@ await step("six demo accounts: wrong password refused; fixed role accounts get n
   await ctx.close();
 });
 
+await step("all six demo accounts on desktop (1440) and phone (390): right portal, own content, no sideways scroll, phone nav, no access elsewhere", async () => {
+  const ACCOUNTS = [
+    { label: "Demo (all roles)", home: /^\/owner$/, anchor: (p) => p.getByRole("navigation", { name: "Switch demo role" }), nav: true },
+    { label: "Owner", home: /^\/owner$/, anchor: (p) => p.getByRole("heading", { level: 1, name: "Dashboard" }), nav: true, denied: ["/craftsman", "/driver"] },
+    { label: "Staff", home: /^\/staff$/, anchor: (p) => p.getByRole("heading", { name: "Operations & Order Queue" }), nav: true, denied: ["/owner", "/owner/inventory", "/craftsman"] },
+    { label: "Craftsman", home: /^\/craftsman$/, anchor: (p) => p.getByRole("tablist", { name: "Job status" }), nav: false, denied: ["/owner", "/staff", "/driver"] },
+    { label: "Delivery Rider", home: /^\/driver$/, anchor: (p) => p.getByText("Online • Synced"), nav: false, denied: ["/owner", "/staff", "/craftsman"] },
+    { label: "Customer", home: /^\/customer\/orders$/, anchor: (p) => p.getByTestId("customer-orders"), nav: true, denied: ["/owner", "/staff", "/owner/inventory"] },
+  ];
+  for (const vp of [{ width: 1440, height: 900, name: "desktop" }, { width: 390, height: 844, name: "phone" }]) {
+    for (const a of ACCOUNTS) {
+      const ctx = await browser.newContext({ viewport: { width: vp.width, height: vp.height }, baseURL: BASE, reducedMotion: "reduce" });
+      const page = await ctx.newPage();
+      const errors = []; page.on("pageerror", (e) => errors.push(e.message));
+      await page.goto("/login");
+      await page.getByRole("button", { name: `Sign in as ${a.label}` }).click();
+      await page.waitForURL((u) => a.home.test(u.pathname), { timeout: 15000 });
+      await a.anchor(page).first().waitFor({ timeout: 15000 });
+      await page.waitForLoadState("networkidle");
+      await noScroll(page, `${a.label} ${vp.name}`);
+      const navShown = await page.getByTestId("mobile-nav-action").isVisible().catch(() => false);
+      if (vp.name === "phone") expect(navShown === a.nav, `${a.label}: phone bottom nav ${a.nav ? "shown" : "hidden"} (got ${navShown})`);
+      else expect(!navShown, `${a.label}: no bottom nav on desktop`);
+      await page.screenshot({ path: `test-results/accounts/${vp.name}-${a.label.replace(/[^a-z]+/gi, "-").toLowerCase()}.png` });
+      for (const path of a.denied ?? []) {
+        await page.goto(path);
+        await page.waitForLoadState("networkidle");
+        expect(new URL(page.url()).pathname !== path, `${a.label} must not open ${path} (got ${page.url()})`);
+      }
+      expect(errors.length === 0, `${a.label} ${vp.name}: page errors ${errors.join(" | ")}`);
+      await ctx.close();
+    }
+  }
+});
+
+await step("Demo Inbox: the curated emails are readable, link to the right pages, and never contain a password", async () => {
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, baseURL: BASE }); const page = await ctx.newPage();
+  await page.goto("/demo/inbox");
+  const items = page.getByTestId("inbox-item");
+  expect((await items.count()) >= 2, "emails listed");
+  const rea = items.filter({ hasText: "rea.caday@example.com" });
+  const text = (await rea.allInnerTexts()).join("\n");
+  expect(/create your JJ Enterprises password/.test(text) && /choose how to pay/.test(text), "Rea's confirmation and quotation emails");
+  expect(!/temporary password|your password is|password\s*:/i.test(text), "no password in any email");
+  expect((await rea.locator('a[href^="/customer/set-password?token="]').count()) === 1, "one single-use create-password link");
+  expect((await rea.locator('a[href="/customer/orders/JJ-2026-1002"]').count()) === 1, "the quotation email links to the login-protected order page");
+  await noScroll(page, "demo inbox phone");
+  await page.screenshot({ path: "test-results/accounts/demo-inbox-phone.png", fullPage: true });
+  await ctx.close();
+});
+
 await step("landing page: sample work + about us, login button, no testimonials, no horizontal scroll at 390px", async () => {
   for (const vp of [{ width: 1440, height: 900 }, { width: 390, height: 844 }]) {
     const ctx = await browser.newContext({ viewport: vp, baseURL: BASE }); const page = await ctx.newPage();

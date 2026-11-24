@@ -113,34 +113,34 @@ Scroll to **What we found in the Discover phase**, then **One record, five porta
 ## 4. Craftsmen Portal (C-01) and Owner Dashboard (O-01) — 2:00
 
 **Craftsmen**
-1. Top bar → **Craftsmen** (Nolito Remulta). **Say:** "Large cards sorted by the owner's priority. No prices or customer phone numbers are ever sent to this screen."
-2. **Up Next** tab: confirmed jobs show *"do not cut wood yet"*. **Say:** "Craftsmen cannot start production themselves; the office releases jobs after the 30% is verified."
+1. Top bar → **Craftsmen** (Nolito Remulta). **Say:** "One row per job, sorted by the owner's priority. No prices or customer phone numbers are ever sent to this screen."
+2. **Up Next** tab: jobs whose quotation was accepted show *"do not cut wood yet"*. **Say:** "Craftsmen never see a quotation that can still change, and cannot start production themselves; the office releases jobs after the 30% is verified."
 3. **In Progress** tab (JJ-2026-0149) → **Ask Spec Question** → type *"Should the table edge be rounded or square?"* → **Send question**. The job moves to **For Revision** because a question is open.
 4. **For Revision** tab → **Mark Ready for Owner Inspection** → tick the 4 checklist boxes → **Send to owner**.
 
 **Owner**
-5. Top bar → **Owner**. Walk through the **8 KPI cards**: Active Orders, Delayed/At Risk, In Production, Waiting Inspection, Deliveries to Watch, Balances Still to Collect, Unpaid After Delivery, Approvals Waiting.
-6. **Awaiting your decision** (approvals and inspections) — the craftsman question is answered in the order's drawer:
-   - Find the spec question → **Answer** → *"Rounded edges, 1cm radius — confirmed with the customer."* → **Send answer to workshop**.
-   - **JJ-2026-0140 Installment Approval** → **Approve** → **Approve**.
-7. **Planning Board**: on JJ-2026-0149 click **Urgent**. It jumps to #1, and the craftsmen see the same order. Optionally use the ↑ / ↓ buttons.
-8. Back in **Awaiting your decision**, find **Quality inspection · JJ-2026-0149** → **Pass** → **Passed — ready for delivery**. It's now stage 5/7, Ready for Delivery.
+5. Top bar → **Owner**. The **sidebar** lists Dashboard, Orders & Quotations, Staff, Craftsmen, Deliveries, Lumber & Inventory, Reports and Roles & Access, with live counts. On the **Dashboard**, walk through the 8 KPIs (to confirm, quotation & payment, workshop, delivery, deposits, balances, delayed, low lumber stock).
+6. Sidebar → **Orders & Quotations** → open JJ-2026-0149 → answer the craftsman's spec question: **Answer** → *"Rounded edges, 1cm radius — confirmed with the customer."* → **Send answer to workshop**.
+7. Sidebar → **Dashboard** → **Awaiting your decision**: **JJ-2026-0140 Installment Approval** → **Approve** → **Approve**.
+8. Sidebar → **Craftsmen**: workload per craftsman, the **Assign jobs** picker, and **Production priority** — on JJ-2026-0149 click **Urgent**. It jumps to #1, and the craftsmen see the same order.
+9. Sidebar → **Lumber & Inventory**: board feet on hand with the reorder tick; Gmelina and Acacia are flagged *Low · reorder*. Optionally **Receive** on Acacia: 10 pieces × 2 × 4 × 10 ft shows **= 66.67 board feet** → **Add to stock**. **Say:** "Stock changes only through these entries, and it can never go below zero."
+10. Sidebar → **Dashboard** → **Quality inspection · JJ-2026-0149** → **Pass** → **Passed — ready for delivery**. It's now stage 5/7, Ready for Delivery.
 
 **Staff hand-off (about 20 seconds, needed before the driver can leave)**
-9. Top bar → **Staff**:
+11. Top bar → **Staff**:
    - **Schedule driver & vehicle** → JJ-2026-0149 → **Schedule delivery** → Driver **Jesse Decena**, Vehicle **Multicab**, Date **today**, Time **1:00 PM - 3:00 PM** → **Schedule delivery**.
 
    **Say:** "The 30% was verified before production, so dispatch is allowed."
 
-## 5. Delivery Driver Portal (D-01) — 1:30
+## 5. Delivery Rider Portal (D-01) — 1:30
 
-1. Top bar → **Delivery Driver** (Jesse Decena). The badge shows **Online • Synced**. Show the JJ-2026-0149 card and its **COLLECT ON DELIVERY ₱16,800**.
+1. Top bar → **Delivery Rider** (Jesse Decena). The badge shows **Online • Synced**. Each trip is one row with a status pill (**On process**, **In transit**, **Delivered**) and the cash to collect. Tap the JJ-2026-0149 row to open the stop: address, **Call**, **Map**, and **Collect on delivery ₱16,800**.
 2. Click **Pre-Load Assignments for Offline Travel**. **Say:** "Before leaving the shop, his trips are saved on the phone."
 3. Turn on **Simulate Offline / Weak Signal**.
 4. On JJ-2026-0149: **Start Trip**, then **Mark Delivered & Log Cash Collected** (₱16,800 pre-filled) → **Save on phone**.
 5. Show the badge **Offline • Saved Locally (2 pending)** and the yellow rows **"Saved Locally — Pending Sync"**.
    **Say:** "It never pretends the data reached the shop."
-6. Turn **Simulate Offline** off. It syncs automatically: **Online • Synced**, a new **Last successful sync** time, and the trip moves to **Done + Failed**.
+6. Turn **Simulate Offline** off. It syncs automatically: **Online • Synced**, a new **Last successful sync** time, and, after **All deliveries**, the trip is under **Done** with a **Delivered** pill.
 
 ## 6. Final Overview — 1:00
 

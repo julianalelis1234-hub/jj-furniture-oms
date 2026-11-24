@@ -650,6 +650,48 @@ end;
 $$;
 revoke all on function private.emit_order_live_event() from public;
 
+-- ------------------------------------------------- workshop jobs (003) ----
+-- Same function as 003; craftsmen no longer see confirmed orders whose quotation is still open.
+create or replace function public.workshop_orders()
+returns table (
+  id uuid, order_code text, item_name text, quantity int, dimensions text,
+  wood_type public.wood_type, color_finish text, special_instructions text,
+  reference_photo_url text, status public.order_status, priority_rank int,
+  priority_label public.priority_label, assigned_craftsman_id uuid,
+  estimated_completion_date date, version int, updated_at timestamptz, needs_revision boolean,
+  furniture_category public.furniture_category, design_variant text,
+  width_cm numeric, height_cm numeric, depth_cm numeric, custom_wood_note text,
+  approved_revision_number int, is_legacy_incomplete boolean
+)
+language plpgsql stable security definer set search_path = ''
+as $$
+begin
+  if (select auth.uid()) is not null
+     and coalesce((select private.app_role()) in ('craftsman', 'owner', 'staff'), false) is false then
+    raise exception 'FORBIDDEN: workshop jobs are for shop staff only' using errcode = '42501';
+  end if;
+  return query
+  select
+    o.id, o.order_code, o.item_name, o.quantity, o.dimensions, o.wood_type, o.color_finish,
+    o.special_instructions, o.reference_photo_url, o.status, o.priority_rank, o.priority_label,
+    o.assigned_craftsman_id, o.estimated_completion_date, o.version, o.updated_at,
+    exists (
+      select 1 from public.order_status_history h
+      where h.order_id = o.id
+        and h.from_status = 'Completed / For Inspection' and h.to_status = 'In Production'
+        and h.changed_at = (select max(h2.changed_at) from public.order_status_history h2 where h2.order_id = o.id)
+    ),
+    o.furniture_category, o.design_variant, o.width_cm, o.height_cm, o.depth_cm, o.custom_wood_note,
+    o.approved_revision_number, o.is_legacy_incomplete
+  from public.orders o
+  where o.status in ('Confirmed', 'In Production', 'Completed / For Inspection', 'Ready for Delivery')
+    -- 009: a Confirmed order reaches the workshop only once its quotation is accepted (the spec is final)
+    and (o.status <> 'Confirmed' or o.specs_confirmed);
+end;
+$$;
+revoke all on function public.workshop_orders() from public, anon;
+grant execute on function public.workshop_orders() to authenticated, service_role;
+
 -- ------------------------------------------------------------- privileges ----
 revoke all on function public.accept_order_revision(uuid, uuid, int, numeric, numeric, numeric, text, public.confirmation_method, text, uuid, text, text, public.payment_method) from public, anon;
 grant execute on function public.accept_order_revision(uuid, uuid, int, numeric, numeric, numeric, text, public.confirmation_method, text, uuid, text, text, public.payment_method) to authenticated, service_role;

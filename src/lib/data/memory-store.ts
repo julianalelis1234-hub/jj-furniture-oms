@@ -458,7 +458,8 @@ export class MemoryStore implements DataStore {
 
   async listWorkshopOrders(): Promise<WorkshopOrder[]> {
     return this.t.orders
-      .filter((o) => WORKSHOP_STATUSES.has(o.status))
+      // mirrors 009: a Confirmed order reaches the workshop only once its quotation is accepted
+      .filter((o) => WORKSHOP_STATUSES.has(o.status) && (o.status !== "Confirmed" || o.specs_confirmed))
       .map((o) => {
         const hist = this.t.order_status_history
           .filter((h) => h.order_id === o.id)
