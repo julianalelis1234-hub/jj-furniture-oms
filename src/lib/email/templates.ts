@@ -37,7 +37,7 @@ function layout(p: { preheader: string; heading: string; intro: string; rows: st
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border:1px solid ${C.latte};border-radius:16px;overflow:hidden;">
 <tr><td style="background:${C.espresso};padding:20px 28px;">
   <span style="display:inline-block;width:34px;height:34px;line-height:34px;text-align:center;border-radius:10px;background:${C.caramel};color:${C.espresso};font:800 15px ${SANS};">JJ</span>
-  <span style="margin-left:10px;color:${C.cream};font:800 18px ${SANS};vertical-align:middle;">JJ Furniture</span>
+  <span style="margin-left:10px;color:${C.cream};font:800 18px ${SANS};vertical-align:middle;">JJ Enterprises</span>
   <div style="margin-top:4px;color:${C.latte};font:12px ${SANS};letter-spacing:.06em;">Shop and Enterprises · Valencia City, Bukidnon</div>
 </td></tr>
 <tr><td style="height:3px;background:${C.caramel};line-height:3px;font-size:0;">&nbsp;</td></tr>
@@ -51,7 +51,7 @@ function layout(p: { preheader: string; heading: string; intro: string; rows: st
   <p style="margin:0;color:${C.mocha};font:13px/1.6 ${SANS};">${p.after}</p>
 </td></tr>
 <tr><td style="padding:16px 28px;background:${C.cream};border-top:1px solid ${C.latte};color:${C.mocha};font:12px/1.5 ${SANS};">
-  JJ Furniture Shop and Enterprises · Poblacion, Valencia City, Bukidnon.<br>If you did not order from JJ Furniture, you can ignore this email.
+  JJ Enterprises — Furniture and Lumber Dealer · Poblacion, Valencia City, Bukidnon.<br>If you did not order from JJ Enterprises, you can ignore this email.
 </td></tr></table></td></tr></table></body></html>`;
 }
 
@@ -66,7 +66,7 @@ export function renderEmail(kind: OutboxKind, d: TemplateData, href: string): Re
   const name = d.customer_name || "there";
   switch (kind) {
     case "quote_review_ready": {
-      const subject = `Your JJ Furniture quotation for ${d.order_code} is ready`;
+      const subject = `Your JJ Enterprises quotation for ${d.order_code} is ready`;
       const rows = row("Order ID", d.order_code) + row("Item", d.item_summary) + row("Total", d.total) + row("Quotation valid until", d.quote_expires);
       const html = layout({
         preheader: `Review and accept your quotation for ${d.order_code}.`,
@@ -75,33 +75,33 @@ export function renderEmail(kind: OutboxKind, d: TemplateData, href: string): Re
         rows, cta: "Review & Accept Quotation", href,
         after: `This secure link works once${d.link_expires ? ` and expires on ${esc(d.link_expires)}` : ""}. Nothing is ordered or charged until you accept.`,
       });
-      const text = `Hello ${name},\n\nYour JJ Furniture quotation is ready.\nOrder ID: ${d.order_code}\nItem: ${d.item_summary}\nTotal: ${d.total}\n` +
+      const text = `Hello ${name},\n\nYour JJ Enterprises quotation is ready.\nOrder ID: ${d.order_code}\nItem: ${d.item_summary}\nTotal: ${d.total}\n` +
         `${d.quote_expires ? `Quotation valid until: ${d.quote_expires}\n` : ""}\nReview & accept (single-use link${d.link_expires ? `, expires ${d.link_expires}` : ""}):\n${href}\n\n` +
-        "Nothing is ordered or charged until you accept. If you did not order from JJ Furniture, ignore this email.";
+        "Nothing is ordered or charged until you accept. If you did not order from JJ Enterprises, ignore this email.";
       return { subject, html, text };
     }
     case "order_confirmed_new_customer": {
-      const subject = `Order ${d.order_code} confirmed — set your JJ Furniture password`;
+      const subject = `Order ${d.order_code} confirmed — set your JJ Enterprises password`;
       const rows = row("Order ID", d.order_code) + row("Confirmed item", d.item_summary) + row("Total", d.total) + row("30% down payment", d.down_payment);
       const html = layout({
         preheader: `Order ${d.order_code} is confirmed. Create your password to follow it.`,
         heading: "Your order is confirmed",
         intro: `Thank you, ${esc(name)}! Production starts once your <b>30% down payment</b>${d.down_payment ? ` of <b>${esc(d.down_payment)}</b>` : ""} is verified by the shop. Create your password to follow every step of your order.`,
         rows, cta: "Set Your Password & Track Order", href,
-        after: "This link works once and expires soon. If it has expired, use “Forgot Password?” on the login page to get a new one. JJ Furniture will never email you a password.",
+        after: "This link works once and expires soon. If it has expired, use “Forgot Password?” on the login page to get a new one. JJ Enterprises will never email you a password.",
       });
       const text = `Thank you, ${name}!\n\nOrder ${d.order_code} is confirmed: ${d.item_summary}.\nTotal: ${d.total}\n30% down payment: ${d.down_payment}\n` +
         `Production starts once your 30% down payment is verified.\n\nSet your password & track your order (single-use link):\n${href}\n\n` +
-        "If the link expired, use “Forgot Password?” on the login page. JJ Furniture will never email you a password.";
+        "If the link expired, use “Forgot Password?” on the login page. JJ Enterprises will never email you a password.";
       return { subject, html, text };
     }
     case "order_confirmed_returning_customer": {
       const subject = `Order ${d.order_code} is confirmed`;
       const rows = row("Order ID", d.order_code) + row("Confirmed item", d.item_summary) + row("Total", d.total) + row("30% down payment", d.down_payment);
       const html = layout({
-        preheader: `Order ${d.order_code} was added to your JJ Furniture account.`,
+        preheader: `Order ${d.order_code} was added to your JJ Enterprises account.`,
         heading: "Your order is confirmed",
-        intro: `Thank you, ${esc(name)}! This order was added to your existing JJ Furniture account. Production starts once your 30% down payment is verified.`,
+        intro: `Thank you, ${esc(name)}! This order was added to your existing JJ Enterprises account. Production starts once your 30% down payment is verified.`,
         rows, cta: "Log In to Track Your Order", href,
         after: "Log in with your usual email and password. Your password was not changed.",
       });
@@ -110,15 +110,15 @@ export function renderEmail(kind: OutboxKind, d: TemplateData, href: string): Re
       return { subject, html, text };
     }
     case "account_setup_link": {
-      const subject = "Your JJ Furniture password set-up link";
+      const subject = "Your JJ Enterprises password set-up link";
       const html = layout({
         preheader: "Use this secure link to set a new password.",
         heading: "Set your password",
-        intro: `Hello ${esc(name)}, use the button below to choose a new password for your JJ Furniture account.`,
+        intro: `Hello ${esc(name)}, use the button below to choose a new password for your JJ Enterprises account.`,
         rows: "", cta: "Set Your Password", href,
         after: "This link works once and expires soon. If you did not ask for it, ignore this email — your password stays the same.",
       });
-      const text = `Hello ${name},\n\nSet a new password for your JJ Furniture account (single-use link):\n${href}\n\nIf you did not ask for this, ignore this email; your password stays the same.`;
+      const text = `Hello ${name},\n\nSet a new password for your JJ Enterprises account (single-use link):\n${href}\n\nIf you did not ask for this, ignore this email; your password stays the same.`;
       return { subject, html, text };
     }
   }

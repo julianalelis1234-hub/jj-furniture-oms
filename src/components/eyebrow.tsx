@@ -3,14 +3,14 @@ import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
 /**
- * Uppercase, wide-tracked micro-label pill with a 1px Caramel border.
+ * Sentence-case label pill with a 1px Caramel border (no all-caps tracking).
  * Text stays Mocha (light, 7.3:1) / Latte (dark) — Caramel is decoration only.
  */
 export function Eyebrow({ children, icon, className }: { children: ReactNode; icon?: ReactNode; className?: string }) {
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-full border border-live bg-background/60 px-3 py-1 font-serif text-xs font-semibold tracking-[0.14em] text-muted-foreground uppercase sm:text-[13px]",
+        "inline-flex items-center gap-1.5 rounded-full border border-live bg-background/60 px-3 py-1 text-xs font-semibold text-muted-foreground sm:text-[13px]",
         className,
       )}
     >

@@ -108,9 +108,9 @@ export async function afterQuoteIssued(store: DataStore, orderId: string) {
 
 const REASONS: Record<Exclude<ConsumeReviewResult, { ok: true }>["reason"], string> = {
   invalid: "This review link is not valid.",
-  used: "This review link was already used. Ask JJ Furniture to send a new one, or log in if you already set a password.",
+  used: "This review link was already used. Ask JJ Enterprises to send a new one, or log in if you already set a password.",
   replaced: "A newer quotation was sent for this order. Please use the most recent email.",
-  expired: "This review link has expired. Ask JJ Furniture to send a new one.",
+  expired: "This review link has expired. Ask JJ Enterprises to send a new one.",
   email_changed: "The email on this order changed, so this link no longer works.",
 };
 

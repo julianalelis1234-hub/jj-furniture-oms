@@ -63,10 +63,10 @@ export default function AboutPage() {
       </header>
 
       <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 sm:py-8">
-        <p className="text-sm font-semibold tracking-wide text-primary uppercase">HCI Design Phase II · Concept 3</p>
+        <p className="text-sm font-semibold text-primary">HCI Design Phase II · Concept 3</p>
         <h1 className="mt-1 text-4xl font-semibold sm:text-5xl">Hybrid Order Monitoring System</h1>
         <p className="mt-3 max-w-3xl text-lg text-muted-foreground">
-          <b className="text-foreground">JJ Furniture Shop and Enterprises</b>, Poblacion, Valencia City, Bukidnon, builds custom
+          <b className="text-foreground">JJ Enterprises — Furniture and Lumber Dealer</b>, Poblacion, Valencia City, Bukidnon, builds custom
           Mahogany and Gmelina furniture to order. This system keeps the paper slip at the counter and gives every role one shared,
           live order record in an ordinary phone browser. There is nothing to install and no monthly software fee.
         </p>

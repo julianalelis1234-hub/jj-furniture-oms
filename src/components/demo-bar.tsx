@@ -29,7 +29,7 @@ export function DemoBar({ current }: { current: Role | "customer" | null }) {
   return (
     <div className="no-print bg-demo-bar text-demo-bar-foreground">
       <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-2 px-4 py-2">
-        <span className="flex items-center gap-1.5 text-xs font-semibold tracking-wide uppercase opacity-80">
+        <span className="flex items-center gap-1.5 text-xs font-semibold opacity-80">
           <FlaskConical className="size-4" aria-hidden /> Demo
         </span>
         <nav aria-label="Switch demo role" className="-mx-1 flex max-w-full gap-1 overflow-x-auto px-1">

@@ -37,16 +37,16 @@ export default async function StaffPage({ searchParams }: { searchParams: Promis
     <AppShell portal={actor.role === "owner" ? "owner" : "staff"} actor={actor} live={<LiveSync />}>
       <OfficeWorkspace actor={actor} data={data} basePath="/staff" openId={openId} tab={typeof sp.tab === "string" ? sp.tab : undefined}
         title="Operations & Order Queue" description="One shared, live order record for the counter, the workshop, the drivers and the customers." />
-      <details className="mt-6 rounded-2xl border bg-card p-4" data-testid="task-inbox">
+      <details id="task-inbox" className="mt-8 border-t border-border pt-4" data-testid="task-inbox">
         <summary className="flex cursor-pointer items-center gap-2 text-lg font-semibold">
           <Inbox className="size-5 text-primary" aria-hidden /> Task inbox
           <span className="rounded-full bg-primary px-2 py-0.5 text-xs font-bold text-primary-foreground tabular-nums">{inbox.length}</span>
         </summary>
         {inbox.length === 0 ? <p className="mt-3 text-sm text-muted-foreground">Nothing waiting. 🎉</p> : (
-          <ul className="mt-3 grid gap-1.5">
+          <ul className="mt-3 divide-y divide-border border-y border-border">
             {inbox.map((x, i) => (
               <li key={`${x.id}-${i}`}>
-                <Link href={`/staff?order=${x.id}&tab=${x.tab}`} scroll={false} className="flex min-h-11 items-center gap-3 rounded-xl border px-3 py-2 text-sm hover:bg-accent-soft">
+                <Link href={`/staff?order=${x.id}&tab=${x.tab}`} scroll={false} className="flex min-h-12 items-center gap-3 px-1 py-2.5 text-sm hover:bg-accent-soft/60">
                   <b className="shrink-0 tabular-nums">{x.order}</b><span className="min-w-0">{x.label}</span>
                 </Link>
               </li>

@@ -86,7 +86,7 @@ export async function reviewProposeAction(fd: FormData): Promise<ActionResult<{ 
   if (!scope) return { ok: false, message: "Your review session ended. Open the link from your email again, or ask the shop for a new one." };
   try {
     const r = await proposeFromReview(await getPublicStore(), scope, Object.fromEntries(fd));
-    return { ok: true, data: { revision_number: r.revision_number }, message: "Your changes were sent to JJ Furniture. They will email you a revised quotation." };
+    return { ok: true, data: { revision_number: r.revision_number }, message: "Your changes were sent to JJ Enterprises. They will email you a revised quotation." };
   } catch (e) {
     return fail(e);
   }

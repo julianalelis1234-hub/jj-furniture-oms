@@ -14,7 +14,7 @@ export default function CustomizePage() {
           <LinkButton href="/customer/login" variant="ghost" className="-ml-2 mb-1"><ArrowLeft aria-hidden /> Customer portal</LinkButton>
           <h1 className="text-2xl font-bold sm:text-3xl">Customize & request a quote</h1>
           <p className="mt-1 text-muted-foreground">
-            Build your piece below. JJ Furniture will check it and email you an official quotation — nothing is ordered or charged until you accept it.
+            Build your piece below. JJ Enterprises will check it and email you an official quotation — nothing is ordered or charged until you accept it.
           </p>
         </div>
         <RequestForm />

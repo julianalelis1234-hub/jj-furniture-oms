@@ -57,7 +57,7 @@ export async function scheduleDelivery(store: DataStore, actor: Actor, raw: unkn
   await notifyCustomer(
     store,
     res.order,
-    `JJ Furniture: ${order.order_code} is scheduled for delivery on ${formatDate(v.scheduled_date)}, ${v.time_window} (${v.vehicle_type}). Amount to prepare: ${formatPeso(order.collectible_on_delivery)}.`,
+    `JJ Enterprises: ${order.order_code} is scheduled for delivery on ${formatDate(v.scheduled_date)}, ${v.time_window} (${v.vehicle_type}). Amount to prepare: ${formatPeso(order.collectible_on_delivery)}.`,
   );
   return delivery;
 }

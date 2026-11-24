@@ -43,8 +43,8 @@ export default async function CustomerOrderDetail({ params }: { params: Promise<
         </div>
         <Card><CardContent className="pt-4"><StageTracker status={v.status} /></CardContent></Card>
         <div className="grid grid-cols-2 gap-2 text-center">
-          <div className="rounded-xl border bg-card p-3"><p className="text-xs uppercase text-muted-foreground">Estimated completion</p><p className="font-bold">{formatDate(v.estimated_completion_date)}</p></div>
-          <div className="rounded-xl border bg-card p-3"><p className="text-xs uppercase text-muted-foreground">Scheduled delivery</p><p className="font-bold">{formatDate(v.scheduled_delivery_date)}</p></div>
+          <div className="rounded-xl border bg-card p-3"><p className="text-xs font-semibold text-muted-foreground">Estimated completion</p><p className="font-bold">{formatDate(v.estimated_completion_date)}</p></div>
+          <div className="rounded-xl border bg-card p-3"><p className="text-xs font-semibold text-muted-foreground">Scheduled delivery</p><p className="font-bold">{formatDate(v.scheduled_delivery_date)}</p></div>
         </div>
         <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(280px,380px)] lg:items-start">
           <Card data-testid="approved-spec">
@@ -65,7 +65,7 @@ export default async function CustomerOrderDetail({ params }: { params: Promise<
                 </dl>
               )}
               {v.status === "Waiting for Confirmation" && (
-                <p className="rounded-lg bg-accent-soft p-2">To accept this quotation, open the review link in the latest email from JJ Furniture.</p>
+                <p className="rounded-lg bg-accent-soft p-2">To accept this quotation, open the review link in the latest email from JJ Enterprises.</p>
               )}
             </CardContent>
           </Card>

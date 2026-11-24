@@ -1,8 +1,8 @@
-import { ChevronRight, Sofa } from "lucide-react";
-import Link from "next/link";
+import { ChevronRight } from "lucide-react";
 import { redirect } from "next/navigation";
 import { AppShell, EmptyState } from "@/components/app-shell";
 import { LiveSync } from "@/components/live-sync";
+import { RowLink, RowList } from "@/components/rows";
 import { StageTracker, StatusBadge } from "@/components/status";
 import { formatDate } from "@/lib/domain/dates";
 import { formatPeso } from "@/lib/domain/finance";
@@ -28,27 +28,28 @@ export default async function CustomerOrdersPage({ searchParams }: { searchParam
           {welcome && <p className="mt-2 rounded-lg bg-success-soft p-3 text-sm" data-testid="welcome">Your password is saved. Welcome, {customer.full_name}!</p>}
         </div>
         {orders.length === 0 ? <EmptyState title="No orders linked to this account yet" /> : (
-          <ul className="grid gap-3" data-testid="customer-orders">
+          <RowList data-testid="customer-orders">
             {orders.map(({ id, view: v }) => (
-              <li key={id}>
-                <Link href={`/customer/orders/${encodeURIComponent(v.order_code)}`} className="grid gap-3 rounded-2xl border bg-card p-4 transition-colors hover:border-primary/50">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Sofa className="size-5 text-primary" aria-hidden />
-                    <span className="font-mono font-bold">{v.order_code}</span>
-                    <StatusBadge status={v.status} />
-                    <ChevronRight className="ml-auto size-5 text-muted-foreground" aria-hidden />
-                  </div>
-                  <p className="font-semibold">{v.quantity} × {v.item_name}</p>
-                  <p className="text-sm text-muted-foreground">{STATUS_CUSTOMER_COPY[v.status]}</p>
-                  <StageTracker status={v.status} compact />
-                  <p className="text-sm tabular-nums">
+              <RowLink key={id} href={`/customer/orders/${encodeURIComponent(v.order_code)}`} className="flex-col items-stretch gap-3">
+                <span className="flex flex-wrap items-start gap-x-6 gap-y-1.5">
+                  <span className="grid min-w-0 flex-1 gap-1.5">
+                    <span className="flex flex-wrap items-center gap-2">
+                      <span className="font-mono font-bold">{v.order_code}</span>
+                      <StatusBadge status={v.status} />
+                    </span>
+                    <span className="font-semibold">{v.quantity} × {v.item_name}</span>
+                    <span className="text-sm text-muted-foreground">{STATUS_CUSTOMER_COPY[v.status]}</span>
+                  </span>
+                  <span className="text-sm tabular-nums text-muted-foreground sm:text-right">
                     Est. completion {formatDate(v.estimated_completion_date)}
-                    {v.payment.furniture_price != null && <> · To pay on delivery <b>{formatPeso(v.payment.collectible_on_delivery)}</b></>}
-                  </p>
-                </Link>
-              </li>
+                    {v.payment.furniture_price != null && <span className="block">To pay on delivery <b className="text-foreground">{formatPeso(v.payment.collectible_on_delivery)}</b></span>}
+                  </span>
+                  <ChevronRight className="hidden size-5 shrink-0 self-center text-muted-foreground sm:block" aria-hidden />
+                </span>
+                <StageTracker status={v.status} compact />
+              </RowLink>
             ))}
-          </ul>
+          </RowList>
         )}
       </div>
     </AppShell>

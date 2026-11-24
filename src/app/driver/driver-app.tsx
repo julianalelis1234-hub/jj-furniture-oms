@@ -328,7 +328,7 @@ function DeliveryCard({ entry: e, today, onStart, onDelivered, onFailed }: { ent
       {d.failure_or_damage_notes && <p className="mt-1 text-sm text-destructive">{d.failure_or_damage_notes}</p>}
 
       <div className="mt-3 rounded-xl bg-foreground p-3 text-center text-background">
-        <p className="text-xs font-semibold tracking-widest uppercase">Collect on delivery</p>
+        <p className="text-sm font-semibold">Collect on delivery</p>
         <p className="text-3xl font-black tabular-nums">{formatPeso(o.collectible_on_delivery)}</p>
         <p className="text-xs opacity-80">balance {formatPeso(o.remaining_furniture_balance)} + delivery fee {o.delivery_fee === 0 ? "FREE" : formatPeso(o.delivery_fee)}</p>
       </div>

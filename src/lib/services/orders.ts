@@ -177,9 +177,9 @@ export async function recordConfirmation(store: DataStore, actor: Actor | null, 
   await notifyCustomer(
     store,
     confirmed,
-    `JJ Furniture: ${confirmed.order_code} (${confirmed.item_name}) is confirmed. Production starts after your 30% down payment of ${formatPeso(
+    `JJ Enterprises: ${confirmed.order_code} (${confirmed.item_name}) is confirmed. Production starts after your 30% down payment of ${formatPeso(
       confirmed.standard_down_payment_due,
-    )} is verified. ${confirmed.customer_email ? "Follow it in your JJ Furniture account." : `Questions? Call the shop with your Order ID ${confirmed.order_code}.`}`,
+    )} is verified. ${confirmed.customer_email ? "Follow it in your JJ Enterprises account." : `Questions? Call the shop with your Order ID ${confirmed.order_code}.`}`,
   );
   return confirmed;
 }
@@ -227,7 +227,7 @@ export async function reviseSpecs(store: DataStore, actor: Actor, orderId: strin
     await notifyCustomer(
       store,
       updated,
-      `JJ Furniture: Your quotation for ${updated.order_code} is ready: ${formatPeso(updated.furniture_price)} + delivery ${formatPeso(
+      `JJ Enterprises: Your quotation for ${updated.order_code} is ready: ${formatPeso(updated.furniture_price)} + delivery ${formatPeso(
         updated.delivery_fee,
       )}. Valid until ${formatDate(res.expires_at?.slice(0, 10) ?? null)}. ${updated.customer_email ? "We emailed you a link to review and accept it." : "Please visit the shop to accept it."}`,
     );
@@ -311,12 +311,12 @@ export interface TransitionOptions {
 }
 
 const CUSTOMER_MESSAGES: Partial<Record<OrderStatus, (o: Order) => string>> = {
-  "In Production": (o) => `JJ Furniture: Your ${o.item_name} (${o.order_code}) is now In Production. Est. completion ${formatDate(o.estimated_completion_date)}.`,
+  "In Production": (o) => `JJ Enterprises: Your ${o.item_name} (${o.order_code}) is now In Production. Est. completion ${formatDate(o.estimated_completion_date)}.`,
   "Ready for Delivery": (o) =>
-    `JJ Furniture: ${o.order_code} passed quality inspection and is Ready for Delivery. Delivery date: ${formatDate(o.scheduled_delivery_date)}.`,
+    `JJ Enterprises: ${o.order_code} passed quality inspection and is Ready for Delivery. Delivery date: ${formatDate(o.scheduled_delivery_date)}.`,
   "Out for Delivery": (o) =>
-    `JJ Furniture: Your ${o.item_name} (${o.order_code}) is out for delivery today. Amount to prepare: ${formatPeso(o.collectible_on_delivery)}.`,
-  Delivered: (o) => `JJ Furniture: ${o.order_code} delivered. Salamat! Report any scratch or repair need: log in at ${portalUrl()} or call the shop.`,
+    `JJ Enterprises: Your ${o.item_name} (${o.order_code}) is out for delivery today. Amount to prepare: ${formatPeso(o.collectible_on_delivery)}.`,
+  Delivered: (o) => `JJ Enterprises: ${o.order_code} delivered. Salamat! Report any scratch or repair need: log in at ${portalUrl()} or call the shop.`,
 };
 
 export async function transitionOrder(store: DataStore, actor: Actor, orderId: string, to: OrderStatus, opts: TransitionOptions = {}) {

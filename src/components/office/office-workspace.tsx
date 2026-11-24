@@ -37,7 +37,7 @@ function Metric({ label, value, sub, icon, testid }: { label: string; value: Rea
     <div className="jj-surface flex items-start gap-3 rounded-2xl border bg-card p-4" data-testid={testid}>
       <span className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-live/40 bg-accent-soft text-primary [&_svg]:size-5" aria-hidden>{icon}</span>
       <span className="min-w-0">
-        <span className="block text-xs font-semibold tracking-[0.08em] text-muted-foreground uppercase">{label}</span>
+        <span className="block text-[13px] font-semibold text-muted-foreground">{label}</span>
         <span className="block text-2xl font-extrabold tabular-nums">{value}</span>
         <span className="block text-xs text-muted-foreground">{sub}</span>
       </span>

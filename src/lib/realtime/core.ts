@@ -59,7 +59,7 @@ export function toastFor(e: LiveEvent, role: LiveViewerRole): LiveToast | null {
   }
   if (role === "customer") {
     if (e.transition === "payment_verified" && e.source === "payments" && e.payment_verified === true)
-      return { ...base, title: "Payment verified", description: `JJ Furniture verified a payment for ${code}.` };
+      return { ...base, title: "Payment verified", description: `JJ Enterprises verified a payment for ${code}.` };
     if ((e.transition === "stage_progress" || e.transition === "quote_accepted") && e.status)
       return { ...base, title: "Order update", description: `${code} is now ${e.status}.` };
   }

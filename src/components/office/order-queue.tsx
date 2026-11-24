@@ -94,13 +94,13 @@ export function OrderQueue({ rows, filters, basePath, openId }: { rows: QueueRow
 
       {q.trim() && <p className="text-xs text-muted-foreground" aria-live="polite">Searching all stages · {shown.length} match{shown.length === 1 ? "" : "es"}</p>}
       {shown.length === 0 ? (
-        <p className="rounded-2xl border border-dashed bg-card p-8 text-center text-sm text-muted-foreground">No orders match this filter.</p>
+        <p className="border-y border-dashed border-border py-10 text-center text-sm text-muted-foreground">No orders match this filter. Try another stage or clear the search.</p>
       ) : (<>
         {/* desktop: 5 scannable columns */}
-        <div className="jj-surface hidden overflow-hidden rounded-2xl border bg-card md:block">
+        <div className="hidden overflow-hidden border-y border-border md:block">
           <table className="w-full table-fixed text-sm">
             <caption className="sr-only">Orders — select a row to open its workspace</caption>
-            <thead className="bg-secondary text-left text-xs font-bold tracking-[0.08em] text-secondary-foreground uppercase">
+            <thead className="bg-secondary text-left text-[13px] font-semibold text-secondary-foreground">
               <tr>
                 <th scope="col" className="w-[15%] px-4 py-3">Order &amp; date</th>
                 <th scope="col" className="w-[19%] px-4 py-3">Customer</th>
@@ -132,12 +132,12 @@ export function OrderQueue({ rows, filters, basePath, openId }: { rows: QueueRow
             </tbody>
           </table>
         </div>
-        {/* phones: stacked list with full-width tap targets */}
-        <ul className="grid gap-2 md:hidden">
+        {/* phones: flat full-width rows with hairline dividers (no boxed cards) */}
+        <ul className="divide-y divide-border border-y border-border md:hidden">
           {shown.map((r) => (
             <li key={r.id}>
               <Link href={`${basePath}?order=${r.id}`} scroll={false} data-testid="queue-card" data-code={r.code}
-                className={cn("jj-surface grid min-w-0 gap-1.5 rounded-2xl border bg-card p-4", openId === r.id && "border-live")}>
+                className={cn("grid min-w-0 gap-1.5 px-1 py-4 transition-colors hover:bg-accent-soft/60", openId === r.id && "bg-accent-soft")}>
                 <span className="flex flex-wrap items-center gap-2">
                   <b className="text-foreground">{r.code}</b>
                   <span className="text-xs text-muted-foreground tabular-nums">{formatDate(r.created_at.slice(0, 10))}</span>

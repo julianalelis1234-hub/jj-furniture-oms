@@ -605,7 +605,7 @@ export class MemoryStore implements DataStore {
     if (o.is_legacy_incomplete)
       throw new DomainError("VALIDATION", "Complete the structured specification (category, design, W × H × D) with a revised quote before confirming.");
     if (isQuoteExpired(rev))
-      throw new DomainError("QUOTE_EXPIRED", "This quotation has expired. Ask JJ Furniture for a fresh quotation.");
+      throw new DomainError("QUOTE_EXPIRED", "This quotation has expired. Ask JJ Enterprises for a fresh quotation.");
     const qp = rev.quoted_furniture_price!, qf = rev.quoted_delivery_fee!;
     if (money(input.accepted_furniture_price) !== qp || money(input.accepted_delivery_fee) !== qf || money(input.accepted_total_amount) !== money(qp + qf))
       throw new DomainError("AMOUNT_MISMATCH", "The accepted amounts do not match the quotation. Please reload.");

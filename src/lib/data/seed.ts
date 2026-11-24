@@ -484,8 +484,8 @@ export async function buildFixtureTables(): Promise<MemoryTables> {
   await store.issueReviewToken({ order_id: ramon.id, revision_id: rev148.revision_id, token_hash: createHash("sha256").update(raw148).digest("hex"), ttl_hours: 72 });
   t.demo_mailbox.push({
     id: crypto.randomUUID(), to: ramon.customer_email!, order_id: ramon.id, created_at: ts(1, 9),
-    subject: `JJ Furniture quotation for ${ramon.order_code} — please review`,
-    text: `Hello ${ramon.customer_name},\n\nYour quotation for ${ramon.item_name} is ready: ₱${ramon.furniture_price!.toLocaleString("en-PH")} furniture price + ₱${ramon.delivery_fee.toLocaleString("en-PH")} delivery.\n\nReview the exact specification and accept it here (single-use link):\n/customer/review?token=${raw148}\n\nIf you did not order from JJ Furniture, ignore this email.`,
+    subject: `JJ Enterprises quotation for ${ramon.order_code} — please review`,
+    text: `Hello ${ramon.customer_name},\n\nYour quotation for ${ramon.item_name} is ready: ₱${ramon.furniture_price!.toLocaleString("en-PH")} furniture price + ₱${ramon.delivery_fee.toLocaleString("en-PH")} delivery.\n\nReview the exact specification and accept it here (single-use link):\n/customer/review?token=${raw148}\n\nIf you did not order from JJ Enterprises, ignore this email.`,
   });
 
   // ---- notifications
@@ -493,16 +493,16 @@ export async function buildFixtureTables(): Promise<MemoryTables> {
     const o = byCode(code);
     t.notifications.push({ id: crypto.randomUUID(), order_id: o.id, recipient_phone: o.customer_phone, channel, message_body: body, delivery_status: status, created_at: ts(daysAgo, 10) });
   };
-  nt("JJ-2026-0145", "JJ Furniture: Your order JJ-2026-0145 (6-Seater Dining Table) is now In Production.", "Sent", 8);
-  nt("JJ-2026-0136", "JJ Furniture: Your Sala Set (JJ-2026-0136) is out for delivery today. Please prepare ₱32,700.", "Sent", 0);
-  nt("JJ-2026-0141", "JJ Furniture: Your specifications for JJ-2026-0141 are confirmed. Please settle the 30% down payment of ₱9,600.", "Failed", 2);
-  nt("JJ-2026-0133", "JJ Furniture: JJ-2026-0133 delivered. Thank you!", "Sent", 3, "Messenger");
+  nt("JJ-2026-0145", "JJ Enterprises: Your order JJ-2026-0145 (6-Seater Dining Table) is now In Production.", "Sent", 8);
+  nt("JJ-2026-0136", "JJ Enterprises: Your Sala Set (JJ-2026-0136) is out for delivery today. Please prepare ₱32,700.", "Sent", 0);
+  nt("JJ-2026-0141", "JJ Enterprises: Your specifications for JJ-2026-0141 are confirmed. Please settle the 30% down payment of ₱9,600.", "Failed", 2);
+  nt("JJ-2026-0133", "JJ Enterprises: JJ-2026-0133 delivered. Thank you!", "Sent", 3, "Messenger");
 
   return structuredClone(t);
 }
 
 // =============================================================================
-// Curated Demo Mode dataset: exactly five active orders for JJ Furniture Shop
+// Curated Demo Mode dataset: exactly five active orders for JJ Enterprises Shop
 // and Enterprises (Valencia City, Bukidnon). DEMO DATA ONLY — production reads
 // the real database and is never capped or seeded from here.
 // PRIVACY: fictional contact details (example.com, 0900-000-xxxx).
@@ -623,7 +623,7 @@ async function buildCuratedTables(): Promise<MemoryTables> {
   await store.issueReviewToken({ order_id: rea.id, revision_id: rev.revision_id, token_hash: createHash("sha256").update(raw).digest("hex"), ttl_hours: 72 });
   t.demo_mailbox.push({
     id: crypto.randomUUID(), to: rea.customer_email!, order_id: rea.id, created_at: ts(1, 9),
-    subject: `Your JJ Furniture quotation for ${rea.order_code} is ready`,
+    subject: `Your JJ Enterprises quotation for ${rea.order_code} is ready`,
     text: `Hello ${rea.customer_name},\n\nYour quotation for ${rea.item_name} is ready: ₱44,000.00 (free delivery in Valencia City).\n\nReview the exact specification and accept it here (single-use link):\n/customer/review?token=${raw}\n\nNothing is ordered or charged until you accept.`,
   });
   return structuredClone(t);

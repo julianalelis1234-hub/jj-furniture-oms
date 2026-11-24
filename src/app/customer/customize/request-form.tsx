@@ -24,9 +24,9 @@ export function RequestForm() {
       <Card className="mx-auto w-full max-w-xl border-success" data-testid="request-done">
         <CardContent className="grid gap-3 pt-4 text-center">
           <CheckCircle2 className="mx-auto size-10 text-success" aria-hidden />
-          <p className="text-lg font-bold">Request sent to JJ Furniture</p>
+          <p className="text-lg font-bold">Request sent to JJ Enterprises</p>
           <div className="rounded-xl border bg-secondary p-3">
-            <p className="text-xs uppercase text-muted-foreground">Order ID</p>
+            <p className="text-xs font-semibold text-muted-foreground">Order ID</p>
             <p className="font-mono text-xl font-black" data-testid="request-code">{done.order_code}</p>
           </div>
           <p className="flex items-start gap-2 text-left text-sm">

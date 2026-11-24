@@ -389,7 +389,7 @@ export function StartProductionDialog({
       action={(fd) => startProductionAction(order.id, s(fd, "assigned_craftsman_id") || null)}
     >
       <dl className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-1 overflow-hidden rounded-xl border bg-background p-3 pt-0 text-sm">
-        <dt className="-mx-3 mb-1 border-b bg-secondary px-3 py-1.5 text-xs font-bold tracking-[0.14em] text-foreground uppercase col-span-2">Down-payment gate · ≥ 30%</dt>
+        <dt className="-mx-3 mb-1 border-b bg-secondary px-3 py-1.5 text-[13px] font-bold text-foreground col-span-2">Down-payment gate · ≥ 30%</dt>
         <dt className="text-muted-foreground">30% down payment due</dt><dd className="font-semibold tabular-nums">{formatPeso(due)}</dd>
         <dt className="text-muted-foreground">Verified furniture payments</dt><dd className="font-semibold tabular-nums">{formatPeso(verifiedPaid)}</dd>
         <dt className="text-muted-foreground">Gate</dt>

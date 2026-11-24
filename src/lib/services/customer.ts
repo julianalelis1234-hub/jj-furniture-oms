@@ -232,7 +232,7 @@ export async function createCustomerRequest(publicStore: DataStore, raw: unknown
     (o) => o.status === "Quote Requested" && o.customer_phone === v.customer_phone && Date.parse(o.created_at) > since,
   );
   if (recent.length >= MAX_OPEN_REQUESTS_PER_PHONE)
-    throw new DomainError("RATE_LIMITED", "You already have open requests. JJ Furniture will contact you with your quotations.");
+    throw new DomainError("RATE_LIMITED", "You already have open requests. JJ Enterprises will contact you with your quotations.");
 
   const spec = normalizeSpec({
     furniture_category: v.furniture_category,

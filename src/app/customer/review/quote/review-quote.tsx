@@ -27,7 +27,7 @@ function Done({ result }: { result: (ProvisionResult & { demo_setup_path?: strin
       )}
       {result?.status === "linked" && (
         <p className="flex gap-2 text-sm" data-testid="order-linked"><KeyRound className="mt-0.5 size-4 shrink-0" aria-hidden />
-          This order was added to your existing JJ Furniture account. Log in with your usual password, or <Link href="/customer/forgot-password" className="font-semibold underline">reset it</Link> if you forgot it.</p>
+          This order was added to your existing JJ Enterprises account. Log in with your usual password, or <Link href="/customer/forgot-password" className="font-semibold underline">reset it</Link> if you forgot it.</p>
       )}
       {result && !["setup_email_sent", "linked"].includes(result.status) && (
         <p className="text-sm">Your account details will follow by email. Your acceptance is saved either way.</p>
@@ -60,18 +60,18 @@ export function ReviewQuote({ view }: { view: ReviewView }) {
     return (
       <p className="flex gap-2 rounded-xl border border-warning/50 bg-warning-soft p-4 text-sm" data-testid="review-proposal-sent">
         <FileClock className="mt-0.5 size-4 shrink-0 text-warning" aria-hidden />
-        Your proposed changes were sent. JJ Furniture will check the price and delivery impact and email you a revised quotation with a new link.
+        Your proposed changes were sent. JJ Enterprises will check the price and delivery impact and email you a revised quotation with a new link.
       </p>
     );
   if (!view.scope_current)
-    return <p className="rounded-xl border border-warning/50 bg-warning-soft p-4 text-sm">A newer quotation was issued for this order. Please open the link in the most recent email from JJ Furniture.</p>;
+    return <p className="rounded-xl border border-warning/50 bg-warning-soft p-4 text-sm">A newer quotation was issued for this order. Please open the link in the most recent email from JJ Enterprises.</p>;
   if (view.order.status !== "Waiting for Confirmation" || !cur || !config || !initial)
     return <p className="rounded-xl border bg-card p-4 text-sm">This quotation is no longer waiting for acceptance. Log in to see your order.</p>;
   if (view.quote_expired)
     return (
       <p className="flex gap-2 rounded-xl border border-warning/50 bg-warning-soft p-4 text-sm" data-testid="review-expired">
         <Clock className="mt-0.5 size-4 shrink-0 text-warning" aria-hidden />
-        This quotation expired on {formatDateTime(cur.expires_at!)}. Please contact JJ Furniture for a fresh quotation.
+        This quotation expired on {formatDateTime(cur.expires_at!)}. Please contact JJ Enterprises for a fresh quotation.
       </p>
     );
 

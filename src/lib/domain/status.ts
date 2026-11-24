@@ -111,5 +111,5 @@ export const STATUS_CUSTOMER_COPY: Record<OrderStatus, string> = {
   "Completed / For Inspection": "Building is done. The owner is checking the quality.",
   "Ready for Delivery": "Your furniture passed inspection and is ready for delivery.",
   "Out for Delivery": "Your furniture is on the way.",
-  Delivered: "Delivered. Thank you for ordering from JJ Furniture!",
+  Delivered: "Delivered. Thank you for ordering from JJ Enterprises!",
 };
