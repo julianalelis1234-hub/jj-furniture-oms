@@ -7,7 +7,7 @@ import { DemoBar } from "@/components/demo-bar";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { isDemoMode } from "@/lib/config";
 import { demoSwitcherAllowed, getActor, PORTAL_FOR } from "@/lib/server/context";
-import { getCustomer } from "@/lib/server/customer-auth";
+import { getCustomerSafe } from "@/lib/server/customer-auth";
 import { cn } from "@/lib/utils";
 
 export const metadata = { title: { absolute: "JJ Enterprises — Furniture and Lumber Dealer" } };
@@ -38,7 +38,9 @@ const STEPS = [
 ] as const;
 
 export default async function Home() {
-  const [actor, customer, switcher] = await Promise.all([getActor(), getCustomer(), demoSwitcherAllowed()]);
+  // a signed-in staff member is never also a customer: skip the customer lookup for them
+  const [actor, switcher] = await Promise.all([getActor(), demoSwitcherAllowed()]);
+  const customer = actor ? null : await getCustomerSafe();
   const portal = actor ? PORTAL_FOR[actor.role] : customer ? "/customer/orders" : null;
   return (
     <div className="flex min-h-dvh flex-col bg-muted/40">

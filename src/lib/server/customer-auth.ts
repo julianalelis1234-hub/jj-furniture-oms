@@ -102,6 +102,22 @@ export async function getCustomer(): Promise<CustomerAccount | null> {
 }
 
 /**
+ * For public pages (home, the 3D designer): the signed-in customer, or null —
+ * never an error page. A failed lookup (e.g. a server key that is missing or
+ * wrong) is logged for the operator and the page renders as for a guest.
+ * Portal pages keep using getCustomer(), so a real misconfiguration still
+ * shows up there instead of silently logging people out.
+ */
+export async function getCustomerSafe(): Promise<CustomerAccount | null> {
+  try {
+    return await getCustomer();
+  } catch (e) {
+    console.error("[customer-auth] customer lookup failed on a public page; rendering as a guest:", e instanceof Error ? e.message : e);
+    return null;
+  }
+}
+
+/**
  * Store for a signed-in customer's own data. In production its default client
  * carries the CUSTOMER's JWT, so order reads go through the RLS policy
  * orders_select_customer_own (customer_user_id = auth.uid(), migration 006):
