@@ -185,7 +185,7 @@ export function DueBars({ days }: { days: { day: Day; label: string; count: numb
           <li key={d.day} className="group relative flex h-full flex-1 items-end" title={`${d.label}: ${d.count} due`}>
             <span className="sr-only">{d.label}: {d.count} due</span>
             <span aria-hidden className={cn("w-full rounded-t-md transition-opacity group-hover:opacity-100",
-              i === peak && d.count > 0 ? "bg-gradient-to-t from-[#c48a5a] to-[#f0b27a]" : "bg-white/15 opacity-90")}
+              i === peak && d.count > 0 ? "bg-gradient-to-t from-[#c48a5a] to-[#f0b27a] premium:from-[#b8924f] premium:to-[#e9cf98]" : "bg-white/15 opacity-90")}
               style={{ height: `${Math.max(6, (d.count / max) * 100)}%` }} />
             <span aria-hidden className="pointer-events-none absolute -top-7 left-1/2 hidden -translate-x-1/2 rounded-md bg-white px-1.5 py-0.5 text-[11px] font-bold text-[#2b1d17] group-hover:block">{d.count}</span>
           </li>
