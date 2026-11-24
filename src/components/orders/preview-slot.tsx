@@ -72,13 +72,19 @@ export function FeasibilityWarning({ spec }: { spec: PreviewSpec }) {
  * all three dimensions are known; otherwise the existing 2D SVG preview (which
  * shows "Dimensions Pending Clarification" for missing W/H/D).
  */
-export function FurniturePreviewSlot({ spec, legacyDimensions, footer }: { spec: PreviewSpec; legacyDimensions?: string | null; footer?: ReactNode }) {
+export function FurniturePreviewSlot({ spec, legacyDimensions, footer, compact = false }: {
+  spec: PreviewSpec; legacyDimensions?: string | null; footer?: ReactNode;
+  /** the pinned mobile view: shorter stage, no footer */
+  compact?: boolean;
+}) {
   const webgl = useWebGL();
   const complete =
     !!spec.furniture_category && !!spec.design_variant && spec.width_cm != null && spec.height_cm != null && spec.depth_cm != null &&
     spec.width_cm > 0 && spec.height_cm > 0 && spec.depth_cm > 0;
   const fallback = (
-    <FurniturePreview spec={spec} legacyDimensions={legacyDimensions} footer={<><FeasibilityWarning spec={spec} />{footer}</>} />
+    <FurniturePreview spec={spec} legacyDimensions={legacyDimensions} compact={compact}
+      className={compact ? "[&_svg]:max-h-[28svh]" : undefined}
+      footer={compact ? undefined : <><FeasibilityWarning spec={spec} />{footer}</>} />
   );
   if (!complete || !webgl) return fallback;
   return (
@@ -95,6 +101,7 @@ export function FurniturePreviewSlot({ spec, legacyDimensions, footer }: { spec:
         }}
         warning={<FeasibilityWarning spec={spec} />}
         footer={footer}
+        compact={compact}
       />
     </Preview3DBoundary>
   );

@@ -130,7 +130,8 @@ await step("staff: new order form validates (email or walk-in) then saves with i
   await page.fill("#customer_email", " Rosalie.Ompad@Example.com ");
   // configurator: Custom Piece → Bookshelf / Divider, custom W×H×D, Other wood needs a note
   await page.getByTestId("cat-Custom Piece").click();
-  await page.getByRole("radio", { name: "Bookshelf / Divider" }).check({ force: true });
+  // click the visible chip (not a forced click on the hidden radio): Playwright then checks nothing (e.g. the pinned 3D view) covers it
+  await page.locator("label", { hasText: "Bookshelf / Divider" }).click();
   await page.fill('input[name="width_cm"]', "150");
   await page.fill('input[name="height_cm"]', "40");
   await page.fill('input[name="depth_cm"]', "45");
@@ -184,6 +185,7 @@ await step("staff: new order form validates (email or walk-in) then saves with i
   expect((await page.getByRole("dialog").innerText()).includes("30% verified ✓"), "release dialog shows the verified gate");
   await page.getByRole("dialog").getByRole("button", { name: "Start production" }).click();
   await page.getByText("Released to the workshop.").first().waitFor();
+  await page.getByTestId("spec-locked").first().waitFor(); // the production lock is visible on the order
   await ctx.close();
 });
 
@@ -415,7 +417,7 @@ await step("customer: staff resend link → propose changes in the review sessio
   await openReview(page, await inboxLink(page, "jocelyn.tan@example.com"));
   // mobile preview bar must not cover the inputs it describes
   await page.getByTestId("wood-Mahogany").scrollIntoViewIfNeeded();
-  const bar = await page.getByTestId("configurator-bar").boundingBox();
+  const bar = await page.getByTestId("configurator-pin").boundingBox();
   const chip = await page.getByTestId("wood-Mahogany").boundingBox();
   expect(bar && chip && chip.y >= bar.y + bar.height - 1, "mobile preview bar covers the wood chips");
   await page.getByTestId("wood-Mahogany").click();
@@ -467,11 +469,22 @@ await step("online order: design → order slip → staff confirm → create pas
   await page.goto("/customer/login");
   await page.getByTestId("option-2").click();
   await page.waitForURL(/\/customer\/customize/);
-  await page.getByTestId("cat-Kitchen / Wall Cabinet").click();
+  // the customization assistant fills the designer from a plain description (and can be undone)
+  await page.fill("#assistant-text", "3 door kitchen base counter, 150 x 85 x 55 cm, mahogany, walnut, needed before Christmas");
+  await page.getByTestId("assistant-apply").click();
+  const understood = await page.getByTestId("assistant-result").innerText();
+  expect(/Kitchen \/ Wall Cabinet/.test(understood) && understood.includes("150 × 85 × 55 cm") && understood.includes("Mahogany") && understood.includes("Walnut Stain"), `assistant result: ${understood}`);
+  expect((await page.inputValue('input[name="width_cm"]')) === "150" && (await page.inputValue('input[name="depth_cm"]')) === "55", "assistant filled the size");
+  expect((await page.inputValue("#special_instructions")).includes("Christmas"), "timing words are copied to the notes for the shop");
+  await page.getByTestId("assistant-photo").waitFor({ state: "detached", timeout: 1000 }).catch(() => {}); // cabinets have no library photo yet
+  // the pinned 3D view stays on screen while the options scroll underneath it
+  await page.getByTestId("finish-Walnut Stain").scrollIntoViewIfNeeded();
+  const pin = await page.getByTestId("configurator-pin").boundingBox();
+  const fin = await page.getByTestId("finish-Walnut Stain").boundingBox();
+  expect(pin && pin.y >= 0 && pin.y < 120 && fin && fin.y >= pin.y + pin.height - 1, `pinned 3D view stays visible and above the inputs: pin ${JSON.stringify(pin)} chip ${JSON.stringify(fin)}`);
+  expect(await page.getByTestId("pinned-preview").isVisible(), "pinned preview visible on phones");
+  await page.screenshot({ path: `${SHOTS}/customer-designer-pinned-mobile.png`, fullPage: false });
   await page.getByRole("radio", { name: "3-Door Base Counter" }).check({ force: true });
-  await page.getByRole("button", { name: "150 × 85 × 55 cm" }).click();
-  await page.getByTestId("wood-Mahogany").click();
-  await page.getByTestId("finish-Walnut Stain").click();
   await page.getByRole("button", { name: "Submit order" }).click();
   await page.getByText("Your name is required.").first().waitFor();
   await page.fill("#customer_name", "Teodora Bacus");

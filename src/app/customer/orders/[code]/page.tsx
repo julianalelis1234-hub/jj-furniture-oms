@@ -1,4 +1,4 @@
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Lock } from "lucide-react";
 import { notFound, redirect } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { LiveSync } from "@/components/live-sync";
@@ -73,6 +73,11 @@ export default async function CustomerOrderDetail({ params }: { params: Promise<
               <CardTitle>
                 {v.approved_revision_number ? `Approved specification & quotation · revision ${v.approved_revision_number}` : `Latest quotation · revision ${spec?.revision_number}`}
               </CardTitle>
+              {v.spec_state === "locked" && (
+                <p className="mt-2 inline-flex w-fit items-center gap-1.5 rounded-full bg-foreground px-3 py-1 text-xs font-bold text-background" data-testid="spec-locked">
+                  <Lock className="size-3.5" aria-hidden /> Locked for production — changes need the shop&apos;s approval
+                </p>
+              )}
             </CardHeader>
             <CardContent className="grid gap-3 text-sm">
               {spec && (

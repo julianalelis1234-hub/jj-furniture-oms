@@ -91,6 +91,10 @@ await step("Demo Customer Login (Juliana Lelis) sees only her own order", async 
   await page.waitForURL(/customer\/orders/);
   const list = await page.getByTestId("customer-orders").innerText();
   expect(list.includes("JJ-2026-1001") && !/JJ-2026-100[2-5]/.test(list), `dashboard: ${list}`);
+  // In Production: the customer sees the production lock, and no quotation to accept
+  await page.goto("/customer/orders/JJ-2026-1001");
+  await page.getByTestId("spec-locked").waitFor();
+  expect((await page.getByTestId("accept-quotation").count()) === 0, "nothing to accept once production started");
   await ctx.close();
 });
 

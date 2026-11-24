@@ -349,8 +349,10 @@ function prefersReducedMotion() {
  * Interactive 3D showroom turntable. Load only through FurniturePreviewSlot
  * (next/dynamic, ssr:false, WebGL check + error boundary with 2D fallback).
  */
-export default function Furniture3DPreview({ spec, className, footer, warning }: {
+export default function Furniture3DPreview({ spec, className, footer, warning, compact = false }: {
   spec: Furniture3DSpec; className?: string; footer?: ReactNode; warning?: ReactNode;
+  /** pinned mobile view: a shorter stage, one-line disclaimer, no footer */
+  compact?: boolean;
 }) {
   const [reduced] = useState(prefersReducedMotion);
   const [spinOn, setSpinOn] = useState(!reduced); // reduced motion: no auto-spin, manual orbit still works
@@ -379,11 +381,12 @@ export default function Furniture3DPreview({ spec, className, footer, warning }:
 
   return (
     <figure className={cn("jj-surface overflow-hidden rounded-2xl border border-live bg-secondary", className)} aria-label="Interactive 3D furniture preview" data-testid="preview-3d">
-      <figcaption className="border-b border-live/40 bg-background/70 px-3 py-2 text-[0.7rem] leading-snug font-semibold text-muted-foreground">
-        {PREVIEW_3D_DISCLAIMER}
-      </figcaption>
-      {warning}
-      <div className="relative aspect-[340/250] w-full touch-none bg-[radial-gradient(ellipse_at_50%_35%,var(--background)_0%,var(--secondary)_75%)]">
+      {compact
+        ? <figcaption className="sr-only">{PREVIEW_3D_DISCLAIMER}</figcaption>
+        : <figcaption className="border-b border-live/40 bg-background/70 px-3 py-2 text-[0.7rem] leading-snug font-semibold text-muted-foreground">{PREVIEW_3D_DISCLAIMER}</figcaption>}
+      {!compact && warning}
+      <div className={cn("relative w-full touch-none", compact ? "aspect-[16/9] max-h-[24svh]" : "aspect-[340/250]")} data-compact={compact || undefined}>
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_50%_35%,var(--background)_0%,var(--secondary)_75%)]">
         <Canvas
           shadows
           dpr={[1, 2]}
@@ -420,7 +423,8 @@ export default function Furniture3DPreview({ spec, className, footer, warning }:
           {spec.wood_type} <span className="font-normal text-muted-foreground">· {spec.color_finish}</span>
         </span>
       </div>
-      <div className="flex flex-wrap items-center gap-1.5 border-t border-live/40 bg-background/70 px-2 py-1.5">
+      </div>
+      <div className={cn("flex flex-wrap items-center gap-1.5 border-t border-live/40 bg-background/70 px-2", compact ? "py-1" : "py-1.5")}>
         <button type="button" onClick={() => setSpinOn((s) => !s)} aria-pressed={spinOn} data-testid="spin-toggle"
           className="flex h-9 items-center gap-1 rounded-full border border-primary/50 bg-background px-3 text-xs font-semibold text-primary hover:border-primary hover:bg-accent-soft">
           {spinOn ? <Pause className="size-3.5" aria-hidden /> : <Play className="size-3.5" aria-hidden />}
@@ -429,9 +433,9 @@ export default function Furniture3DPreview({ spec, className, footer, warning }:
         <button type="button" onClick={reset} className="flex h-9 items-center gap-1 rounded-full border border-primary/50 bg-background px-3 text-xs font-semibold text-primary hover:border-primary hover:bg-accent-soft">
           <RotateCcw className="size-3.5" aria-hidden /> Reset View
         </button>
-        <span className="ml-auto text-[0.7rem] text-muted-foreground">Drag to turn · pinch / scroll to zoom</span>
+        <span className="ml-auto text-[0.7rem] text-muted-foreground">{compact ? "Illustrative preview only" : "Drag to turn · pinch / scroll to zoom"}</span>
       </div>
-      {footer}
+      {!compact && footer}
     </figure>
   );
 }

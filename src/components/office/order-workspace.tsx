@@ -1,4 +1,4 @@
-import { ExternalLink, PackageCheck, Printer, ShieldCheck, ShieldX, Truck } from "lucide-react";
+import { ExternalLink, Lock, PackageCheck, Printer, ShieldCheck, ShieldX, Truck } from "lucide-react";
 import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
 import { DesignNote } from "@/components/design-note";
@@ -33,7 +33,7 @@ import { formatDate, formatDateTime } from "@/lib/domain/dates";
 import { feePaidFrom, formatPeso, furniturePaidFrom, money } from "@/lib/domain/finance";
 import { describeDiff, formatDims, type FurnitureSpec, type SpecDiff } from "@/lib/domain/furniture";
 import { blockingItems, isQuoteExpired, quoteValidityDays } from "@/lib/domain/gate";
-import { quoteStep } from "@/lib/domain/status";
+import { isProductionLocked, quoteStep } from "@/lib/domain/status";
 import { CONFIRMATION_METHOD_LABEL, PAYMENT_PLAN_LABEL, type Actor, type Order, type SpecRevision } from "@/lib/domain/types";
 import { getStore } from "@/lib/server/context";
 import { nameOf } from "@/lib/server/office-data";
@@ -439,6 +439,11 @@ export async function OrderWorkspace({ orderId, actor, variant, initialTab }: { 
       {variant === "page" ? <h1 className="text-2xl font-bold sm:text-3xl">{o.order_code}</h1> : <h2 id="drawer-title" className="text-2xl font-bold">{o.order_code}</h2>}
       <StatusBadge status={o.status} />
       <PriorityBadge label={o.priority_label} rank={o.priority_rank} />
+      {isProductionLocked(o.status) && (
+        <span className="inline-flex items-center gap-1 rounded-full bg-foreground px-2.5 py-0.5 text-xs font-bold text-background" data-testid="spec-locked">
+          <Lock className="size-3" aria-hidden /> Spec locked
+        </span>
+      )}
       <span className="w-full text-sm text-muted-foreground">
         {o.customer_name} · {o.order_origin === "customer_self_service" ? <>Online order · order slip {o.paper_slip_number ?? o.order_code}</> : o.paper_slip_number ? <>Paper slip #{o.paper_slip_number} · encoded by {nameOf(profiles, o.encoded_by_id)}</> : <>No paper slip yet</>}
       </span>

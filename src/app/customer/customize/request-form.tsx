@@ -4,10 +4,10 @@ import { Loader2, Send } from "lucide-react";
 import { useState } from "react";
 import { customerRequestAction, type OrderSlip } from "@/app/actions";
 import { OrderSlipView } from "./order-slip";
+import { CustomizationAssistant } from "@/components/orders/customization-assistant";
 import { Field, NativeSelect, TextArea, TextInput, useServerAction } from "@/components/form";
 import { emptyConfig, FurnitureConfigurator, type ConfigValue } from "@/components/orders/FurnitureConfigurator";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { MUNICIPALITIES } from "@/lib/domain/types";
 import { newUuid } from "@/lib/uuid";
 
@@ -17,6 +17,8 @@ export function RequestForm() {
   // one idempotency key per form: a double tap or a retry never creates two requests
   const [requestKey] = useState(() => newUuid());
   const [done, setDone] = useState<OrderSlip | null>(null);
+  const [notes, setNotes] = useState("");
+  const [photoUrl, setPhotoUrl] = useState("");
   const err = (k: string) => errors[k];
 
   if (done) return <OrderSlipView slip={done} />;
@@ -38,26 +40,27 @@ export function RequestForm() {
         <input id="website" name="website" tabIndex={-1} autoComplete="off" defaultValue="" />
       </div>
 
-      <Card>
-        <CardHeader><CardTitle>1 · Design your furniture</CardTitle></CardHeader>
-        <CardContent className="grid gap-4">
+      {/* flat sections, no card: a clipping wrapper would stop the 3D view from staying in place */}
+      <section aria-labelledby="step-design" className="grid gap-4">
+        <h2 id="step-design" className="text-2xl">Design your furniture</h2>
+          <CustomizationAssistant value={config} onChange={setConfig} onUsePhoto={setPhotoUrl}
+            onNotes={(t) => setNotes((n) => (n.includes(t) ? n : [n, t].filter(Boolean).join("\n")))} />
           <FurnitureConfigurator value={config} onChange={setConfig} errors={errors} showQuantity />
           <div className="grid gap-3 sm:grid-cols-2">
             <Field label="Notes for the shop (optional)" htmlFor="special_instructions" className="sm:col-span-2"
               hint="e.g. number of drawers, handle style, where it will stand.">
-              <TextArea id="special_instructions" name="special_instructions" maxLength={1000} />
+              <TextArea id="special_instructions" name="special_instructions" maxLength={1000} value={notes} onChange={(e) => setNotes(e.target.value)} />
             </Field>
             <Field label="Reference photo link (optional)" htmlFor="reference_photo_url" error={err("reference_photo_url")} className="sm:col-span-2"
               hint="A Facebook / Google Drive / Messenger photo link of the style you like.">
-              <TextInput id="reference_photo_url" name="reference_photo_url" type="url" placeholder="https://…" invalid={!!err("reference_photo_url")} />
+              <TextInput id="reference_photo_url" name="reference_photo_url" type="url" placeholder="https://…" invalid={!!err("reference_photo_url")}
+                value={photoUrl} onChange={(e) => setPhotoUrl(e.target.value)} />
             </Field>
           </div>
-        </CardContent>
-      </Card>
+      </section>
 
-      <Card>
-        <CardHeader><CardTitle>2 · Your contact and delivery details</CardTitle></CardHeader>
-        <CardContent className="grid gap-3 sm:grid-cols-2">
+      <section aria-labelledby="step-contact" className="grid gap-3 border-t border-border pt-6 sm:grid-cols-2">
+        <h2 id="step-contact" className="text-2xl sm:col-span-2">Your contact and delivery details</h2>
           <Field label="Your name" htmlFor="customer_name" required error={err("customer_name")}>
             <TextInput id="customer_name" name="customer_name" autoComplete="name" invalid={!!err("customer_name")} />
           </Field>
@@ -73,11 +76,11 @@ export function RequestForm() {
           <Field label="Delivery address" htmlFor="delivery_address" required error={err("delivery_address")} hint="Purok, barangay and a landmark.">
             <TextInput id="delivery_address" name="delivery_address" autoComplete="street-address" invalid={!!err("delivery_address")} />
           </Field>
-        </CardContent>
-      </Card>
+      </section>
 
       {errors._form && <p className="text-sm font-medium text-destructive">{errors._form}</p>}
-      <div className="sticky bottom-0 z-10 -mx-4 border-t bg-background/95 px-4 py-3 backdrop-blur sm:static sm:mx-0 sm:border-0 sm:bg-transparent sm:p-0">
+      {/* on phones it floats just above the bottom navigation (which sits at z-30) */}
+      <div className="sticky bottom-24 z-10 -mx-4 border-y bg-background/95 px-4 py-3 backdrop-blur sm:static sm:mx-0 sm:border-0 sm:bg-transparent sm:p-0">
         <Button type="submit" size="xl" className="h-auto min-h-12 w-full py-2 whitespace-normal sm:w-auto" disabled={pending}>
           {pending ? <Loader2 className="animate-spin" aria-hidden /> : <Send aria-hidden />} Submit order
         </Button>

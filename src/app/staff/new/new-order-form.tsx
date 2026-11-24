@@ -92,7 +92,8 @@ export function NewOrderForm({ staff, currentUserId }: { staff: { id: string; fu
           </CardContent>
         </Card>
 
-        <Card>
+        {/* overflow-visible: a clipping card would stop the 3D preview from staying in view */}
+        <Card className="overflow-visible">
           <CardHeader><CardTitle>3 · Furniture specifications</CardTitle></CardHeader>
           <CardContent className="grid gap-4">
             <FurnitureConfigurator value={config} onChange={setConfig} errors={errors} showQuantity />
