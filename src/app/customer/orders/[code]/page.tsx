@@ -1,9 +1,8 @@
 import { ArrowLeft, Lock } from "lucide-react";
 import { notFound, redirect } from "next/navigation";
-import { AppShell } from "@/components/app-shell";
-import { LiveSync } from "@/components/live-sync";
 import { LinkButton } from "@/components/link-button";
 import { FurniturePreviewSlot } from "@/components/orders/preview-slot";
+import { PortalShell } from "@/components/portal-shell";
 import { StageTracker } from "@/components/status";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DomainError } from "@/lib/domain/errors";
@@ -54,7 +53,7 @@ export default async function CustomerOrderDetail({ params }: { params: Promise<
   // the approved revision when there is one; otherwise the latest quotation
   const spec = (v.approved_revision_number && v.quote?.revision_number === v.approved_revision_number ? v.quote : v.quote ?? v.current)!;
   return (
-    <AppShell portal="customer" actor={null} headerExtra={<CustomerLogoutButton />} live={<LiveSync orderIds={[data.order.id]} />}>
+    <PortalShell portal="customer" actor={null} name={customer.full_name} signOutControl={<CustomerLogoutButton compact />} headerExtra={<CustomerLogoutButton />} live={{ orderIds: [data.order.id] }}>
       <div className="mx-auto grid max-w-5xl gap-4">
         <LinkButton href="/customer/orders" variant="ghost" className="-ml-2 w-fit"><ArrowLeft aria-hidden /> My orders</LinkButton>
         <div>
@@ -173,6 +172,6 @@ export default async function CustomerOrderDetail({ params }: { params: Promise<
           </CardContent>
         </Card>
       </div>
-    </AppShell>
+    </PortalShell>
   );
 }

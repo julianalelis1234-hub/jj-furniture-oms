@@ -53,7 +53,7 @@ export function Metric({ label, value, sub, icon, testid, tone }: { label: strin
  *   2. stage filters + search + 5-column queue
  *   3. the selected order in a slide-over drawer (?order=<id>)
  */
-export async function OfficeWorkspace({ actor, data, title, description, basePath, openId, tab, between }: {
+export async function OfficeWorkspace({ actor, data, title, description, basePath, openId, tab, between, intro = true }: {
   actor: Actor;
   data: OfficeData;
   title: string;
@@ -63,12 +63,15 @@ export async function OfficeWorkspace({ actor, data, title, description, basePat
   tab?: string;
   /** owner-only blocks shown between the metrics and the queue */
   between?: ReactNode;
+  /** false: the page draws its own heading and KPI cards; only the queue (+ drawer) renders here */
+  intro?: boolean;
 }) {
   const m = workspaceMetrics(data.orders, data.payments);
   const filters = QUEUE_FILTERS.map((f) => ({ key: f.key, label: f.label, statuses: f.statuses, count: m.filterCounts[f.key] }));
   const openOk = !!openId && data.orders.some((o) => o.id === openId);
   return (
     <>
+      {intro && <>
       <div className="mb-5 flex flex-wrap items-end gap-3">
         <div className="min-w-0 flex-1 basis-72">
           <h1 className="text-3xl font-semibold sm:text-4xl">{title}</h1>
@@ -83,6 +86,7 @@ export async function OfficeWorkspace({ actor, data, title, description, basePat
         <Metric testid="kpi-delivery" label="Out / ready for delivery" value={m.delivery} sub="ready or on the road" icon={<Truck />} />
         <Metric testid="kpi-deposits" label="Collected deposits" value={formatPeso(m.collectedDeposits)} sub="verified furniture payments · active orders" icon={<Wallet />} />
       </div>
+      </>}
       {between}
       <OrderQueue rows={queueRows(data.orders, data.payments)} filters={filters} basePath={basePath} openId={openOk ? openId : null} />
       {openOk && (

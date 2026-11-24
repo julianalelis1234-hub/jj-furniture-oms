@@ -23,7 +23,7 @@ await step("staff queue shows exactly the 5 curated orders with computed metrics
   await page.goto("/staff");
   const codes = await page.getByTestId("queue-row").evaluateAll((r) => r.map((x) => x.dataset.code).sort());
   expect(codes.join() === "JJ-2026-1001,JJ-2026-1002,JJ-2026-1003,JJ-2026-1004,JJ-2026-1005", `rows ${codes}`);
-  const kpi = async (id) => (await page.getByTestId(id).innerText()).replace(/\s+/g, " ");
+  const kpi = async (id) => ` ${(await page.getByTestId(id).innerText()).replace(/\s+/g, " ")} `;
   expect((await kpi("kpi-to-confirm")).includes(" 1 "), "to confirm 1");
   expect((await kpi("kpi-quote-payment")).includes(" 2 "), "quotation & payment 2");
   expect((await kpi("kpi-workshop")).includes(" 1 "), "workshop 1");

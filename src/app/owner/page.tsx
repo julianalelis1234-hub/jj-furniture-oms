@@ -1,15 +1,15 @@
 import { AlertTriangle, ArrowRight, ClipboardList, Hammer, Plus, Sparkles, TrendingUp, Wallet } from "lucide-react";
 import Link from "next/link";
-import type { ReactNode } from "react";
 import { DecideExceptionControls, InspectionControls } from "@/components/office/actions";
 import { TaskCard } from "@/components/office/order-card";
 import { ReviewProposalControls } from "@/components/office/spec-dialogs";
+import { DarkCard, DarkFigure, DarkStats, DashboardHeader, darkPrimary, darkSecondary, dashCard, headerPrimary, headerSecondary, KpiCard, KpiRow } from "@/components/dashboard";
 import { ActivityChart, DueBars } from "@/components/owner/dashboard-charts";
 import { OwnerShell } from "@/components/owner/owner-shell";
 import { RowList } from "@/components/rows";
 import { StatusBadge } from "@/components/status";
 import { toClientOrder } from "@/lib/client-order";
-import { addDays, formatDate, formatDateTime, SHOP_TZ, todayISO } from "@/lib/domain/dates";
+import { addDays, formatDate, formatDateTime, todayISO } from "@/lib/domain/dates";
 import { formatPeso } from "@/lib/domain/finance";
 import { formatDims } from "@/lib/domain/furniture";
 import { getStore, requireActor } from "@/lib/server/context";
@@ -21,31 +21,9 @@ import { cn } from "@/lib/utils";
 
 export const metadata = { title: "Owner dashboard" };
 
-const card = "rounded-2xl border border-border bg-card shadow-[0_1px_2px_rgb(43_29_23/0.04)]";
-
-function greeting(now: Date) {
-  const hour = Number(new Intl.DateTimeFormat("en-US", { hour: "numeric", hourCycle: "h23", timeZone: SHOP_TZ }).format(now));
-  return hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
-}
-const firstName = (full: string) => full.replace(/^(mr|mrs|ms)\.?\s+/i, "").split(/\s+/)[0] ?? full;
+const card = dashCard;
 const initials = (name: string) => name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]!.toUpperCase()).join("");
 const weekday = (iso: string) => new Intl.DateTimeFormat("en-PH", { weekday: "short", timeZone: "UTC" }).format(Date.parse(`${iso}T00:00:00Z`));
-
-/** A KPI card: label, icon chip, big number, one supporting line. */
-function KpiCard({ testid, label, value, sub, icon, tone = "muted" }: {
-  testid: string; label: string; value: ReactNode; sub: ReactNode; icon: ReactNode; tone?: "good" | "warning" | "muted";
-}) {
-  return (
-    <div className={cn(card, "flex min-w-0 flex-col gap-3 p-5")} data-testid={testid}>
-      <div className="flex items-start justify-between gap-3">
-        <span className="text-sm font-semibold text-muted-foreground">{label}</span>
-        <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-accent-soft text-primary [&_svg]:size-4" aria-hidden>{icon}</span>
-      </div>
-      <span className="text-[2rem] leading-none font-extrabold tracking-[-0.03em] tabular-nums">{value}</span>
-      <span className={cn("flex items-center gap-1 text-xs font-semibold", tone === "good" ? "text-success" : tone === "warning" ? "text-warning" : "text-muted-foreground")}>{sub}</span>
-    </div>
-  );
-}
 
 /** O-01 · Dashboard: greeting, four headline numbers, weekly activity, this week in the workshop, recent orders, then decisions. */
 export default async function OwnerDashboard() {
@@ -87,23 +65,14 @@ export default async function OwnerDashboard() {
 
   return (
     <OwnerShell actor={actor} badges={badges}>
-      <header className="mb-6 flex flex-wrap items-center gap-3">
-        <div className="min-w-0 flex-1 basis-72">
-          <h1 className="text-2xl font-bold tracking-[-0.02em] sm:text-3xl">{greeting(now)}, {firstName(actor.full_name)}</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {new Intl.DateTimeFormat("en-PH", { weekday: "long", month: "long", day: "numeric", timeZone: SHOP_TZ }).format(now)}
-            {" · "}{decisions ? `${decisions} waiting for your decision` : "nothing waiting for your decision"}
-          </p>
-        </div>
-        <Link href="/owner/orders" className="inline-flex h-11 items-center gap-2 rounded-xl border border-border bg-card px-4 text-sm font-semibold hover:bg-muted">
-          <ClipboardList className="size-4 text-primary" aria-hidden /> Orders & Quotations
-        </Link>
-        <Link href="/staff/new" className="inline-flex h-11 items-center gap-2 rounded-xl bg-primary px-4 text-sm font-bold text-primary-foreground hover:bg-primary/90">
-          <Plus className="size-4" aria-hidden /> New order
-        </Link>
-      </header>
+      <DashboardHeader name={actor.full_name} now={now}
+        summary={decisions ? `${decisions} waiting for your decision` : "nothing waiting for your decision"}
+        actions={<>
+          <Link href="/owner/orders" className={headerSecondary}><ClipboardList className="size-4 text-primary" aria-hidden /> Orders & Quotations</Link>
+          <Link href="/staff/new" className={headerPrimary}><Plus className="size-4" aria-hidden /> New order</Link>
+        </>} />
 
-      <div className="mb-5 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4" data-testid="kpi-strip">
+      <KpiRow testid="kpi-strip">
         <KpiCard testid="kpi-to-confirm" label="To confirm" value={m.toConfirm} icon={<ClipboardList />}
           sub={<><TrendingUp className="size-3.5" aria-hidden /> {newThisWeek} new in the last 7 days</>} tone={newThisWeek ? "good" : "muted"} />
         <KpiCard testid="kpi-workshop" label="In the workshop" value={m.inWorkshop} icon={<Hammer />}
@@ -113,48 +82,28 @@ export default async function OwnerDashboard() {
         <KpiCard testid="kpi-balances" label="Balances to collect" value={formatPeso(k.balancesToCollect)} icon={<Wallet />}
           sub={k.unpaidAfterDelivery.count ? `${formatPeso(k.unpaidAfterDelivery.amount)} unpaid after delivery` : "on active orders"}
           tone={k.unpaidAfterDelivery.count ? "warning" : "muted"} />
-      </div>
+      </KpiRow>
 
       <div className="mb-5 grid gap-5 xl:grid-cols-[minmax(0,1fr)_22rem]">
         <section className={cn(card, "flex min-h-[22rem] min-w-0 flex-col p-5")} aria-label="Shop activity">
           <ActivityChart orderDays={orderDays} paymentDays={paymentDays} today={today} />
         </section>
 
-        {/* the dark highlight card: this week in the workshop */}
-        <section aria-labelledby="week-title" className="dark relative flex flex-col gap-4 overflow-hidden rounded-2xl border border-white/10 bg-[#1e130e] p-5 text-[#faf6f0] shadow-[0_12px_32px_-12px_rgb(30_19_14/0.55)]">
-          <span aria-hidden className="pointer-events-none absolute -top-24 -right-20 size-72 rounded-full bg-[#c48a5a]/35 blur-3xl" />
-          <div className="relative flex items-center gap-2">
-            <Sparkles className="size-4 text-[#f0b27a]" aria-hidden />
-            <h2 id="week-title" className="flex-1 text-sm font-bold">This week in the workshop</h2>
-            <span className="rounded-full border border-white/15 bg-white/10 px-2 py-0.5 text-[11px] font-semibold text-white/80">Live</span>
+        <DarkCard id="week-title" title="This week in the workshop">
+          <DarkFigure value={dueThisWeek} caption={`${dueThisWeek === 1 ? "job" : "jobs"} due in the next 7 days`} testid="kpi-late"
+            note={k.delayedOrAtRisk ? `${k.delayedOrAtRisk} delayed or at risk` : "Nothing delayed or at risk"} noteTone={k.delayedOrAtRisk ? "warning" : "good"} />
+          <DueBars days={due} />
+          <DarkStats items={[
+            { testid: "kpi-quote-payment", label: "Quote & payment", value: m.quotationAndPayment },
+            { testid: "kpi-delivery", label: "Ready / out", value: m.delivery },
+            { testid: "kpi-low-stock", label: "Low lumber", value: inv.lowStock.length },
+          ]} />
+          <p className="rounded-xl bg-white/[0.07] p-3 text-sm leading-snug">{tip}</p>
+          <div className="mt-auto flex gap-2">
+            <a href="#decide-title" className={darkPrimary}>Review decisions</a>
+            <Link href="/owner/craftsmen" className={darkSecondary}>Workshop</Link>
           </div>
-          <div className="relative">
-            <p className="flex items-baseline gap-2"><b className="text-5xl leading-none font-extrabold tracking-[-0.03em] tabular-nums">{dueThisWeek}</b><span className="text-sm text-white/75">{dueThisWeek === 1 ? "job" : "jobs"} due in the next 7 days</span></p>
-            <p className={cn("mt-1 text-xs font-semibold", k.delayedOrAtRisk ? "text-[#f3c77a]" : "text-[#9fd3a4]")} data-testid="kpi-late">
-              {k.delayedOrAtRisk ? `${k.delayedOrAtRisk} delayed or at risk` : "Nothing delayed or at risk"}
-            </p>
-          </div>
-          <div className="relative"><DueBars days={due} /></div>
-          <dl className="relative grid grid-cols-3 gap-2 text-center">
-            {[
-              { id: "kpi-quote-payment", label: "Quote & payment", value: m.quotationAndPayment },
-              { id: "kpi-delivery", label: "Ready / out", value: m.delivery },
-              { id: "kpi-low-stock", label: "Low lumber", value: inv.lowStock.length },
-            ].map((s) => (
-              <div key={s.id} data-testid={s.id} className="rounded-xl bg-white/[0.07] px-2 py-2">
-                <dt className="text-[11px] text-white/65">{s.label}</dt>
-                <dd className="text-lg font-extrabold tabular-nums">{s.value}</dd>
-              </div>
-            ))}
-          </dl>
-          <p className="relative rounded-xl bg-white/[0.07] p-3 text-sm leading-snug">{tip}</p>
-          <div className="relative mt-auto flex gap-2">
-            <a href="#decide-title" className="inline-flex h-11 flex-1 items-center justify-center gap-2 rounded-full bg-gradient-to-r from-[#a86a3e] to-[#c48a5a] px-4 text-sm font-bold text-white hover:brightness-110">
-              Review decisions
-            </a>
-            <Link href="/owner/craftsmen" className="inline-flex h-11 items-center rounded-full bg-white/10 px-4 text-sm font-semibold hover:bg-white/15">Workshop</Link>
-          </div>
-        </section>
+        </DarkCard>
       </div>
 
       <section aria-labelledby="recent-title" className={cn(card, "mb-5 p-5")}>
