@@ -43,8 +43,8 @@ export function KpiCard({ testid, label, value, sub, icon, tone = "muted" }: {
   );
 }
 
-export function KpiRow({ children, testid }: { children: ReactNode; testid?: string }) {
-  return <div className="mb-3 grid grid-cols-2 gap-2.5 sm:mb-5 sm:gap-4 xl:grid-cols-4" data-testid={testid}>{children}</div>;
+export function KpiRow({ children, testid, cols = 4 }: { children: ReactNode; testid?: string; cols?: 4 | 5 }) {
+  return <div className={cn("mb-3 grid grid-cols-2 gap-2.5 sm:mb-5 sm:gap-4", cols === 5 ? "lg:grid-cols-3 xl:grid-cols-5" : "xl:grid-cols-4")} data-testid={testid}>{children}</div>;
 }
 
 /** The espresso highlight card (right column): a glow, a title row with a chip, then its content. */
@@ -109,3 +109,20 @@ export function CardSection({ id, title, chip, action, children, className, test
     </section>
   );
 }
+
+/** A person row as a small card: initials avatar, name, a line under it, and chips on the right. */
+export function PersonCard({ name, line, chips, className }: { name: string; line?: ReactNode; chips?: ReactNode; className?: string }) {
+  const ini = name.replace(/^(mr|mrs|ms)\.?\s+/i, "").split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]!.toUpperCase()).join("");
+  return (
+    <li className={cn("flex min-w-0 items-center gap-3 rounded-xl border border-border bg-muted/40 p-2.5 sm:p-3", className)}>
+      <span className="grid size-9 shrink-0 place-items-center rounded-full bg-secondary text-xs font-bold text-secondary-foreground sm:size-10 sm:text-sm" aria-hidden>{ini}</span>
+      <span className="min-w-0 flex-1">
+        <b className="block truncate text-sm sm:text-base">{name}</b>
+        {line && <span className="block truncate text-[11px] text-muted-foreground sm:text-xs">{line}</span>}
+      </span>
+      {chips && <span className="flex shrink-0 flex-wrap justify-end gap-1">{chips}</span>}
+    </li>
+  );
+}
+
+export const chip = "rounded-full bg-secondary px-2 py-0.5 text-[11px] font-bold tabular-nums sm:px-2.5 sm:text-xs";

@@ -1,5 +1,5 @@
-import { AlertTriangle, Layers } from "lucide-react";
-import { Metric } from "@/components/office/office-workspace";
+import { AlertTriangle, ArrowDownToLine, ArrowUpFromLine, Layers } from "lucide-react";
+import { CardSection, KpiCard, KpiRow } from "@/components/dashboard";
 import { AddLumberItemDialog, RecordLumberDialog, ReorderLevelEditor } from "@/components/owner/inventory-controls";
 import { OwnerHeading, OwnerShell } from "@/components/owner/owner-shell";
 import { RowList } from "@/components/rows";
@@ -33,19 +33,17 @@ export default async function OwnerInventory() {
       <OwnerHeading title="Lumber & Inventory" description="Board feet on hand for every timber the shop stocks. Stock changes only through receive, use and adjust entries."
         actions={<AddLumberItemDialog />} />
 
-      <div className="mb-10 grid grid-cols-2 gap-x-6 gap-y-6 lg:grid-cols-4">
-        <Metric testid="inv-on-hand" label="On hand" value={`${bf(inv.totalOnHandBf)} bf`} sub={`${inv.items.length} kinds of lumber`} icon={<Layers />} />
-        <Metric testid="inv-low" label="To reorder" value={inv.lowStock.length} sub="at or below the reorder level" icon={<AlertTriangle />} tone={inv.lowStock.length ? "warning" : undefined} />
-        <Metric testid="inv-received" label="Received · 30 days" value={`${bf(inv.received30)} bf`} sub="deliveries from suppliers" icon={<Layers />} />
-        <Metric testid="inv-used" label="Used · 30 days" value={`${bf(inv.used30)} bf`} sub="taken for workshop jobs" icon={<Layers />} />
-      </div>
+      <KpiRow>
+        <KpiCard testid="inv-on-hand" label="On hand" value={`${bf(inv.totalOnHandBf)} bf`} sub={`${inv.items.length} kinds of lumber`} icon={<Layers />} />
+        <KpiCard testid="inv-low" label="To reorder" value={inv.lowStock.length} sub="at or below the reorder level" icon={<AlertTriangle />} tone={inv.lowStock.length ? "warning" : "good"} />
+        <KpiCard testid="inv-received" label="Received · 30 days" value={`${bf(inv.received30)} bf`} sub="deliveries from suppliers" icon={<ArrowDownToLine />} />
+        <KpiCard testid="inv-used" label="Used · 30 days" value={`${bf(inv.used30)} bf`} sub="taken for workshop jobs" icon={<ArrowUpFromLine />} />
+      </KpiRow>
 
-      <section aria-labelledby="stock-title" className="mb-10">
-        <h2 id="stock-title" className="mb-1 text-2xl">Stock</h2>
-        <p className="mb-3 text-sm text-muted-foreground">The bar shows board feet on hand; the tick is the reorder level.</p>
+      <CardSection id="stock" title="Stock" chip="Bar: on hand · tick: reorder level">
         <RowList data-testid="stock-list">
           {items.map((i) => (
-            <li key={i.id} className="grid gap-3 px-1 py-4 sm:px-3 lg:grid-cols-[minmax(0,15rem)_minmax(0,1fr)_auto] lg:items-center" data-testid="stock-row" data-level={i.level}>
+            <li key={i.id} className="grid gap-2 px-1 py-3 sm:gap-3 sm:px-2 sm:py-4 lg:grid-cols-[minmax(0,15rem)_minmax(0,1fr)_auto] lg:items-center" data-testid="stock-row" data-level={i.level}>
               <span className="min-w-0">
                 <b className="block">{i.wood_name}</b>
                 <span className="text-sm text-muted-foreground">{i.size_note ?? "any size"}{i.wood_type === "Other" ? "" : ` · ${i.wood_type}`}</span>
@@ -71,13 +69,12 @@ export default async function OwnerInventory() {
             </li>
           ))}
         </RowList>
-      </section>
+      </CardSection>
 
-      <section aria-labelledby="ledger-title">
-        <h2 id="ledger-title" className="mb-3 text-2xl">Recent entries</h2>
+      <CardSection id="ledger" title="Recent entries">
         <RowList data-testid="lumber-ledger">
           {lumberMovements.slice(0, 25).map((m) => (
-            <li key={m.id} className="grid gap-1 px-1 py-3 text-sm sm:grid-cols-[9rem_minmax(0,1fr)_auto] sm:items-center sm:gap-4 sm:px-3">
+            <li key={m.id} className="grid gap-1 px-1 py-2.5 text-xs sm:grid-cols-[9rem_minmax(0,1fr)_auto] sm:items-center sm:gap-4 sm:px-2 sm:py-3 sm:text-sm">
               <span className="text-muted-foreground tabular-nums">{formatDateTime(m.created_at)}</span>
               <span className="min-w-0">
                 <b>{itemName.get(m.item_id) ?? "—"}</b>
@@ -89,7 +86,7 @@ export default async function OwnerInventory() {
             </li>
           ))}
         </RowList>
-      </section>
+      </CardSection>
     </OwnerShell>
   );
 }
