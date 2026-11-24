@@ -1,5 +1,6 @@
 import { LogOut } from "lucide-react";
 import Image from "next/image";
+import { cn } from "@/lib/utils";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { signOut } from "@/app/actions";
@@ -37,9 +38,12 @@ export async function AppShell({
   actor,
   headerExtra,
   live,
+  wide = false,
   children,
 }: {
   portal: Role | "customer";
+  /** wider page (owner dashboard with its sidebar) */
+  wide?: boolean;
   actor: Actor | null;
   headerExtra?: ReactNode;
   /** live-sync indicator + subscription for this page: pass <LiveSync /> (server component) */
@@ -54,7 +58,7 @@ export async function AppShell({
       {switcher && <DemoBar current={portal} />}
       {/* Espresso navigation anchor in both modes: the `dark` class scopes the dark tokens to the header */}
       <header className="dark no-print sticky top-0 z-30 border-b border-border bg-background/95 text-foreground backdrop-blur">
-        <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-2.5">
+        <div className={cn("mx-auto flex items-center gap-3 px-4 py-2.5", wide ? "max-w-[90rem]" : "max-w-6xl")}>
           <Logo />
           <div className="ml-1 hidden border-l pl-3 sm:block">
             <p className="text-sm font-semibold">{p.title}</p>
@@ -81,7 +85,7 @@ export async function AppShell({
         </div>
       </header>
       {/* bottom padding on phones keeps content clear of the floating nav */}
-      <main className="mx-auto w-full max-w-6xl flex-1 px-4 pt-4 pb-28 sm:pt-6 md:pb-6">{children}</main>
+      <main className={cn("mx-auto w-full flex-1 px-4 pt-4 pb-28 sm:pt-6 md:pb-6", wide ? "max-w-[90rem]" : "max-w-6xl")}>{children}</main>
       <footer className="no-print border-t py-4 pb-28 text-center text-xs text-muted-foreground md:pb-4">
         JJ Enterprises — Furniture and Lumber Dealer · Poblacion, Valencia City, Bukidnon
       </footer>

@@ -61,8 +61,8 @@ await step("drawer gates: verified payments only; 30% met / not met per order", 
 for (const theme of ["light", "dark"]) {
   await step(`390px ${theme}: stacked list + full-screen sheet, no sideways scroll`, async () => {
     const { page, ctx } = await as("Mr. Vincris Lelis", { width: 390, height: 844 }, theme);
-    await page.goto("/owner");
-    await page.getByRole("heading", { name: "Shop Overview & Approvals" }).waitFor();
+    await page.goto("/owner/orders");
+    await page.getByRole("heading", { level: 1, name: "Orders & Quotations" }).waitFor();
     expect((await page.getByTestId("queue-card").count()) === 5, "5 cards");
     await noScroll(page, "owner list");
     await page.locator('[data-testid="queue-card"][data-code="JJ-2026-1004"]').click();

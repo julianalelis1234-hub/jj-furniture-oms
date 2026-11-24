@@ -23,9 +23,9 @@ const NAV: Record<Role | "customer", NavConfig> = {
     right: [{ href: "/staff#task-inbox", label: "Tasks", icon: Inbox, match: () => false }],
   },
   owner: {
-    left: [{ href: "/owner", label: "Overview", icon: LayoutDashboard, match: (p) => p.startsWith("/owner") }],
+    left: [{ href: "/owner", label: "Overview", icon: LayoutDashboard, match: (p) => p.startsWith("/owner") && !p.startsWith("/owner/orders") }],
     action: { href: "/staff/new", label: "New walk-in order" },
-    right: [{ href: "/staff", label: "Queue", icon: ClipboardList, match: (p) => p.startsWith("/staff") && p !== "/staff/new" }],
+    right: [{ href: "/owner/orders", label: "Orders", icon: ClipboardList, match: (p) => p.startsWith("/owner/orders") }],
   },
   craftsman: { left: [{ href: "/craftsman", label: "Jobs", icon: Hammer, match: (p) => p.startsWith("/craftsman") }], right: [] },
   driver: { left: [{ href: "/driver", label: "Deliveries", icon: Truck, match: (p) => p.startsWith("/driver") }], right: [] },

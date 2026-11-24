@@ -387,6 +387,34 @@ async function seedOrders(store: MemoryStore, list: SeedOrder[]) {
  * Regression-test dataset (15 orders covering every edge case). Used by the
  * unit / E2E suites and by the demo when DEMO_DATASET=fixtures.
  */
+
+/**
+ * Lumber & Inventory sample (migration 010): what a Valencia City lumber dealer stocks.
+ * Opening stock and history are real movements, so on-hand is computed, never typed.
+ * Gmelina 2×6 and Acacia are below their reorder levels (low-stock alerts).
+ */
+async function seedLumber(store: MemoryStore, orderId: (code: string) => string | null) {
+  const items: [string, WoodType, string, number, [number, "receive" | "use" | "adjust", number, string | null, string | null][]][] = [
+    ["Mahogany", "Mahogany", "2\" × 4\" × 10 ft", 200, [[21, "receive", 600, null, "Delivery from a Bukidnon supplier"], [12, "use", 96, "JJ-2026-1001", null], [6, "use", 54, null, "Door frames"]]],
+    ["Mahogany", "Mahogany", "1\" × 12\" × 8 ft", 150, [[25, "receive", 320, null, "Opening stock"], [9, "use", 64, null, "Table tops"]]],
+    ["Gmelina", "Gmelina", "2\" × 6\" × 8 ft", 200, [[30, "receive", 400, null, "Opening stock"], [14, "use", 152, null, "Sala set frames"], [5, "use", 88, null, "Cabinet carcasses"], [2, "adjust", -6, null, "Stock count: split boards"]]],
+    ["Narra", "Other", "1\" × 12\" × 8 ft", 50, [[40, "receive", 160, null, "Opening stock"], [12, "use", 72, "JJ-2026-1001", null]]],
+    ["Acacia", "Other", "2\" × 4\" × 8 ft", 40, [[35, "receive", 96, null, "Opening stock"], [20, "use", 64, null, "Study desk legs"]]],
+    ["Molave", "Other", "4\" × 4\" × 10 ft", 30, [[28, "receive", 133.33, null, "Opening stock (10 posts)"]]],
+  ];
+  const t = store.t;
+  for (const [name, wood, size, reorder, moves] of items) {
+    const item = await store.insertLumberItem({ wood_name: name, wood_type: wood, size_note: size, reorder_level_bf: reorder });
+    const row = t.lumber_stock_items.find((i) => i.id === item.id)!;
+    row.created_at = ts(45);
+    for (const [daysAgo, kind, bf, code, note] of moves.sort((a, b) => b[0] - a[0])) {
+      const { movement } = await store.insertLumberMovement({ item_id: item.id, kind, board_feet: bf, order_id: code ? orderId(code) : null, note,
+        recorded_by: STAFF.gilbert, client_transaction_id: null });
+      t.lumber_movements.find((m) => m.id === movement.id)!.created_at = ts(daysAgo, 10);
+    }
+  }
+}
+
 export async function buildFixtureTables(): Promise<MemoryTables> {
   const store = new MemoryStore();
   const t = store.t;
@@ -511,6 +539,7 @@ export async function buildFixtureTables(): Promise<MemoryTables> {
   nt("JJ-2026-0141", "JJ Enterprises: Your specifications for JJ-2026-0141 are confirmed. Please settle the 30% down payment of ₱9,600.", "Failed", 2);
   nt("JJ-2026-0133", "JJ Enterprises: JJ-2026-0133 delivered. Thank you!", "Sent", 3, "Messenger");
 
+  await seedLumber(store, (code) => t.orders.find((o) => o.order_code === code)?.id ?? null);
   return structuredClone(t);
 }
 
@@ -678,6 +707,7 @@ async function buildCuratedTables(): Promise<MemoryTables> {
       subject: `Quotation for ${rea.order_code}: choose how to pay`,
       text: `Hello ${rea.customer_name},\n\nYour official quotation for ${rea.order_code} is ready.\nItem: ${rea.item_name}\nTotal: ₱44,000.00 (free delivery in Valencia City)\n30% down payment: ₱13,200.00\n\nLog in to accept it and choose 30% down payment, installment or full payment:\n/customer/orders/${rea.order_code}\n\nProduction starts once your down payment is verified.` },
   );
+  await seedLumber(store, (code) => t.orders.find((o) => o.order_code === code)?.id ?? null);
   return structuredClone(t);
 }
 

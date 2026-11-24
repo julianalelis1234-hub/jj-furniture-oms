@@ -5,7 +5,7 @@ import { dimensionsText, diffSpecs } from "@/lib/domain/furniture";
 import { assertProductionGate, blockingItems, isQuoteExpired, specOrQuoteChanged } from "@/lib/domain/gate";
 import { assertTransition, isProductionLocked } from "@/lib/domain/status";
 import { money } from "@/lib/domain/finance";
-import { PAYMENT_PLANS, QUOTE_REVISION_TYPES, REFERENCE_PAYMENT_METHODS, type OrderStatus } from "@/lib/domain/types";
+import { PAYMENT_PLANS, QUOTE_REVISION_TYPES, REFERENCE_PAYMENT_METHODS, type LumberItem, type LumberMovement, type OrderStatus } from "@/lib/domain/types";
 import { currentActorRole } from "@/lib/realtime/actor-context";
 import { classifyOrderChange, classifyPaymentChange, type LiveEvent, type LiveOp, type LiveSource } from "@/lib/realtime/events";
 import type {
@@ -61,6 +61,9 @@ export interface MemoryTables {
   rate_limit_hits: { bucket: string; at: number }[];
   /** demo stand-in for the private payment-proofs bucket (migration 009) */
   payment_proofs: { path: string; bytes: Uint8Array; content_type: string }[];
+  /** mirrors public.lumber_stock_items / lumber_movements (migration 010) */
+  lumber_stock_items: LumberItem[];
+  lumber_movements: LumberMovement[];
 }
 
 export function emptyTables(): MemoryTables {
@@ -81,6 +84,8 @@ export function emptyTables(): MemoryTables {
     live_events: [],
     notification_outbox: [],
     payment_proofs: [],
+    lumber_stock_items: [],
+    lumber_movements: [],
     rate_limit_hits: [],
   };
 }
@@ -871,6 +876,55 @@ export class MemoryStore implements DataStore {
       n += 1;
     }
     return n;
+  }
+
+  // ---------------------------------------------------- lumber (mirrors 010)
+  async listLumberItems() {
+    return clone(this.t.lumber_stock_items.sort((a, b) => a.wood_name.localeCompare(b.wood_name) || (a.size_note ?? "").localeCompare(b.size_note ?? "")));
+  }
+  async insertLumberItem(row: Pick<LumberItem, "wood_name" | "wood_type" | "size_note" | "reorder_level_bf">) {
+    // owner-only is enforced by the service (and by RLS + the items guard in Postgres)
+    const name = row.wood_name.trim();
+    if (name.length < 2 || name.length > 60) throw new DomainError("VALIDATION", "Enter the wood name (2–60 characters).");
+    if (!(row.reorder_level_bf >= 0)) throw new DomainError("VALIDATION", "The reorder level cannot be negative.");
+    const key = (n: string, s: string | null) => `${n.toLowerCase()}|${(s ?? "").toLowerCase()}`;
+    if (this.t.lumber_stock_items.some((i) => key(i.wood_name, i.size_note) === key(name, row.size_note)))
+      throw new DomainError("VALIDATION", "That wood and size is already in the inventory.");
+    const ts = now();
+    const item: LumberItem = { id: randomUUID(), wood_name: name, wood_type: row.wood_type, size_note: row.size_note?.trim() || null,
+      reorder_level_bf: money(row.reorder_level_bf), on_hand_bf: 0, is_active: true, created_at: ts, updated_at: ts };
+    this.t.lumber_stock_items.push(item);
+    return clone(item);
+  }
+  async updateLumberItem(id: string, patch: Partial<Pick<LumberItem, "wood_name" | "wood_type" | "size_note" | "reorder_level_bf" | "is_active">>) {
+    if ("on_hand_bf" in patch) throw new DomainError("IMMUTABLE_RECORD", "Stock on hand changes only through receive / use / adjust entries.");
+    const item = this.find(this.t.lumber_stock_items, id, "Lumber item");
+    if (patch.reorder_level_bf !== undefined && !(patch.reorder_level_bf >= 0)) throw new DomainError("VALIDATION", "The reorder level cannot be negative.");
+    Object.assign(item, patch, { updated_at: now() });
+    return clone(item);
+  }
+  async listLumberMovements(itemId?: string) {
+    return clone(this.t.lumber_movements.filter((m) => !itemId || m.item_id === itemId).sort((a, b) => b.created_at.localeCompare(a.created_at)));
+  }
+  async insertLumberMovement(row: Omit<LumberMovement, "id" | "created_at">) {
+    if (row.client_transaction_id) {
+      const dup = this.t.lumber_movements.find((m) => m.client_transaction_id === row.client_transaction_id);
+      if (dup) return { movement: clone(dup), duplicate: true };
+    }
+    const item = this.find(this.t.lumber_stock_items, row.item_id, "Lumber item");
+    if (!item.is_active) throw new DomainError("VALIDATION", "This lumber item is archived.");
+    const bf = money(row.board_feet);
+    if (!bf || Math.abs(bf) > 100000 || (row.kind !== "adjust" && bf < 0))
+      throw new DomainError("VALIDATION", "Enter the board feet (a positive amount; only adjustments may be negative).");
+    if (row.kind === "adjust" && !row.note?.trim()) throw new DomainError("VALIDATION", "Give a reason for the stock adjustment.");
+    const delta = row.kind === "use" ? -bf : bf;
+    if (item.on_hand_bf + delta < 0)
+      throw new DomainError("INSUFFICIENT_STOCK", `Only ${item.on_hand_bf} board feet of ${item.wood_name} on hand.`);
+    const m: LumberMovement = { ...row, board_feet: bf, note: row.note?.trim() || null, id: randomUUID(), created_at: now() };
+    this.t.lumber_movements.push(m);
+    item.on_hand_bf = money(item.on_hand_bf + delta);
+    item.updated_at = now();
+    return { movement: clone(m), duplicate: false };
   }
 
   async listCustomerOrders(userId: string) {

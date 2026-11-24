@@ -3,6 +3,8 @@ import type { PostgrestError, SupabaseClient } from "@supabase/supabase-js";
 import { DomainError, fromPostgresMessage } from "@/lib/domain/errors";
 import { LIVE_EVENT_COLUMNS, type LiveEvent } from "@/lib/realtime/events";
 import type {
+  LumberItem,
+  LumberMovement,
   NewOutboxRow,
   OutboxRow,
   ConsumeReviewResult,
@@ -61,6 +63,7 @@ const normConfirmation = (c: OrderConfirmation): OrderConfirmation => ({
   accepted_total_amount: Number(c.accepted_total_amount),
 });
 const normPayment = (p: Payment): Payment => ({ ...p, amount: Number(p.amount) });
+const normLumber = (i: LumberItem): LumberItem => ({ ...i, on_hand_bf: Number(i.on_hand_bf), reorder_level_bf: Number(i.reorder_level_bf) });
 const normDelivery = (d: DeliveryAssignment): DeliveryAssignment => ({
   ...d,
   delivery_fee: Number(d.delivery_fee),
@@ -398,6 +401,42 @@ export class SupabaseStore implements DataStore {
     if (error) fail(error);
     return data as { linked: boolean; already: boolean };
   }
+  // ---------------------------------------------------- lumber (migration 010)
+  async listLumberItems() {
+    const { data, error } = await this.db.from("lumber_stock_items").select("*").order("wood_name").order("size_note");
+    if (error) fail(error);
+    return (data as LumberItem[]).map(normLumber);
+  }
+  async insertLumberItem(row: Pick<LumberItem, "wood_name" | "wood_type" | "size_note" | "reorder_level_bf">) {
+    const { data, error } = await this.db.from("lumber_stock_items").insert(row).select("*").single();
+    if (error) fail(error);
+    return normLumber(data as LumberItem);
+  }
+  async updateLumberItem(id: string, patch: Partial<Pick<LumberItem, "wood_name" | "wood_type" | "size_note" | "reorder_level_bf" | "is_active">>) {
+    const { data, error } = await this.db.from("lumber_stock_items").update(patch).eq("id", id).select("*").single();
+    if (error) fail(error);
+    return normLumber(data as LumberItem);
+  }
+  async listLumberMovements(itemId?: string) {
+    let q = this.db.from("lumber_movements").select("*").order("created_at", { ascending: false });
+    if (itemId) q = q.eq("item_id", itemId);
+    const { data, error } = await q;
+    if (error) fail(error);
+    return (data as LumberMovement[]).map((m) => ({ ...m, board_feet: Number(m.board_feet) }));
+  }
+  async insertLumberMovement(row: Omit<LumberMovement, "id" | "created_at">) {
+    const { data, error } = await this.db.from("lumber_movements").insert(row).select("*").single();
+    if (error) {
+      if (error.code === "23505" && error.message.includes("client_transaction_id") && row.client_transaction_id) {
+        const { data: existing, error: e2 } = await this.db.from("lumber_movements").select("*").eq("client_transaction_id", row.client_transaction_id).single();
+        if (e2) fail(e2);
+        return { movement: { ...(existing as LumberMovement), board_feet: Number((existing as LumberMovement).board_feet) }, duplicate: true };
+      }
+      fail(error);
+    }
+    return { movement: { ...(data as LumberMovement), board_feet: Number((data as LumberMovement).board_feet) }, duplicate: false };
+  }
+
   async claimCustomerOrders(userId: string) {
     const { data, error } = await this.db.rpc("claim_customer_orders", { p_user_id: userId });
     if (error) fail(error);

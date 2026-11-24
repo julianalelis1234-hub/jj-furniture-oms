@@ -19,6 +19,7 @@ import {
   XCircle,
 } from "lucide-react";
 import {
+  assignCraftsmanAction,
   confirmOrderAction,
   decideExceptionAction,
   rejectPaymentAction,
@@ -470,5 +471,21 @@ export function RetryProvisioningButton({ orderId }: { orderId: string }) {
     <ActionButton action={() => retryProvisioningAction(orderId)}>
       <RefreshCw aria-hidden /> Retry account set-up
     </ActionButton>
+  );
+}
+
+/** Owner / staff: pick the craftsman for a job (recorded in the order history). */
+export function AssignCraftsmanSelect({ order, craftsmen }: { order: ClientOrder; craftsmen: Pick<Profile, "id" | "full_name">[] }) {
+  const { pending, run } = useServerAction();
+  return (
+    <label className="flex items-center gap-2 text-sm">
+      <span className="sr-only">Craftsman for {order.order_code}</span>
+      <select value={order.assigned_craftsman_id ?? ""} disabled={pending} data-testid={`assign-${order.order_code}`}
+        onChange={(e) => run(() => assignCraftsmanAction(order.id, e.target.value || null))}
+        className="h-11 min-w-44 rounded-full border border-input bg-card px-4 pr-8 text-sm font-semibold outline-none focus-visible:ring-3 focus-visible:ring-ring/40">
+        <option value="">Not assigned</option>
+        {craftsmen.map((c) => <option key={c.id} value={c.id}>{c.full_name}</option>)}
+      </select>
+    </label>
   );
 }

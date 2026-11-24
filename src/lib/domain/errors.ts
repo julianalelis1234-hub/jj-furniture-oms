@@ -20,6 +20,7 @@ export type DomainErrorCode =
   | "IMMUTABLE_RECORD"
   | "INVALID_REVISION"
   | "ALREADY_ACCEPTED"
+  | "INSUFFICIENT_STOCK"
   | "BACKEND";
 
 /** HTTP-style status for API callers (409 stale, 410 expired quote, ...). */
@@ -32,6 +33,7 @@ export const HTTP_STATUS: Partial<Record<DomainErrorCode, number>> = {
   NOT_FOUND: 404,
   STALE_REVISION: 409,
   ALREADY_ACCEPTED: 409,
+  INSUFFICIENT_STOCK: 409,
   VERSION_CONFLICT: 409,
   IDEMPOTENCY_CONFLICT: 409,
   DUPLICATE_SLIP: 409,
@@ -75,6 +77,7 @@ export function fromPostgresMessage(message: string, pgCode?: string): DomainErr
     "IMMUTABLE_RECORD",
     "INVALID_REVISION",
     "ALREADY_ACCEPTED",
+    "INSUFFICIENT_STOCK",
   ];
   for (const code of known) {
     if (message.includes(code)) return new DomainError(code, message.replace(`${code}: `, ""));
@@ -83,6 +86,10 @@ export function fromPostgresMessage(message: string, pgCode?: string): DomainErr
     return new DomainError("DUPLICATE_REQUEST", "This request was already submitted.");
   if (message.includes("orders_quote_fields_required"))
     return new DomainError("VALIDATION", "A quotation needs a price, a paper slip number and an estimated completion date.");
+  if (message.includes("lumber_items_name_size_uidx"))
+    return new DomainError("VALIDATION", "That wood and size is already in the inventory.");
+  if (message.includes("lumber_adjust_note_chk"))
+    return new DomainError("VALIDATION", "Give a reason for the stock adjustment.");
   if (message.includes("payments_online_reference_chk"))
     return new DomainError("VALIDATION", "Online and bank payments need the transaction reference number.");
   if (message.includes("payments_rejection_chk"))

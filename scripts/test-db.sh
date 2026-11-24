@@ -90,6 +90,8 @@ fi
 run "$DB" supabase/migrations/009a_payment_channel_enums.sql
 run "$DB" supabase/migrations/009b_confirm_quote_pay_flow.sql 2>/dev/null
 psql "$PGURL/$DB" -v ON_ERROR_STOP=1 -f supabase/tests/12_confirm_quote_pay_flow.sql 2>&1 | grep -E "ok -|FAILED|ERROR|PASSED"
+run "$DB" supabase/migrations/010_lumber_inventory.sql 2>/dev/null
+psql "$PGURL/$DB" -v ON_ERROR_STOP=1 -f supabase/tests/13_lumber_inventory.sql 2>&1 | grep -E "ok -|FAILED|ERROR|PASSED"
 
 # 1d. Race: two sessions open the same review link at the same moment ---------
 RORDER=$(psql "$PGURL/$DB" -Atc "insert into public.orders (order_code, paper_slip_number, customer_name, customer_phone, delivery_address, municipality, item_name, quantity, dimensions, wood_type, color_finish, furniture_price, estimated_completion_date, furniture_category, design_variant, width_cm, height_cm, depth_cm, customer_email) values ('DR-0710','S-710','C','09000000710','Purok 1, Poblacion','Valencia City','Door',1,'-','Mahogany','Natural Varnish',9000,current_date,'Panel Door','Classic 2-Panel',80,210,4.5,'race@example.com') returning id" | head -1)
@@ -142,6 +144,8 @@ run "$DB2" supabase/migrations/008_harden_notification_outbox.sql
 run "$DB2" supabase/migrations/009a_payment_channel_enums.sql
 run "$DB2" supabase/migrations/009b_confirm_quote_pay_flow.sql 2>/dev/null
 run "$DB2" supabase/migrations/009b_confirm_quote_pay_flow.sql 2>/dev/null
+run "$DB2" supabase/migrations/010_lumber_inventory.sql 2>/dev/null
+run "$DB2" supabase/migrations/010_lumber_inventory.sql 2>/dev/null
 LIVE9=$(psql "$PGURL/$DB2" -Atc "select count(*) from public.orders where status not in ('Quote Requested','Waiting for Confirmation') and (confirmed_at is null or quotation_issued_at is null)")
 if [[ "$LIVE9" == "0" ]]; then echo "NOTICE:  ok - migration 009 (twice) on the live data: every confirmed-or-later order is backfilled as confirmed and quoted"; else echo "TEST FAILED: 009 backfill left $LIVE9 orders"; exit 1; fi
 OB=$(psql "$PGURL/$DB2" -Atc "select count(*) from pg_constraint where conrelid = 'public.notification_outbox'::regclass and contype = 'c'")

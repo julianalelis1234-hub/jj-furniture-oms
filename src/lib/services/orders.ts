@@ -414,6 +414,27 @@ export async function startProduction(store: DataStore, actor: Actor, orderId: s
   });
 }
 
+/** Owner / staff assign (or unassign) the craftsman for an accepted or running job. Recorded in the history. */
+export async function assignCraftsman(store: DataStore, actor: Actor, orderId: string, craftsmanId: string | null) {
+  ensureRole(actor, ["owner", "staff"], "assign craftsmen");
+  const order = await mustGetOrder(store, orderId);
+  if (!["Confirmed", "In Production", "Completed / For Inspection"].includes(order.status))
+    throw new DomainError("VALIDATION", "Craftsmen are assigned to confirmed or running jobs only.");
+  if (craftsmanId) {
+    const p = (await store.listProfiles()).find((x) => x.id === craftsmanId);
+    if (!p || p.role !== "craftsman" || !p.is_active) throw new DomainError("VALIDATION", "Choose an active craftsman.");
+  }
+  if (order.assigned_craftsman_id === craftsmanId) return order;
+  const res = await store.updateOrder(orderId, { assigned_craftsman_id: craftsmanId }, order.version);
+  if (!res.ok) throw new DomainError("VERSION_CONFLICT", "This order was changed by someone else. Please refresh.");
+  const name = craftsmanId ? (await store.listProfiles()).find((x) => x.id === craftsmanId)?.full_name : null;
+  await store.insertHistory({
+    order_id: orderId, from_status: order.status, to_status: order.status, changed_by_id: actor.id,
+    notes: name ? `Assigned to ${name}` : "Craftsman unassigned", client_transaction_id: null, changed_at: new Date().toISOString(),
+  });
+  return res.order;
+}
+
 export async function passInspection(store: DataStore, actor: Actor, orderId: string, notes?: string) {
   ensureRole(actor, ["owner"], "pass inspections");
   return transitionOrder(store, actor, orderId, "Ready for Delivery", { notes: notes || "Inspection passed" });

@@ -190,11 +190,14 @@ await step("staff: new order form validates (email or walk-in) then saves with i
 });
 
 // ---------------------------------------------------------------- owner --
-await step("owner: KPIs, approve installment, pass inspection, reprioritise", async () => {
+await step("owner: sidebar dashboard KPIs, approve installment, pass inspection, sections, assign + reprioritise, lumber", async () => {
   const { page, ctx } = await asPersona("Mr. Vincris Lelis", desktop);
   expect(page.url().endsWith("/owner"), "owner portal");
-  await page.getByRole("heading", { name: "Shop Overview & Approvals" }).waitFor();
-  for (const id of ["kpi-to-confirm", "kpi-quote-payment", "kpi-workshop", "kpi-delivery", "kpi-deposits"]) expect(await page.getByTestId(id).isVisible(), `metric ${id}`);
+  await page.getByRole("heading", { name: "Dashboard", exact: true }).waitFor();
+  for (const label of ["Dashboard", "Orders & Quotations", "Staff", "Craftsmen", "Deliveries", "Lumber & Inventory", "Reports", "Roles & Access"])
+    expect(await page.getByTestId("owner-nav").getByRole("link", { name: new RegExp(`^${label.replace("&", "&")}`) }).isVisible(), `sidebar ${label}`);
+  for (const id of ["kpi-to-confirm", "kpi-quote-payment", "kpi-workshop", "kpi-delivery", "kpi-deposits", "kpi-balances", "kpi-late", "kpi-low-stock"]) expect(await page.getByTestId(id).isVisible(), `metric ${id}`);
+  expect((await page.getByTestId("low-stock").locator("li").count()) >= 1, "low lumber stock is flagged on the dashboard");
   await page.getByRole("heading", { name: "Awaiting your decision" }).waitFor();
   await page.screenshot({ path: `${SHOTS}/owner-desktop.png`, fullPage: true });
   const installment = page.locator("li", { hasText: "Installment Approval" }).first();
@@ -205,7 +208,36 @@ await step("owner: KPIs, approve installment, pass inspection, reprioritise", as
   await insp.getByRole("button", { name: "Pass" }).click();
   await page.getByRole("button", { name: "Passed — ready for delivery" }).click();
   await page.getByText("Inspection passed").waitFor();
-  await page.getByTestId("planning-board").locator("summary").click();
+  // every section opens from the sidebar
+  for (const [label, heading] of [["Orders & Quotations", "Orders & Quotations"], ["Staff", "Staff"], ["Deliveries", "Deliveries"], ["Reports", "Reports"], ["Roles & Access", "Roles & Access"]]) {
+    await page.getByTestId("owner-nav").getByRole("link", { name: new RegExp(`^${label}`) }).click();
+    await page.getByRole("heading", { level: 1, name: heading, exact: true }).waitFor();
+  }
+  expect((await page.getByTestId("access-matrix").locator("tbody tr").count()) > 5, "permission matrix");
+  // lumber: receive 10 pieces of 2" x 4" x 10 ft = 66.67 bf; using more than on hand is refused
+  await page.getByTestId("owner-nav").getByRole("link", { name: /^Lumber & Inventory/ }).click();
+  await page.getByRole("heading", { level: 1, name: "Lumber & Inventory" }).waitFor();
+  const row = page.getByTestId("stock-row").filter({ hasText: "Acacia" }).first();
+  const before = Number((await row.locator("b.text-xl").innerText()).replace(/[^0-9.]/g, ""));
+  await row.getByRole("button", { name: "Receive" }).click();
+  const dlg = page.getByRole("dialog");
+  for (const [id, v] of [["#lm-pieces", "10"], ["#lm-thickness_in", "2"], ["#lm-width_in", "4"], ["#lm-length_ft", "10"]]) await dlg.locator(id).fill(v);
+  expect((await dlg.innerText()).includes("66.67"), "live board-feet calculation");
+  await dlg.getByRole("button", { name: "Add to stock" }).click();
+  await page.getByText("Received 66.67 board feet.").first().waitFor();
+  await page.waitForLoadState("networkidle");
+  const after = Number((await row.locator("b.text-xl").innerText()).replace(/[^0-9.]/g, ""));
+  expect(Math.abs(after - before - 66.67) < 0.01, `on hand ${before} → ${after}`);
+  await row.getByRole("button", { name: "Use" }).click();
+  await page.getByRole("dialog").getByRole("radio", { name: "Board feet" }).click();
+  await page.getByRole("dialog").locator("#lm-bf").fill("99999");
+  await page.getByRole("dialog").getByRole("button", { name: "Take from stock" }).click();
+  await page.getByText(/Only .* board feet of Acacia on hand/).first().waitFor();
+  await page.keyboard.press("Escape");
+  await page.screenshot({ path: `${SHOTS}/owner-inventory-desktop.png`, fullPage: true });
+  // craftsmen: assign a job, then reprioritise the production queue
+  await page.getByTestId("owner-nav").getByRole("link", { name: /^Craftsmen/ }).click();
+  await page.getByRole("heading", { level: 1, name: "Craftsmen" }).waitFor();
   const queueItems = page.getByTestId("planning-board").locator("ol > li");
   const second = (await queueItems.nth(1).locator("a").first().innerText()).trim();
   await queueItems.nth(1).getByRole("button", { name: "Move up" }).click();
@@ -239,26 +271,38 @@ await step("craftsman: no money on screen; cannot start production; finishes a r
 });
 
 // --------------------------------------------------------------- driver --
-await step("driver: offline action is queued locally, then syncs when online", async () => {
+await step("driver: flat rows with status pills → detail; offline action is queued locally, then syncs when online", async () => {
   const { page, ctx } = await asPersona("Jesse Decena");
   expect(page.url().endsWith("/driver"), "driver portal");
   await page.getByText("Online • Synced").waitFor();
-  expect((await page.content()).includes("COLLECT ON DELIVERY") || (await page.getByText("Collect on delivery").first().isVisible()), "collectible shown");
+  // rows: order, customer, municipality, cash to collect and a status pill (no boxed cards)
+  const rows = page.getByTestId("delivery-rows");
+  expect((await rows.getByTestId("delivery-pill").count()) === (await rows.getByTestId("delivery-row").count()), "every row has a status pill");
+  expect((await rows.innerText()).includes("In transit") && (await rows.innerText()).includes("On process"), "rider words: On process / In transit");
+  const open = async (code) => {
+    if (await page.getByTestId("delivery-back").count()) await page.getByTestId("delivery-back").click();
+    await page.locator(`[data-testid="delivery-rows"] li[data-code="${code}"]`).getByTestId("delivery-row").click();
+    return page.getByTestId("delivery-detail");
+  };
+  let detail = await open("JJ-2026-0138");
+  expect(await detail.getByText("Collect on delivery").isVisible(), "collectible shown in the detail");
   await page.getByRole("switch", { name: "Simulate Offline / Weak Signal" }).click();
-  const card = page.locator("li", { hasText: "JJ-2026-0138" });
-  await card.getByRole("button", { name: "Start Trip" }).click();
+  await detail.getByRole("button", { name: "Start Trip" }).click();
   await page.getByText("Offline • Saved Locally (1 pending)").waitFor();
   expect(await page.getByText("Saved Locally — Pending Sync").first().isVisible(), "honest local label");
   await noHorizontalScroll(page, "driver-offline-mobile");
   await page.screenshot({ path: `${SHOTS}/driver-offline-mobile.png`, fullPage: true });
-  // still works after a reload while "offline" (IndexedDB)
   await page.getByRole("switch", { name: "Simulate Offline / Weak Signal" }).click();
   await page.getByText("Online • Synced").waitFor({ timeout: 10000 });
-  await page.locator("li", { hasText: "JJ-2026-0138" }).getByRole("button", { name: "Mark Delivered & Log Cash Collected" }).click();
+  detail = page.getByTestId("delivery-detail");
+  await detail.getByRole("button", { name: "Mark Delivered & Log Cash Collected" }).click();
   await page.getByRole("button", { name: "Save delivery" }).click();
   await page.getByText(/Synced 1 action/).first().waitFor({ timeout: 10000 });
+  await page.getByTestId("delivery-back").click();
   await page.getByRole("tab", { name: /Done/ }).click();
-  expect(await page.locator("li", { hasText: "JJ-2026-0138" }).isVisible(), "delivered trip in Done tab");
+  const done = page.locator('[data-testid="delivery-rows"] li[data-code="JJ-2026-0138"]');
+  expect(await done.isVisible(), "delivered trip in Done tab");
+  expect((await done.innerText()).includes("Delivered"), "Delivered pill");
   await noHorizontalScroll(page, "driver-synced-mobile");
   await page.screenshot({ path: `${SHOTS}/driver-synced-mobile.png`, fullPage: true });
   await ctx.close();
@@ -606,7 +650,7 @@ await step("live sync: staff see a new quote request without reload; no false to
 
     // the owner makes an internal edit (re-prioritises): staff get no false "quotation accepted" toast
     const owner = await asPersona("Mr. Vincris Lelis", desktop);
-    await owner.page.getByTestId("planning-board").locator("summary").click();
+    await owner.page.goto("/owner/craftsmen");
     await owner.page.getByTestId("planning-board").locator("ol > li").nth(1).getByRole("button", { name: "Move up" }).click();
     await owner.page.waitForLoadState("networkidle");
     await staff.waitForTimeout(6000);
@@ -654,7 +698,7 @@ await step("live sync: staff see a new quote request without reload; no false to
     await cust.locator('[data-testid="live-status"][data-status="offline"]').waitFor({ timeout: 10000 });
     expect((await cust.getByTestId("live-status").innerText()).includes("Offline"), "Offline shown");
     const insp = owner.page.locator("li", { hasText: "Quality inspection" }).filter({ hasText: "JJ-2026-0145" }).first();
-    await owner.page.reload();
+    await owner.page.goto("/owner"); // inspections are decided on the dashboard
     await insp.getByRole("button", { name: "Pass" }).click();
     await owner.page.getByRole("button", { name: "Passed — ready for delivery" }).click();
     await owner.page.getByText("Inspection passed").waitFor();

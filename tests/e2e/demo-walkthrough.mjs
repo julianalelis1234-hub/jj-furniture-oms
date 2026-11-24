@@ -285,9 +285,11 @@ try {
 
   // ------------------------------------------------------------- 4b. Owner
   await role("Owner");
-  await caption("Owner (O-01) — Shop Overview & Approvals: the same live metrics and queue, plus the owner's decisions");
+  await caption("Owner dashboard — a sidebar of sections; the shop at a glance, the owner's decisions, lumber to reorder");
   await checkLayout("owner");
   await pause(4000);
+  await page.goto("/owner/orders");
+  await page.waitForLoadState("networkidle");
   drawer = await openDrawer(newCode);
   await caption("The craftsman's spec question is answered right in the order's drawer");
   const q = drawer.locator("li", { hasText: "Should the table edge be rounded" }).first();
@@ -297,6 +299,8 @@ try {
   await page.getByRole("button", { name: "Send answer to workshop" }).click();
   await toast("Marked resolved.");
   await closeDrawer();
+  await page.goto("/owner");
+  await page.waitForLoadState("networkidle");
   await scrollTo(page.getByRole("heading", { name: "Awaiting your decision" }));
   const inst = page.locator("li", { hasText: "Installment Approval" }).first();
   await scrollTo(inst);
@@ -304,15 +308,22 @@ try {
   await inst.getByRole("button", { name: "Approve" }).click();
   await page.getByRole("dialog").getByRole("button", { name: "Approve" }).click();
   await toast("Marked approved.");
+  await page.goto("/owner/craftsmen");
+  await page.waitForLoadState("networkidle");
   const board = page.getByTestId("planning-board");
-  await scrollTo(board.locator("summary"));
-  await board.locator("summary").click();
-  await caption("Planning Board: move jobs up/down or mark Urgent — craftsmen see the same order");
+  await caption("Craftsmen: workload, job assignment, and the production priority craftsmen see on their phones");
+  await pause(2500);
   const target = board.locator("ol > li", { hasText: newCode }).first();
   await scrollTo(target);
   await target.getByRole("button", { name: "Urgent" }).click();
   await toast("Priority set to Urgent.");
   await pause(2500);
+  await page.goto("/owner/inventory");
+  await page.waitForLoadState("networkidle");
+  await caption("Lumber & Inventory: board feet on hand, reorder alerts, and every receive / use / adjust entry");
+  await pause(3500);
+  await page.goto("/owner");
+  await page.waitForLoadState("networkidle");
   const insp = page.locator("li", { hasText: "Quality inspection" }).filter({ hasText: newCode }).first();
   await scrollTo(insp);
   await caption("Quality inspection passed → Ready for Delivery (stage 5/7)");
@@ -338,10 +349,11 @@ try {
   // ------------------------------------------------ 5. Delivery driver 1:30
   await role("Delivery Rider");
   await page.getByText("Online • Synced").waitFor();
-  await caption("5 · Driver portal (D-01) — only Jesse's trips, exact COLLECT ON DELIVERY amounts");
+  await caption("5 · Rider portal — one row per trip: On process / In transit / Delivered, and the cash to collect");
   await checkLayout("driver");
-  const trip = () => page.locator("li", { hasText: newCode }).first();
-  await scrollTo(trip());
+  const row = () => page.locator(`[data-testid="delivery-rows"] li[data-code="${newCode}"]`).first();
+  const trip = () => page.getByTestId("delivery-detail");
+  await scrollTo(row());
   await pause(3500);
   await page.evaluate(() => window.scrollTo(0, 0));
   await caption("Before leaving the shop: Pre-Load Assignments for Offline Travel");
@@ -350,7 +362,10 @@ try {
   await pause(1500);
   await caption("No signal on the road: Simulate Offline / Weak Signal");
   await page.getByRole("switch", { name: "Simulate Offline / Weak Signal" }).click();
+  await caption("Tap a row for the full stop: address, call, map, cash to collect and the trip buttons");
+  await row().getByTestId("delivery-row").click();
   await scrollTo(trip());
+  await pause(2000);
   await trip().getByRole("button", { name: "Start Trip" }).click();
   await page.getByText("Offline • Saved Locally (1 pending)").waitFor();
   await caption("Mark Delivered & log the cash collected — still offline");
@@ -366,8 +381,9 @@ try {
   await page.getByRole("switch", { name: "Simulate Offline / Weak Signal" }).click();
   await page.getByText("Online • Synced").waitFor({ timeout: 15000 });
   await pause(3500);
+  await page.getByTestId("delivery-back").click();
   await page.getByRole("tab", { name: /Done/ }).click();
-  await scrollTo(trip());
+  await scrollTo(row());
   await pause(2500);
 
   // --------------------------------------------------- 6. Final overview 1:00

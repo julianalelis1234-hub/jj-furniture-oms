@@ -10,6 +10,8 @@ import type {
   Order,
   OrderConfirmation,
   OrderException,
+  LumberItem,
+  LumberMovement,
   Payment,
   PaymentMethod,
   PaymentPlan,
@@ -196,6 +198,16 @@ export interface DataStore {
   /** Any profile (staff included) already using this email — staff emails are never turned into customer logins. */
   emailBelongsToStaff(email: string): Promise<boolean>;
   insertCustomerProfile(row: { id: string; email: string; full_name: string }): Promise<CustomerAccount>;
+
+  // ------------------------------------------------- lumber & inventory (010)
+  listLumberItems(): Promise<LumberItem[]>;
+  /** owner only; opening stock is recorded as a receive movement */
+  insertLumberItem(row: Pick<LumberItem, "wood_name" | "wood_type" | "size_note" | "reorder_level_bf">): Promise<LumberItem>;
+  /** owner only: name, size, reorder level, archive. Never on_hand_bf. */
+  updateLumberItem(id: string, patch: Partial<Pick<LumberItem, "wood_name" | "wood_type" | "size_note" | "reorder_level_bf" | "is_active">>): Promise<LumberItem>;
+  listLumberMovements(itemId?: string): Promise<LumberMovement[]>;
+  /** append-only; updates on_hand_bf atomically, refuses negative stock; idempotent on client_transaction_id */
+  insertLumberMovement(row: Omit<LumberMovement, "id" | "created_at">): Promise<{ movement: LumberMovement; duplicate: boolean }>;
 
   /** A store with elevated privileges for narrowly-scoped server operations. */
   elevated(): DataStore;

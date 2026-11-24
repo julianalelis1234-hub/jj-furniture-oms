@@ -21,7 +21,9 @@ import { createCustomerRequest } from "@/lib/services/customer";
 import { scheduleDelivery } from "@/lib/services/deliveries";
 import { decideException, requestException, reviewCustomerProposal } from "@/lib/services/exceptions";
 import { retryNotification, SMS_SIMULATED_NOTE, smsMode } from "@/lib/services/notify";
+import { addLumberItem, recordLumberMovement, setReorderLevel } from "@/lib/services/inventory";
 import {
+  assignCraftsman,
   confirmOrder,
   createOrder,
   editOrderDetails,
@@ -300,4 +302,23 @@ export async function customerRequestAction(_: unknown, fd: FormData): Promise<A
       notes: o.special_instructions, submitted_at: o.created_at,
     };
   }, "Order sent. Keep your order slip.");
+}
+
+// ------------------------------------------------------- owner: craftsmen + inventory
+export async function assignCraftsmanAction(orderId: string, craftsmanId: string | null) {
+  return run(["owner", "staff"], async (a) => { await assignCraftsman(await getStore(), a, orderId, craftsmanId || null); },
+    craftsmanId ? "Craftsman assigned." : "Craftsman unassigned.");
+}
+
+export async function addLumberItemAction(_: unknown, fd: FormData) {
+  return run(["owner"], async (a) => { await addLumberItem(await getStore(), a, Object.fromEntries(fd)); }, "Lumber item added. Record its opening stock as a receive.");
+}
+
+export async function setReorderLevelAction(itemId: string, level: number) {
+  return run(["owner"], async (a) => { await setReorderLevel(await getStore(), a, itemId, level); }, "Reorder level saved.");
+}
+
+export async function recordLumberAction(_: unknown, fd: FormData) {
+  return run(["owner", "staff"], async (a) => (await recordLumberMovement(await getStore(), a, Object.fromEntries(fd))).movement,
+    (m) => `${m.kind === "receive" ? "Received" : m.kind === "use" ? "Used" : "Adjusted"} ${Math.abs(m.board_feet).toLocaleString("en-PH")} board feet.`);
 }

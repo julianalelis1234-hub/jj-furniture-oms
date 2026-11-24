@@ -422,3 +422,34 @@ export interface OutboxRow {
   sent_at: string | null;
 }
 export type NewOutboxRow = Pick<OutboxRow, "kind" | "order_id" | "recipient_email" | "customer_user_id" | "review_token_id" | "template_data" | "idempotency_key" | "encrypted_payload" | "requested_by_user_id"> & { max_attempts?: number };
+
+// ------------------------------------------------------------ lumber (migration 010)
+export const LUMBER_MOVEMENT_KINDS = ["receive", "use", "adjust"] as const;
+export type LumberMovementKind = (typeof LUMBER_MOVEMENT_KINDS)[number];
+
+export interface LumberItem {
+  id: string;
+  wood_name: string;
+  wood_type: WoodType;
+  /** e.g. 2" × 4" × 10 ft */
+  size_note: string | null;
+  reorder_level_bf: number;
+  /** maintained only by movements (row-locked in Postgres); never below zero */
+  on_hand_bf: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface LumberMovement {
+  id: string;
+  item_id: string;
+  kind: LumberMovementKind;
+  /** receive / use: positive; adjust: signed */
+  board_feet: number;
+  order_id: string | null;
+  note: string | null;
+  recorded_by: string | null;
+  client_transaction_id: string | null;
+  created_at: string;
+}
