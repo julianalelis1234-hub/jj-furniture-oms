@@ -4,7 +4,7 @@ import { CircleHelp, Hourglass, PackageCheck, Ruler } from "lucide-react";
 import { useState } from "react";
 import { requestExceptionAction, transitionAction } from "@/app/actions";
 import { ActionDialog } from "@/components/action-dialog";
-import { EmptyState } from "@/components/app-shell";
+import { EmptyState } from "@/components/empty-state";
 import { Field, TextArea } from "@/components/form";
 import { PriorityBadge } from "@/components/status";
 import { formatDate, todayISO, daysBetween } from "@/lib/domain/dates";

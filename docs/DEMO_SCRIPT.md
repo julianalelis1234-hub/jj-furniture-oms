@@ -34,7 +34,7 @@ data and real application features. Nothing is faked except where it says
 | JJ-2026-0145 | Maria Santos | Urgent dining table, In Production |
 | DR-0148 | Ramon dela Cruz (ramon.delacruz@example.com) | Waiting — review link in the Demo Inbox |
 | DR-0147 | Josefina Lagura | Quote Requested — Option 2 request awaiting the shop's quotation |
-| Customer login | **Demo Customer Login (Maria Santos)** button, or maria.santos@example.com / Narra-Table-2026 | Dashboard with JJ-2026-0145 |
+| Customer login | **Demo Customer Login (Maria Santos)** button, or maria.santos@example.com / JJ-Demo-2026 | Dashboard with JJ-2026-0145 |
 | JJ-2026-0136 | Pedro & Ana Bautista | Out for Delivery (driver Jesse) |
 | JJ-2026-0133 | Lourdes Ybañez | Delivered, unpaid balance (approved credit); legacy order, no email, not linked to any account |
 

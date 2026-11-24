@@ -3,7 +3,7 @@
 import { Search } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { EmptyState } from "@/components/app-shell";
+import { EmptyState } from "@/components/empty-state";
 import { NativeSelect, TextInput } from "@/components/form";
 import { StatusBadge } from "@/components/status";
 import type { ClientOrder } from "@/lib/client-order";

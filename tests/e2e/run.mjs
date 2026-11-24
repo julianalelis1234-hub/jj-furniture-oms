@@ -44,12 +44,14 @@ const browser = await chromium.launch(process.env.PW_EXECUTABLE ? { executablePa
 const mobile = { viewport: { width: 390, height: 844 }, deviceScaleFactor: 1, isMobile: true, hasTouch: true };
 const desktop = { viewport: { width: 1280, height: 900 }, deviceScaleFactor: 1 };
 
+const ACCOUNT = { "Gilbert Decena": "Staff", "Mr. Vincris Lelis": "Owner", "Nolito Remulta": "Craftsman", "Jesse Decena": "Delivery Rider" };
+/** Sign in with the fixed demo account of that persona (Demo Mode login page). */
 async function asPersona(name, opts = mobile) {
   const ctx = await browser.newContext({ ...opts, baseURL: BASE });
   const page = await ctx.newPage();
   page.on("pageerror", (e) => results.push(`warn - page error (${name}): ${e.message}`));
-  await page.goto("/");
-  await page.getByRole("button", { name: `Enter as ${name}` }).click();
+  await page.goto("/login");
+  await page.getByRole("button", { name: `Sign in as ${ACCOUNT[name]}` }).click();
   await page.waitForLoadState("networkidle");
   return { ctx, page };
 }
@@ -509,8 +511,8 @@ await step("live sync: staff see a new quote request without reload; no false to
     // staff dashboard, connected
     const sctx = await gl.newContext({ ...desktop, baseURL: BASE });
     const staff = await sctx.newPage();
-    await staff.goto("/");
-    await staff.getByRole("button", { name: "Enter as Gilbert Decena" }).click();
+    await staff.goto("/login");
+    await staff.getByRole("button", { name: "Sign in as Staff" }).click();
     await staff.waitForURL(/\/staff$/);
     await live(staff).waitFor({ timeout: 15000 });
     expect((await live(staff).innerText()).includes("Live Sync Active"), "Live Sync Active label");
@@ -651,7 +653,7 @@ await step("3D turntable: exact W×H×D labels, non-blocking warning, NULL → 2
 });
 
 await step("security: craftsman cannot open office or driver pages", async () => {
-  const { page, ctx } = await asPersona("Carlo");
+  const { page, ctx } = await asPersona("Nolito Remulta");
   for (const path of ["/owner", "/staff", "/driver"]) {
     await page.goto(path);
     expect(page.url().endsWith("/craftsman"), `${path} should bounce to /craftsman, got ${page.url()}`);

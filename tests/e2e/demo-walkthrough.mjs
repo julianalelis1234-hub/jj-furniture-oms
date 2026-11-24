@@ -68,7 +68,7 @@ async function checkLayout(label) {
   if (sw > iw + 1) throw new Error(`${label}: horizontal scroll (${sw}px content on ${iw}px screen)`);
   if (await page.getByText(/Application error|Something went wrong on the server|404/).count()) throw new Error(`${label}: error screen`);
 }
-const PORTAL = { Owner: "/owner", Staff: "/staff", Craftsmen: "/craftsman", "Delivery Driver": "/driver", Customer: "/customer/login" };
+const PORTAL = { Owner: "/owner", Staff: "/staff", Craftsmen: "/craftsman", "Delivery Rider": "/driver", Customer: "/customer/login" };
 async function role(name) {
   await closeDrawer();
   await page.getByRole("navigation", { name: "Switch demo role" }).getByRole("button", { name: new RegExp(`^${name}`) }).click();
@@ -104,7 +104,10 @@ let newCode = "";
 let orderId = "";
 try {
   // ---------------------------------------------------------------- 0. reset
-  await page.goto("/");
+  // the all-roles Demo account: role-switcher bar + Reset Demo Data
+  await page.goto("/login");
+  await page.getByRole("button", { name: "Sign in as Demo (all roles)" }).click();
+  await page.waitForURL(/\/owner/);
   await page.getByRole("button", { name: "Reset Demo Data" }).click();
   await toast("Demo data restored");
   await page.reload();
@@ -172,7 +175,9 @@ try {
   await pause(2500);
 
   // --------------------------------------------------- 3. Customer portal 1:00
-  await role("Customer");
+  await closeDrawer();
+  await page.goto("/customer/login"); // the public customer entry (Option 1 login / Option 2 customize)
+  await page.waitForLoadState("networkidle");
   await caption("3 · Customer portal (CU-01) — Option 1: log in with email + password · Option 2: customize & request a quote");
   if (await page.locator("#order_code, #pin").count()) throw new Error("retired Order ID + PIN lookup is still on the page");
   await checkLayout("customer portal");
@@ -329,7 +334,7 @@ try {
   await pause(1500);
 
   // ------------------------------------------------ 5. Delivery driver 1:30
-  await role("Delivery Driver");
+  await role("Delivery Rider");
   await page.getByText("Online • Synced").waitFor();
   await caption("5 · Driver portal (D-01) — only Jesse's trips, exact COLLECT ON DELIVERY amounts");
   await checkLayout("driver");

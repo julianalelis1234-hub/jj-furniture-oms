@@ -53,7 +53,7 @@ export function MobileNav({ portal }: { portal: Role | "customer" }) {
   const is = (i: Item) => (i.match ? i.match(path) : path === i.href);
   if (!cfg.action && cfg.left.length + cfg.right.length <= 1) return null; // a single destination needs no bar
   return (
-    <nav aria-label="Quick navigation" className="no-print fixed inset-x-0 bottom-0 z-40 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] md:hidden">
+    <nav aria-label="Quick navigation" className="no-print fixed inset-x-0 bottom-0 z-30 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] md:hidden">
       <div className="mx-auto flex max-w-sm items-center justify-around rounded-full border border-border bg-card/95 px-2 py-1.5 shadow-[0_12px_32px_-10px_rgba(43,29,23,0.45)] backdrop-blur">
         {cfg.left.map((i) => <NavLink key={i.href} item={i} active={is(i)} />)}
         {cfg.action && (

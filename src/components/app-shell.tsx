@@ -4,6 +4,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { signOut } from "@/app/actions";
 import { isDemoMode } from "@/lib/config";
+import { demoSwitcherAllowed } from "@/lib/server/context";
 import type { Actor, Role } from "@/lib/domain/types";
 import { Button } from "@/components/ui/button";
 import { DemoBar } from "./demo-bar";
@@ -31,7 +32,7 @@ export function Logo() {
   );
 }
 
-export function AppShell({
+export async function AppShell({
   portal,
   actor,
   headerExtra,
@@ -46,10 +47,11 @@ export function AppShell({
   children: ReactNode;
 }) {
   const demo = isDemoMode();
+  const switcher = await demoSwitcherAllowed(); // role-switcher bar: the all-roles Demo account only
   const p = PORTAL_LABEL[portal];
   return (
     <div className="flex min-h-dvh flex-col">
-      {demo && <DemoBar current={portal} />}
+      {switcher && <DemoBar current={portal} />}
       {/* Espresso navigation anchor in both modes: the `dark` class scopes the dark tokens to the header */}
       <header className="dark no-print sticky top-0 z-30 border-b border-border bg-background/95 text-foreground backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-2.5">
@@ -116,11 +118,4 @@ export function Section({ title, count, children, action }: { title: string; cou
   );
 }
 
-export function EmptyState({ title, children }: { title: string; children?: ReactNode }) {
-  return (
-    <div className="rounded-xl border border-dashed bg-card p-6 text-center">
-      <p className="font-semibold">{title}</p>
-      {children && <p className="mt-1 text-sm text-muted-foreground">{children}</p>}
-    </div>
-  );
-}
+export { EmptyState } from "./empty-state";

@@ -17,7 +17,7 @@ import {
 import { useCallback, useEffect, useRef, useState } from "react";
 import { LIVE_DOM_EVENT } from "@/components/live-sync-client";
 import { toast } from "sonner";
-import { EmptyState } from "@/components/app-shell";
+import { EmptyState } from "@/components/empty-state";
 import { DesignNote } from "@/components/design-note";
 import { Field, NativeSelect, TextArea, TextInput } from "@/components/form";
 import { Button } from "@/components/ui/button";

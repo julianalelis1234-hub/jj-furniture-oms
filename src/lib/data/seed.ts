@@ -41,8 +41,11 @@ export const DEMO_PERSONA: Record<Profile["role"], string> = {
   driver: STAFF.jesse,
 };
 
+/** One shared password for every Demo Mode account (fictional; never used on the live site). */
+export const DEMO_ACCOUNT_PASSWORD = "JJ-Demo-2026";
+
 /** Demo customer login (fictional) — shown on /customer/login in Demo Mode only. */
-export const DEMO_CUSTOMER_LOGIN = { email: "maria.santos@example.com", password: "Narra-Table-2026", name: "Maria Santos" };
+export const DEMO_CUSTOMER_LOGIN = { email: "maria.santos@example.com", password: DEMO_ACCOUNT_PASSWORD, name: "Maria Santos" };
 
 /** Fictional customer emails (example.com is reserved for documentation). Walk-ins have none. */
 const SEED_EMAIL: Record<string, string | "walk-in"> = {
@@ -511,10 +514,27 @@ export type DemoDataset = "curated" | "fixtures";
 /** Demo Mode shows the curated five; the test suites start the server with DEMO_DATASET=fixtures. */
 export const demoDataset = (): DemoDataset => (process.env.DEMO_DATASET === "fixtures" ? "fixtures" : "curated");
 
-const DEMO_PASSWORD = "Narra-Table-2026";
+const DEMO_PASSWORD = DEMO_ACCOUNT_PASSWORD;
 export const CURATED_CUSTOMER_LOGIN = { email: "juliana.lelis@example.com", password: DEMO_PASSWORD, name: "Juliana Lelis" };
 /** The one-click Demo Customer Login for the active dataset. */
 export const demoCustomerLogin = () => (demoDataset() === "fixtures" ? DEMO_CUSTOMER_LOGIN : CURATED_CUSTOMER_LOGIN);
+
+/**
+ * The six Demo Mode accounts (fictional emails, shared DEMO_ACCOUNT_PASSWORD).
+ *  - "demo": one login for presentations; shows the role-switcher bar for every portal
+ *  - owner / staff / craftsman / rider: fixed logins that only ever see their own portal
+ *  - customer: the demo customer (standard customer login)
+ * The live site never uses these: its staff and customers sign in with real Supabase accounts.
+ */
+export type DemoAccount = { key: "demo" | "owner" | "staff" | "craftsman" | "rider" | "customer"; email: string; label: string; person: string; profileId?: string; all?: boolean };
+export const demoAccounts = (): DemoAccount[] => [
+  { key: "demo", email: "demo@jj-enterprises.example", label: "Demo (all roles)", person: "Switch between every portal", profileId: STAFF.owner, all: true },
+  { key: "owner", email: "owner@jj-enterprises.example", label: "Owner", person: "Mr. Vincris Lelis", profileId: STAFF.owner },
+  { key: "staff", email: "staff@jj-enterprises.example", label: "Staff", person: "Gilbert Decena", profileId: STAFF.gilbert },
+  { key: "craftsman", email: "craftsman@jj-enterprises.example", label: "Craftsman", person: "Nolito Remulta", profileId: STAFF.nolito },
+  { key: "rider", email: "rider@jj-enterprises.example", label: "Delivery Rider", person: "Jesse Decena", profileId: STAFF.jesse },
+  { key: "customer", email: demoCustomerLogin().email, label: "Customer", person: demoCustomerLogin().name },
+];
 
 const CURATED: SeedOrder[] = [
   {

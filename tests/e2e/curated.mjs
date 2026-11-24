@@ -8,11 +8,12 @@ const results = []; let failures = 0;
 const expect = (c, m) => { if (!c) throw new Error(m); };
 async function step(name, fn) { try { await fn(); results.push(`ok   - ${name}`); } catch (e) { failures++; results.push(`FAIL - ${name}\n       ${String(e?.message ?? e).split("\n")[0]}`); } }
 const browser = await chromium.launch({ args: ["--use-angle=swiftshader", "--enable-unsafe-swiftshader"] });
+const ACCOUNT = { "Gilbert Decena": "Staff", "Mr. Vincris Lelis": "Owner", "Nolito Remulta": "Craftsman", "Jesse Decena": "Delivery Rider" };
 async function as(name, viewport, theme = "light") {
   const ctx = await browser.newContext({ viewport, baseURL: BASE, reducedMotion: "reduce" });
   await ctx.addInitScript((t) => localStorage.setItem("theme", t), theme);
   const page = await ctx.newPage();
-  await page.goto("/"); await page.getByRole("button", { name: `Enter as ${name}` }).click(); await page.waitForLoadState("networkidle");
+  await page.goto("/login"); await page.getByRole("button", { name: `Sign in as ${ACCOUNT[name]}` }).click(); await page.waitForLoadState("networkidle");
   return { ctx, page };
 }
 const noScroll = async (page, label) => { const w = await page.evaluate(() => [document.documentElement.scrollWidth, innerWidth]); expect(w[0] <= w[1] + 1, `${label}: horizontal scroll ${w}`); };
@@ -115,6 +116,46 @@ await step("Rea Caday accepts JJ-2026-1002 from the emailed link, creates her pa
   await page.waitForURL(/\/customer\/orders/);
   expect((await page.getByTestId("customer-orders").innerText()).includes("JJ-2026-1002"), "Rea sees her order");
   await ctx.close();
+});
+
+await step("six demo accounts: wrong password refused; fixed role accounts get no role switcher; Demo account does", async () => {
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 }, baseURL: BASE });
+  const page = await ctx.newPage();
+  await page.goto("/login");
+  expect((await page.getByTestId("demo-accounts").locator("button").count()) === 6, "six demo accounts listed");
+  await page.fill("#email", "owner@jj-enterprises.example"); await page.fill("#password", "wrong-password");
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  await page.getByRole("alert").getByText("Wrong email or password.").waitFor();
+  for (const [label, path] of [["Owner", "/owner"], ["Staff", "/staff"], ["Craftsman", "/craftsman"], ["Delivery Rider", "/driver"]]) {
+    await page.goto("/login"); await page.getByRole("button", { name: `Sign in as ${label}` }).click();
+    await page.waitForURL((u) => u.pathname === path);
+    expect((await page.getByRole("navigation", { name: "Switch demo role" }).count()) === 0, `${label}: no role switcher`);
+    await page.getByRole("button", { name: /Exit|Sign out/ }).first().click(); await page.waitForURL((u) => u.pathname === "/");
+  }
+  await page.goto("/login"); await page.getByRole("button", { name: "Sign in as Customer" }).click();
+  await page.waitForURL(/\/customer\/orders/);
+  expect((await page.getByTestId("customer-orders").innerText()).includes("JJ-2026-1001"), "customer account opens its orders");
+  await page.goto("/login"); await page.getByRole("button", { name: "Sign in as Demo (all roles)" }).click();
+  await page.waitForURL(/\/owner/);
+  const bar = page.getByRole("navigation", { name: "Switch demo role" });
+  await bar.getByRole("button", { name: /^Staff/ }).click(); await page.waitForURL(/\/staff/);
+  await bar.getByRole("button", { name: /^Delivery Rider/ }).click(); await page.waitForURL(/\/driver/);
+  await bar.getByRole("button", { name: /^Customer/ }).click(); await page.waitForURL(/\/customer\/orders/);
+  expect((await bar.count()) === 1, "switcher stays on the customer portal for the Demo account");
+  await ctx.close();
+});
+
+await step("landing page: sample work + about us, login button, no testimonials, no horizontal scroll at 390px", async () => {
+  for (const vp of [{ width: 1440, height: 900 }, { width: 390, height: 844 }]) {
+    const ctx = await browser.newContext({ viewport: vp, baseURL: BASE }); const page = await ctx.newPage();
+    await page.goto("/");
+    await page.getByRole("heading", { name: "Sample work" }).waitFor();
+    await page.getByRole("heading", { name: "About JJ Enterprises" }).waitFor();
+    expect(!(await page.content()).toLowerCase().includes("testimonial"), "no testimonials");
+    await noScroll(page, `landing ${vp.width}`);
+    await page.getByTestId("landing-login").click(); await page.waitForURL(/\/login/);
+    await ctx.close();
+  }
 });
 
 await browser.close();
