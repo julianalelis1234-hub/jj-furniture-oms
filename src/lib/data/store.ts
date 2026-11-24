@@ -11,6 +11,8 @@ import type {
   OrderConfirmation,
   OrderException,
   Payment,
+  PaymentMethod,
+  PaymentPlan,
   Profile,
   RevisionType,
   SpecRevision,
@@ -33,8 +35,11 @@ export type ComputedOrderFields =
 
 /** Account linking and verification are never set at insert (migration 005). */
 type ServerOnlyOrderFields = "customer_user_id" | "email_verified_at" | "provisioning_status" | "legacy_contact_unknown";
+/** Set by the confirm / quotation / acceptance steps (migration 009); seeds may preset them. */
+type FlowOrderFields = "confirmed_at" | "quotation_issued_at" | "payment_plan" | "preferred_payment_method";
 
-export type NewOrderRow = Omit<Order, ComputedOrderFields | ServerOnlyOrderFields | "order_origin" | "client_request_key" | "customer_email" | "has_no_email"> & {
+export type NewOrderRow = Omit<Order, ComputedOrderFields | ServerOnlyOrderFields | FlowOrderFields | "order_origin" | "client_request_key" | "customer_email" | "has_no_email"> &
+  Partial<Pick<Order, FlowOrderFields>> & {
   is_legacy_incomplete?: boolean;
   order_origin?: Order["order_origin"];
   client_request_key?: string | null;
@@ -83,7 +88,11 @@ export interface AcceptRevisionInput {
   method: ConfirmationMethod;
   confirmed_by_name: string;
   recorded_by: string | null;
+  /** legacy DR- codes only; codes are final from submission since migration 009 */
   new_order_code: string | null;
+  /** the customer's payment terms and preferred channel (migration 009) */
+  payment_plan: PaymentPlan;
+  payment_method: PaymentMethod | null;
 }
 export interface AcceptRevisionResult {
   confirmation_id: string;
@@ -143,7 +152,7 @@ export interface DataStore {
   /** Specification revisions — immutable; created only through addSpecRevision (row-locked in Postgres). */
   listRevisions(orderId: string): Promise<SpecRevision[]>;
   addSpecRevision(input: AddRevisionInput): Promise<AddRevisionResult>;
-  /** Customer acceptance of one exact revision + quotation; moves the order to Confirmed atomically. */
+  /** Acceptance of the issued quotation of a Confirmed order + payment plan; no status change (migration 009). */
   acceptOrderRevision(input: AcceptRevisionInput): Promise<AcceptRevisionResult>;
 
   /** Acceptance events are append-only and written only by acceptOrderRevision. */
@@ -175,6 +184,8 @@ export interface DataStore {
   issueReviewToken(input: { order_id: string; revision_id: string; token_hash: string; ttl_hours: number }): Promise<{ token_id: string; expires_at: string; sent_to_email: string }>;
   /** consume_quote_review_token(): atomic, single use; verifies the inbox for that order on success. */
   consumeReviewToken(tokenHash: string): Promise<ConsumeReviewResult>;
+  /** claim_customer_orders(): links every email-verified, unlinked order with the account's email. */
+  claimCustomerOrders(userId: string): Promise<number>;
   /** link_customer_account(): idempotent; requires verified email that equals the account email. */
   linkCustomerAccount(orderId: string, userId: string): Promise<{ linked: boolean; already: boolean }>;
   /** Orders linked to a verified customer account. */

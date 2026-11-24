@@ -57,18 +57,18 @@ const quote = (overrides: Record<string, unknown> = {}) => ({
 });
 
 describe("Option 2 — customer self-service quote request", () => {
-  it("creates a Quote Requested order with no price / slip / date, revision 1 = customer_request, no PIN, unverified email", async () => {
+  it("an online order gets its permanent JJ code at once (also its slip no.), waits for confirmation, no price, no PIN", async () => {
     const store = await seededStore();
     const { order } = await createCustomerRequest(store, request());
     expect(order.pin_code_hash).toBeNull();
     expect(order.customer_email).toBe("josefina@example.com");
     expect(order.email_verified_at).toBeNull();
     expect(order.customer_user_id).toBeNull();
-    expect(order.order_code).toMatch(/^DR-\d{4}$/);
-    expect(order.status).toBe("Quote Requested");
+    expect(order.order_code).toMatch(new RegExp(`^JJ-${new Date().getFullYear()}-\\d{4}$`));
+    expect(order.status).toBe("Waiting for Confirmation");
     expect(order.order_origin).toBe("customer_self_service");
     expect(order.furniture_price).toBeNull();
-    expect(order.paper_slip_number).toBeNull();
+    expect(order.paper_slip_number).toBe(order.order_code); // the printable order slip
     expect(order.estimated_completion_date).toBeNull();
     expect(order.standard_down_payment_due).toBe(0);
     const [rev] = await store.listRevisions(order.id);
@@ -78,10 +78,10 @@ describe("Option 2 — customer self-service quote request", () => {
     // craftsmen never see intake requests
     expect((await store.listWorkshopOrders()).some((w) => w.id === order.id)).toBe(false);
     const view = await customerOrderView(store, order.id);
-    expect(view.spec_state).toBe("quote_requested");
-    // nothing to accept yet
-    expect((await err(customerAccept(store, order.id))).code).toBe("PENDING_REVIEW");
-    expect((await err(transitionOrder(store, actors.owner, order.id, "Confirmed"))).code).toBe("INVALID_TRANSITION");
+    expect(view.spec_state).toBe("submitted");
+    // nothing to accept yet, and production cannot be skipped to
+    expect((await err(customerAccept(store, order.id, 1))).code).toBe("PENDING_REVIEW");
+    expect((await err(transitionOrder(store, actors.owner, order.id, "In Production"))).code).toBe("INVALID_TRANSITION");
   });
 
   it("is idempotent, rate-limited per phone and rejects bots", async () => {
@@ -95,13 +95,16 @@ describe("Option 2 — customer self-service quote request", () => {
     expect((await err(createCustomerRequest(store, request({ website: "spam", customer_phone: "09000000999" })))).code).toBe("VALIDATION");
   });
 
-  it("staff issue the official quotation (paper slip + date required) -> Waiting for Confirmation, valid QUOTE_VALIDITY_DAYS", async () => {
+  it("after confirming, staff issue the official quotation (completion date required) -> stays Confirmed, valid QUOTE_VALIDITY_DAYS", async () => {
     const store = await seededStore();
     const { order } = await createCustomerRequest(store, request());
-    expect((await err(reviseSpecs(store, actors.staff, order.id, quote({ paper_slip_number: "" }), 1))).code).toBe("VALIDATION");
+    await transitionOrder(store, actors.staff, order.id, "Confirmed");
+    expect((await customerOrderView(store, order.id)).spec_state).toBe("awaiting_quotation");
+    expect((await err(reviseSpecs(store, actors.staff, order.id, quote({ estimated_completion_date: "" }), 1))).code).toBe("VALIDATION");
     expect((await err(reviseSpecs(store, actors.craftsman, order.id, quote(), 1))).code).toBe("FORBIDDEN");
     const quoted = await reviseSpecs(store, actors.staff, order.id, quote(), 1);
-    expect(quoted.status).toBe("Waiting for Confirmation");
+    expect(quoted.status).toBe("Confirmed");
+    expect(quoted.quotation_issued_at).not.toBeNull();
     expect(quoted.current_revision).toBe(2);
     expect(quoted.furniture_price).toBe(9500);
     expect(quoted.delivery_fee).toBe(600);
@@ -111,8 +114,11 @@ describe("Option 2 — customer self-service quote request", () => {
     expect(rev.revision_type).toBe("revised_quote");
     expect(Date.parse(rev.expires_at!) - Date.parse(rev.quoted_at!)).toBe(quoteValidityDays() * 86_400_000);
     const view = await customerOrderView(store, order.id);
-    expect(view.spec_state).toBe("awaiting_confirmation");
+    expect(view.spec_state).toBe("awaiting_acceptance");
     expect(view.current?.expires_at).toBe(rev.expires_at);
+    // the "choose how to pay" email is queued (no secret in it: the order page needs a login)
+    const mail = (await store.listOutbox({ orderId: order.id })).find((r) => r.kind === "quotation_payment_request");
+    expect(mail?.encrypted_payload ?? null).toBeNull();
   });
 });
 
@@ -120,6 +126,7 @@ describe("atomic acceptance — accept_order_revision", () => {
   async function quotedRequest() {
     const store = await seededStore();
     const { order } = await createCustomerRequest(store, request());
+    await transitionOrder(store, actors.staff, order.id, "Confirmed");
     await reviseSpecs(store, actors.staff, order.id, quote(), 1);
     const rev = (await store.listRevisions(order.id))[1];
     const base = {
@@ -173,7 +180,7 @@ describe("atomic acceptance — accept_order_revision", () => {
     expect(c.specification_accepted_at).toBe(c.quotation_accepted_at);
     expect([c.accepted_furniture_price, c.accepted_delivery_fee, c.accepted_total_amount]).toEqual([9500, 600, 10100]);
     expect(first.status).toBe("Confirmed");
-    expect(first.order_code).toMatch(/^JJ-\d{4}-\d{4}$/);
+    expect(first.order_code).toBe(order.order_code); // the code never changes after submission
     expect(first.approved_revision_number).toBe(first.current_revision);
     // the same key for a different revision is a conflict, not a silent success
     const other = await err(customerAcceptQuote(store, order.id, { ...base, revision_id: "00000000-0000-0000-0000-000000000000" }));
@@ -185,6 +192,7 @@ describe("Confirmed -> In Production: the verified 30% gate", () => {
   it("only verified furniture payments of at least 30% (centavo-exact) unlock production; then the spec locks", async () => {
     const store = await seededStore();
     const { order } = await createCustomerRequest(store, request());
+    await transitionOrder(store, actors.staff, order.id, "Confirmed");
     await reviseSpecs(store, actors.staff, order.id, quote({ furniture_price: "9999.99" }), 1);
     await customerAccept(store, order.id);
     const due = roundToCurrency(9999.99 * 0.3);

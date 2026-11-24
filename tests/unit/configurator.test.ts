@@ -4,7 +4,7 @@ import { describeDiff, diffSpecs, formatDims } from "@/lib/domain/furniture";
 import { customerOrderView, customerProposeChanges, customerRequestRepair } from "@/lib/services/customer";
 import { decideException, requestException, reviewCustomerProposal } from "@/lib/services/exceptions";
 import { createOrder, recordConfirmation, startProduction, transitionOrder } from "@/lib/services/orders";
-import { actors, customerAccept, payDown, seededStore, staffAccept, validOrderInput } from "./helpers";
+import { actors, customerAccept, issueQuotation, payDown, readyForAcceptance, seededStore, shopConfirm, staffAccept, validOrderInput } from "./helpers";
 
 const err = async (p: Promise<unknown>) => {
   try {
@@ -40,16 +40,21 @@ describe("specification revisions & customer scenarios", () => {
     expect(formatDims({ width_cm: null, height_cm: 1, depth_cm: 1 })).toBeNull();
   });
 
-  it("Scenario 1: customer confirms the latest revision -> Confirmed and linked to the revision", async () => {
+  it("Scenario 1: submit -> shop confirms -> quotation issued -> customer accepts the latest revision", async () => {
     const { store, order } = await newOrder();
+    expect((await customerOrderView(store, order.id)).spec_state).toBe("submitted");
+    await shopConfirm(store, order.id);
+    expect((await customerOrderView(store, order.id)).spec_state).toBe("awaiting_quotation");
+    await issueQuotation(store, order.id);
     const view = await customerOrderView(store, order.id);
-    expect(view.spec_state).toBe("awaiting_confirmation");
-    expect(view.current?.revision_number).toBe(1);
-    const o = await customerAccept(store, order.id, 1);
-    expect(o.status).toBe("Confirmed");
-    expect(o.approved_revision_number).toBe(1);
+    expect(view.spec_state).toBe("awaiting_acceptance");
+    expect(view.current?.revision_number).toBe(2);
+    const o = await customerAccept(store, order.id, 2);
+    expect(o.status).toBe("Confirmed"); // acceptance does not move the status (migration 009)
+    expect(o.approved_revision_number).toBe(2);
+    expect((await customerOrderView(store, order.id)).spec_state).toBe("accepted");
     const [c] = await store.listConfirmations(order.id);
-    expect(c.revision_id).toBe((await store.listRevisions(order.id))[0].revision_id);
+    expect(c.revision_id).toBe((await store.listRevisions(order.id))[1].revision_id);
     expect(c.specification_accepted_at).toBeTruthy();
     expect(c.quotation_accepted_at).toBe(c.specification_accepted_at);
     expect(c.accepted_total_amount).toBe(24000);
@@ -57,10 +62,11 @@ describe("specification revisions & customer scenarios", () => {
 
   it("Scenario 2: a proposal is a new immutable revision, raises a review, and locks nothing open", async () => {
     const { store, order } = await newOrder();
-    const res = await customerProposeChanges(store, order.id, 1, proposal);
-    expect(res.revision_number).toBe(2);
+    await readyForAcceptance(store, order.id); // confirmed, quotation = revision 2
+    const res = await customerProposeChanges(store, order.id, 2, proposal);
+    expect(res.revision_number).toBe(3);
     const o = (await store.getOrder(order.id))!;
-    expect(o.current_revision).toBe(2);
+    expect(o.current_revision).toBe(3);
     expect(o.wood_type).toBe("Gmelina"); // authoritative spec unchanged
     expect(o.specs_confirmed).toBe(false);
     expect(o.approved_revision_number).toBeNull();
@@ -71,29 +77,30 @@ describe("specification revisions & customer scenarios", () => {
     expect((await store.listNotifications(order.id)).some((n) => n.channel === "In-App")).toBe(true);
     const view = await customerOrderView(store, order.id);
     expect(view.spec_state).toBe("proposal_under_review");
-    // the customer cannot confirm their own proposal, nor the stale revision 1
-    expect((await err(customerAccept(store, order.id, 2))).code).toBe("PENDING_REVIEW");
-    expect((await err(customerAccept(store, order.id, 1))).code).toBe("STALE_REVISION");
+    // the customer cannot accept their own proposal, nor the stale revision 2
+    expect((await err(customerAccept(store, order.id, 3))).code).toBe("PENDING_REVIEW");
+    expect((await err(customerAccept(store, order.id, 2))).code).toBe("STALE_REVISION");
     // production stays locked
-    expect((await err(transitionOrder(store, actors.owner, order.id, "Confirmed"))).code).toBe("SPECS_NOT_CONFIRMED");
+    expect((await err(transitionOrder(store, actors.owner, order.id, "In Production"))).code).toBe("SPECS_NOT_CONFIRMED");
   });
 
   it("staff quote the proposal (price impact) -> customer must accept the revised quote", async () => {
     const { store, order } = await newOrder();
-    await customerProposeChanges(store, order.id, 1, proposal);
+    await readyForAcceptance(store, order.id);
+    await customerProposeChanges(store, order.id, 2, proposal);
     const ex = (await store.listExceptions(order.id)).find((e) => e.category === "Spec Clarification")!;
     // the generic "answer" path is refused for proposals
     expect((await err(decideException(store, actors.staff, ex.id, "Resolved", "ok"))).code).toBe("VALIDATION");
     const quoted = await reviewCustomerProposal(store, actors.staff, ex.id, "quote", { ...proposal, furniture_price: "31000", delivery_fee: "0" }, "Bigger table");
-    expect(quoted.current_revision).toBe(3);
+    expect(quoted.current_revision).toBe(4);
     expect(quoted.furniture_price).toBe(31000);
     expect(quoted.wood_type).toBe("Mahogany");
-    expect(quoted.status).toBe("Waiting for Confirmation");
+    expect(quoted.status).toBe("Confirmed"); // re-issued quotation; the order stays confirmed
     expect((await store.listExceptions(order.id)).find((e) => e.id === ex.id)!.status).toBe("Resolved");
-    const confirmed = await customerAccept(store, order.id, 3);
-    expect(confirmed.approved_revision_number).toBe(3);
+    const confirmed = await customerAccept(store, order.id, 4);
+    expect(confirmed.approved_revision_number).toBe(4);
     const revs = await store.listRevisions(order.id);
-    expect(revs.map((r) => r.revision_type)).toEqual(["staff_draft", "customer_proposal", "revised_quote"]);
+    expect(revs.map((r) => r.revision_type)).toEqual(["staff_draft", "revised_quote", "customer_proposal", "revised_quote"]);
   });
 
   it("staff may keep the original spec; the new quote revision equals the previous quote", async () => {
@@ -126,7 +133,7 @@ describe("specification revisions & customer scenarios", () => {
     expect(started.status).toBe("In Production");
     // once in production, specs and quote are locked
     expect((await err(store.updateOrder(order.id, { furniture_price: 1 }))).code).toBe("SPEC_LOCKED");
-    expect((await err(customerProposeChanges(store, order.id, 1, proposal))).code).toBe("SPEC_LOCKED");
+    expect((await err(customerProposeChanges(store, order.id, (await store.getOrder(order.id))!.current_revision, proposal))).code).toBe("SPEC_LOCKED");
     expect((await customerOrderView(store, order.id)).spec_state).toBe("locked");
     // later changes go through a change request
     const cr = await customerRequestRepair(store, order.id, "Please add a drawer", "change");

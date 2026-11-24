@@ -165,8 +165,8 @@ try {
   await page.waitForURL(/\/slip\?new=1/);
   newCode = (await page.locator("article .font-mono").first().innerText()).trim();
   orderId = page.url().match(/orders\/([^/]+)\/slip/)[1];
-  if (!/^DR-\d{4}$/.test(newCode)) throw new Error(`slip shows ${newCode}`);
-  await caption(`Paper slip: Order ID ${newCode}, QR code, two dates — the quotation review link went to the customer's email (no PIN)`);
+  if (!/^JJ-\d{4}-\d{4}$/.test(newCode)) throw new Error(`slip shows ${newCode}`);
+  await caption(`Paper slip: Order ID ${newCode} is permanent from the start · QR code · two dates · no PIN`);
   await checkLayout("slip");
   await pause(3500);
   await scrollTo(page.getByText("Estimated completion", { exact: false }).first());
@@ -174,78 +174,77 @@ try {
   await scrollTo(page.getByText("Collect on delivery", { exact: false }).first());
   await pause(2500);
 
-  // --------------------------------------------------- 3. Customer portal 1:00
-  await closeDrawer();
-  await page.goto("/customer/login"); // the public customer entry (Option 1 login / Option 2 customize)
+  // ------------------------------- staff confirm, then issue the quotation
+  await page.goto("/staff");
   await page.waitForLoadState("networkidle");
-  await caption("3 · Customer portal (CU-01) — Option 1: log in with email + password · Option 2: customize & request a quote");
+  let drawer = await openDrawer(newCode);
+  await caption("Step 1 · The shop confirms the order — the customer is emailed a link to create a password");
+  await pause(2500);
+  await drawer.getByTestId("next-step").getByRole("button", { name: "Confirm order" }).click();
+  await toast("Order confirmed.");
+  await pause(1500);
+  await caption("Step 2 · Issue the official quotation — the customer is emailed to accept it and choose how to pay");
+  await drawer.getByTestId("next-step").getByRole("button", { name: "Issue quotation" }).click();
+  await pause(1500);
+  await page.getByRole("dialog").filter({ has: page.locator("#q-price") }).getByRole("button", { name: "Issue quotation" }).click();
+  await toast("Quotation issued.");
+  await pause(1500);
+
+  // --------------------------------------------------- 3. Customer portal
+  await closeDrawer();
+  await page.goto("/customer/login"); // the public customer entry (Option 1 login / Option 2 design online)
+  await page.waitForLoadState("networkidle");
+  await caption("3 · Customer portal — log in with email + password, or design a piece online");
   if (await page.locator("#order_code, #pin").count()) throw new Error("retired Order ID + PIN lookup is still on the page");
   await checkLayout("customer portal");
   await pause(3000);
-  await scrollTo(page.getByTestId("option-2"));
-  await pause(2500);
-  await caption("The quotation arrives by email (demo inbox) with a single-use review link");
+  await caption("The confirmation email (demo inbox) carries a single-use link to create a password — never a password itself");
   await page.goto("/demo/inbox");
-  const mail = page.getByTestId("inbox-item").filter({ hasText: "rosalinda.abellana@example.com" }).first();
+  const mail = page.getByTestId("inbox-item").filter({ hasText: "rosalinda.abellana@example.com" }).filter({ has: page.locator('a[href^="/customer/set-password"]') }).first();
   await scrollTo(mail);
   await pause(2500);
-  const reviewHref = await mail.locator('a[href^="/customer/review"]').first().getAttribute("href");
-  await page.goto(reviewHref);
-  await caption("Opening the link verifies the email and opens ONLY this quotation (scanners cannot use it up)");
-  await pause(2000);
-  await page.getByRole("button", { name: "Open my quotation" }).click();
-  await page.waitForURL(/\/customer\/review\/quote/);
-  await page.waitForLoadState("networkidle");
-  await checkLayout("customer review");
-  await pause(2500);
-  await caption("While reviewing, the customer can explore woods and finishes live");
-  await page.getByTestId("wood-Gmelina").first().click();
-  await page.getByText("Your changes:").waitFor();
-  await pause(2500);
-  await caption("Changing anything would be sent for review — here the customer keeps the quote");
-  await page.getByRole("button", { name: "Undo my changes" }).click();
-  await pause(1200);
-  await caption("Accept Quote & Confirm Specifications — two explicit acceptances: the spec AND the quotation (valid 7 days)");
-  await page.getByRole("button", { name: "Accept Quote & Confirm Specifications" }).click();
-  await pause(1500);
-  await page.getByTestId("accept-specification").check();
-  await pause(600);
-  await page.getByTestId("accept-quotation").check();
-  await pause(1000);
-  await page.getByRole("dialog").getByRole("button", { name: "Accept quote & confirm" }).click();
-  await page.getByTestId("setup-email-sent").waitFor();
-  await caption("Accepted — the customer gets an email to create a password (never a plaintext password)");
-  await pause(3000);
-  const setupHref = await (async () => {
-    await page.goto("/demo/inbox");
-    return page.getByTestId("inbox-item").filter({ hasText: "rosalinda.abellana@example.com" }).first()
-      .locator('a[href^="/customer/set-password"]').first().getAttribute("href");
-  })();
-  await page.goto(setupHref);
+  await page.goto(await mail.locator('a[href^="/customer/set-password"]').first().getAttribute("href"));
   await page.fill("#password", "Narra-Dining-2026");
   await page.fill("#confirm", "Narra-Dining-2026");
   await pause(1200);
   await page.getByRole("button", { name: "Save password" }).click();
   await page.waitForURL(/\/customer\/orders/);
-  await caption("Customer dashboard (email + password): all their orders, 7-stage progress, 3D preview, payments");
-  await pause(3500);
-  newCode = newCode.replace(/^DR-(\d{4})$/, `JJ-${new Date().getFullYear()}-$1`);
-  await caption(`Confirmed — ${newCode} is at stage 2/7, but wood is not cut until the 30% is verified`);
-  await page.evaluate(() => window.scrollTo(0, 0));
+  await caption("Signing in proves the inbox is theirs, so the confirmed order now appears in the account");
+  await pause(3000);
+  await page.goto(`/customer/orders/${newCode}`);
+  await page.waitForLoadState("networkidle");
+  const accept = page.getByTestId("accept-quotation");
+  await scrollTo(accept);
+  await caption("Accept the quotation and choose the terms: 30% down payment, installment or full payment");
+  await pause(2500);
+  await accept.getByText("GCash / Maya").click();
+  await accept.getByText("I checked the design").click();
+  await accept.getByText("I accept the quotation").click();
+  await pause(1200);
+  await accept.getByRole("button", { name: "Accept quotation" }).click();
+  await toast("Quotation accepted.");
+  const pay = page.getByTestId("submit-payment");
+  await scrollTo(pay);
+  await caption("Pay by GCash / Maya or bank transfer: amount, reference number and a photo of the receipt");
+  await pay.locator("#reference_number").fill("GC 4410 2026 77");
+  await pay.locator("#proof").setInputFiles({ name: "gcash-receipt.png", mimeType: "image/png",
+    buffer: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64") });
+  await pause(1500);
+  await pay.getByRole("button", { name: "Send payment for checking" }).click();
+  await toast("Payment sent.");
+  await caption(`${newCode} stays at stage 2/7: no wood is cut until the shop verifies the 30%`);
   await pause(3500);
 
-  // ------------------------- staff: verified 30% -> release to the workshop
+  // ------------------------- staff: verify the payment -> release to the workshop
   await role("Staff");
-  await caption("Staff logs the 30% down payment, then releases the job to the workshop");
-  let drawer = await openDrawer(newCode, "Payments & Gate");
-  await caption("Order drawer · Payments & Gate: verified vs unverified payments, the 30% gate, balances and the separate delivery fee");
+  await caption("Staff check the reference number and receipt, verify the payment, then release the job");
+  drawer = await openDrawer(newCode, "Payments & Gate");
+  await caption("Payments & Gate: customer submissions wait here; only verified payments count toward the 30%");
   await pause(2500);
-  await drawer.getByTestId("next-step").getByRole("button", { name: "Log payment" }).click();
-  await pause(1000);
-  await page.getByRole("button", { name: "Save payment" }).click();
-  await toast("Payment recorded.");
+  await drawer.getByTestId("unverified-payment").first().getByRole("button", { name: /^Verify/ }).click();
+  await toast("Payment verified.");
   await drawer.getByTestId("next-step").getByRole("button", { name: "Release to workshop" }).click();
-  await caption("The server re-checks: verified 30%, accepted latest revision, no price drift, no blocking items");
+  await caption("The server re-checks: verified 30%, accepted latest quotation, no price drift, no blocking items");
   await pause(2500);
   await page.getByRole("dialog").getByRole("button", { name: "Start production" }).click();
   await toast("Released to the workshop.");
@@ -255,6 +254,9 @@ try {
   await role("Craftsmen");
   await caption("4 · Craftsmen portal (C-01) — priority-sorted jobs, no prices or phone numbers");
   {
+    // a full load, so the check covers exactly what the server sends to a craftsman (not data from an earlier document)
+    await page.reload();
+    await page.waitForLoadState("networkidle");
     const html = await page.content();
     const i = html.indexOf("₱");
     if (i >= 0) throw new Error("money shown on craftsman screen: …" + html.slice(Math.max(0, i - 200), i + 40).replace(/\s+/g, " ") + "… url=" + page.url());

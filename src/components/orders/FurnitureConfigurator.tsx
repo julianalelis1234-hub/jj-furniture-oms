@@ -367,7 +367,8 @@ export function FurnitureConfigurator({
 
         <Group legend="Color / finish" step={5} error={errors.color_finish}>
           <div className="grid grid-cols-2 gap-2">
-            {FINISHES.map((f) => {
+            {/* a finish written on an older order (not one of the four) stays selectable, so re-quoting never changes it silently */}
+            {[...FINISHES, ...((FINISHES as readonly string[]).includes(value.color_finish) || !value.color_finish ? [] : [value.color_finish])].map((f) => {
               const l = finishLook(value.wood_type, f);
               return (
                 <Chip key={f} name="color_finish" value={f} checked={value.color_finish === f} onSelect={() => set({ color_finish: f })} disabled={readOnly} testId={`finish-${f}`}>

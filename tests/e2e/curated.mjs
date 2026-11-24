@@ -24,13 +24,14 @@ await step("staff queue shows exactly the 5 curated orders with computed metrics
   const codes = await page.getByTestId("queue-row").evaluateAll((r) => r.map((x) => x.dataset.code).sort());
   expect(codes.join() === "JJ-2026-1001,JJ-2026-1002,JJ-2026-1003,JJ-2026-1004,JJ-2026-1005", `rows ${codes}`);
   const kpi = async (id) => (await page.getByTestId(id).innerText()).replace(/\s+/g, " ");
-  expect((await kpi("kpi-needs-quote")).includes(" 2 "), "needs quote 2");
-  expect((await kpi("kpi-workshop")).includes(" 2 "), "workshop 2");
+  expect((await kpi("kpi-to-confirm")).includes(" 1 "), "to confirm 1");
+  expect((await kpi("kpi-quote-payment")).includes(" 2 "), "quotation & payment 2");
+  expect((await kpi("kpi-workshop")).includes(" 1 "), "workshop 1");
   expect((await kpi("kpi-delivery")).includes(" 1 "), "delivery 1");
   expect((await kpi("kpi-deposits")).includes("₱25,000"), "deposits ₱25,000 (verified only)");
-  await page.getByTestId("filter-needs_quote").click();
+  await page.getByTestId("filter-to_confirm").click();
   const nq = await page.getByTestId("queue-row").allInnerTexts();
-  expect(nq.length === 1 && nq[0].includes("JJ-2026-1003") && /Intake ·\s*Quote Requested/.test(nq[0]), "Needs Quote = 1003 intake only");
+  expect(nq.length === 1 && nq[0].includes("JJ-2026-1003") && /Waiting/.test(nq[0]), `To confirm = the 1003 online order only: ${nq}`);
   await page.getByTestId("filter-active").click();
   const bon = await page.locator('[data-testid="queue-row"][data-code="JJ-2026-1005"]').innerText();
   expect(bon.includes("Walk-in · unlinked") && bon.includes("₱19,600") && bon.includes("30% due ₱5,880"), `1005 row: ${bon}`);
@@ -93,28 +94,36 @@ await step("Demo Customer Login (Juliana Lelis) sees only her own order", async 
   await ctx.close();
 });
 
-await step("Rea Caday accepts JJ-2026-1002 from the emailed link, creates her password, then logs in", async () => {
+await step("Rea Caday creates her password from the confirmation email, accepts JJ-2026-1002 with 30% down, and sends a bank transfer", async () => {
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, baseURL: BASE, reducedMotion: "reduce" });
   const page = await ctx.newPage();
   await page.goto("/demo/inbox");
-  const item = page.getByTestId("inbox-item").filter({ hasText: "rea.caday@example.com" }).filter({ has: page.locator('a[href^="/customer/review"]') }).first();
-  await page.goto(await item.locator('a[href^="/customer/review"]').first().getAttribute("href"));
-  await page.getByRole("button", { name: "Open my quotation" }).click();
-  await page.waitForURL(/\/customer\/review\/quote/);
-  await page.getByRole("button", { name: "Accept Quote & Confirm Specifications" }).click();
-  await page.getByTestId("accept-specification").check();
-  await page.getByTestId("accept-quotation").check();
-  await page.getByRole("dialog").getByRole("button", { name: "Accept quote & confirm" }).click();
-  await page.getByTestId("setup-email-sent").waitFor(); // never "log in with your usual password"
-  expect(await page.getByTestId("order-linked").count() === 0, "an account without a password must get the create-password flow");
-  await page.getByTestId("demo-setup-shortcut").getByRole("link", { name: "Set your password now" }).click();
-  await page.waitForURL(/\/customer\/set-password/);
+  const item = page.getByTestId("inbox-item").filter({ hasText: "rea.caday@example.com" }).filter({ has: page.locator('a[href^="/customer/set-password"]') }).first();
+  await page.goto(await item.locator('a[href^="/customer/set-password"]').first().getAttribute("href"));
   await page.waitForLoadState("networkidle");
   await page.fill("#password", "Mahogany-Bed-2026");
   await page.fill("#confirm", "Mahogany-Bed-2026");
   await page.getByRole("button", { name: "Save password" }).click();
   await page.waitForURL(/\/customer\/orders/);
   expect((await page.getByTestId("customer-orders").innerText()).includes("JJ-2026-1002"), "Rea sees her order");
+  await page.goto("/customer/orders/JJ-2026-1002");
+  const accept = page.getByTestId("accept-quotation");
+  await accept.waitFor();
+  expect((await accept.innerText()).includes("₱13,200"), "30% down payment shown before accepting");
+  await accept.getByText("Bank transfer").click();
+  await accept.getByText("I checked the design").click();
+  await accept.getByText("I accept the quotation").click();
+  await accept.getByRole("button", { name: "Accept quotation" }).click();
+  await page.getByText("Quotation accepted.").first().waitFor();
+  const pay = page.getByTestId("submit-payment");
+  await pay.waitFor();
+  expect((await pay.locator("#amount").inputValue()) === "13200", "the amount defaults to the 30% down payment");
+  await pay.locator("#reference_number").fill("BDO 2026 1124 0001");
+  await pay.locator("#proof").setInputFiles({ name: "deposit-slip.pdf", mimeType: "application/pdf", buffer: Buffer.from("%PDF-1.4\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF") });
+  await pay.getByRole("button", { name: "Send payment for checking" }).click();
+  await page.getByText("Payment sent.").first().waitFor();
+  await noScroll(page, "customer-pay-mobile");
+  await page.screenshot({ path: "test-results/declutter/curated-customer-pay-mobile.png", fullPage: true });
   await ctx.close();
 });
 

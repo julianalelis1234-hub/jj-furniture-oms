@@ -19,7 +19,10 @@ import {
   XCircle,
 } from "lucide-react";
 import {
+  confirmOrderAction,
   decideExceptionAction,
+  rejectPaymentAction,
+  verifyPaymentAction,
   editOrderAction,
   inspectionAction,
   logPaymentAction,
@@ -42,7 +45,10 @@ import { addDays, todayISO } from "@/lib/domain/dates";
 import { formatPeso } from "@/lib/domain/finance";
 import {
   CONFIRMATION_METHODS,
+  CUSTOMER_PAYMENT_METHODS,
   MUNICIPALITIES,
+  PAYMENT_PLAN_LABEL,
+  PAYMENT_PLANS,
   PAYMENT_EXCEPTION_TYPES,
   PAYMENT_METHODS,
   PAYMENT_TYPES,
@@ -52,6 +58,8 @@ import {
   type NotificationLog,
   type OrderException,
   type PaymentExceptionType,
+  type PaymentMethod,
+  type PaymentPlan,
   type PaymentType,
   type PriorityLabel,
   type Profile,
@@ -69,7 +77,7 @@ export function ConfirmSpecsDialog({ order }: { order: ClientOrder }) {
       trigger="Record acceptance"
       icon={<ClipboardCheck aria-hidden />}
       title={`Customer accepted ${order.order_code} · revision ${order.current_revision}?`}
-      description="Record this only after the customer accepted this exact specification AND quotation (below). Stale revisions, expired quotations and changed amounts are rejected by the server."
+      description="Record this only after the customer accepted this exact quotation (below), for example by signing it at the shop. Stale revisions, expired quotations and changed amounts are rejected by the server."
       submitLabel="Record acceptance"
       submitVariant="success"
       action={(fd) =>
@@ -81,6 +89,8 @@ export function ConfirmSpecsDialog({ order }: { order: ClientOrder }) {
           accepted_furniture_price: order.furniture_price ?? 0,
           accepted_delivery_fee: order.delivery_fee,
           client_idempotency_key: key,
+          payment_plan: s(fd, "payment_plan") as PaymentPlan,
+          payment_method: (s(fd, "payment_method") || null) as PaymentMethod | null,
         })
       }
     >
@@ -100,7 +110,46 @@ export function ConfirmSpecsDialog({ order }: { order: ClientOrder }) {
       <Field label="Confirmed by (name)" htmlFor="confirmed_by_name" required>
         <TextInput id="confirmed_by_name" name="confirmed_by_name" defaultValue={order.customer_name} required />
       </Field>
+      <Field label="Payment terms" htmlFor="payment_plan" required hint="Installment needs the owner's approval before production.">
+        <NativeSelect id="payment_plan" name="payment_plan" defaultValue="down_30"
+          options={PAYMENT_PLANS.map((p) => ({ value: p, label: PAYMENT_PLAN_LABEL[p] }))} />
+      </Field>
+      <Field label="How they will pay" htmlFor="payment_method">
+        <NativeSelect id="payment_method" name="payment_method" defaultValue="Cash" options={CUSTOMER_PAYMENT_METHODS} />
+      </Field>
     </ActionDialog>
+  );
+}
+
+/** Waiting for Confirmation -> Confirmed. The customer is then emailed to create a password (or to log in). */
+export function ConfirmOrderButton({ order }: { order: ClientOrder }) {
+  return (
+    <ActionButton variant="success" action={() => confirmOrderAction(order.id, order.version)}
+      confirmText={order.customer_email
+        ? `Confirm ${order.order_code}? ${order.customer_name} will be emailed a link to create their password; the quotation follows.`
+        : `Confirm ${order.order_code}? This is a walk-in order: tell the customer the quotation at the shop.`}>
+      <CheckCircle2 aria-hidden /> Confirm order
+    </ActionButton>
+  );
+}
+
+/** A customer's online / bank payment: open the receipt, then verify it or reject it with a reason. */
+export function VerifyPaymentControls({ paymentId, amount, reference }: { paymentId: string; amount: number; reference: string | null }) {
+  return (
+    <div className="flex flex-wrap gap-2">
+      <ActionButton variant="success" action={() => verifyPaymentAction(paymentId)}
+        confirmText={`Confirm ${formatPeso(amount)} (ref. ${reference ?? "-"}) arrived in the shop's GCash, Maya or bank account?`}>
+        <BadgeCheck aria-hidden /> Verify {formatPeso(amount)}
+      </ActionButton>
+      <ActionDialog trigger="Reject" icon={<XCircle aria-hidden />} variant="outline" title="Reject this payment"
+        description="The customer sees your reason and can submit the payment again. A rejected payment never counts."
+        submitLabel="Reject payment" submitVariant="destructive"
+        action={(fd) => rejectPaymentAction(paymentId, s(fd, "reason"))}>
+        <Field label="Reason" htmlFor={`rej-${paymentId}`} required>
+          <TextInput id={`rej-${paymentId}`} name="reason" placeholder="e.g. Reference number not found in GCash" required maxLength={300} />
+        </Field>
+      </ActionDialog>
+    </div>
   );
 }
 

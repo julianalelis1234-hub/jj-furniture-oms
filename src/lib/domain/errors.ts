@@ -19,6 +19,7 @@ export type DomainErrorCode =
   | "DUPLICATE_REQUEST"
   | "IMMUTABLE_RECORD"
   | "INVALID_REVISION"
+  | "ALREADY_ACCEPTED"
   | "BACKEND";
 
 /** HTTP-style status for API callers (409 stale, 410 expired quote, ...). */
@@ -30,6 +31,7 @@ export const HTTP_STATUS: Partial<Record<DomainErrorCode, number>> = {
   IMMUTABLE_RECORD: 403,
   NOT_FOUND: 404,
   STALE_REVISION: 409,
+  ALREADY_ACCEPTED: 409,
   VERSION_CONFLICT: 409,
   IDEMPOTENCY_CONFLICT: 409,
   DUPLICATE_SLIP: 409,
@@ -72,6 +74,7 @@ export function fromPostgresMessage(message: string, pgCode?: string): DomainErr
     "IDEMPOTENCY_CONFLICT",
     "IMMUTABLE_RECORD",
     "INVALID_REVISION",
+    "ALREADY_ACCEPTED",
   ];
   for (const code of known) {
     if (message.includes(code)) return new DomainError(code, message.replace(`${code}: `, ""));
@@ -80,6 +83,10 @@ export function fromPostgresMessage(message: string, pgCode?: string): DomainErr
     return new DomainError("DUPLICATE_REQUEST", "This request was already submitted.");
   if (message.includes("orders_quote_fields_required"))
     return new DomainError("VALIDATION", "A quotation needs a price, a paper slip number and an estimated completion date.");
+  if (message.includes("payments_online_reference_chk"))
+    return new DomainError("VALIDATION", "Online and bank payments need the transaction reference number.");
+  if (message.includes("payments_rejection_chk"))
+    return new DomainError("VALIDATION", "Give a reason for rejecting the payment.");
   if (message.includes("orders_paper_slip_number_key"))
     return new DomainError("DUPLICATE_SLIP", "That paper slip number is already encoded in another order.");
   if (message.includes("orders_other_wood_note")) return new DomainError("VALIDATION", "Describe the wood when \"Other\" is selected.");

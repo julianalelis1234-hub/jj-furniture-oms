@@ -252,6 +252,10 @@
   body { background: #fff !important; color: #000 !important; }
   .print-sheet { box-shadow: none !important; border: 0 !important; margin: 0 !important; max-width: none !important; }
   @page { size: A5 portrait; margin: 10mm; }
+  /* the online order slip prints on its own, without the page around it */
+  body:has(.print-slip) * { visibility: hidden; }
+  body:has(.print-slip) .print-slip, body:has(.print-slip) .print-slip * { visibility: visible; }
+  body:has(.print-slip) .print-slip { position: absolute; inset: 0 auto auto 0; width: 100%; border-color: #000 !important; }
 }
 
 /* ---------------------------------------------------------------- swaying tree */

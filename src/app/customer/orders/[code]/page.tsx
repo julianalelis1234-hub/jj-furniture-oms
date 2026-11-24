@@ -14,6 +14,27 @@ import { getCustomer, getCustomerStore } from "@/lib/server/customer-auth";
 import { customerOwnedOrder } from "@/lib/services/customer-portal";
 import { CustomerLogoutButton } from "../../logout-button";
 import { PostConfirmationRequest } from "./order-request";
+import { AcceptQuotation, SubmitPayment, type ShopAccounts } from "./quote-and-pay";
+import { isDemoMode } from "@/lib/config";
+import { PAYMENT_PLAN_LABEL } from "@/lib/domain/types";
+import { cn } from "@/lib/utils";
+
+/** Where customers send online / bank payments. Demo Mode shows fictional details; production reads them from the environment. */
+function shopAccounts(): ShopAccounts {
+  if (isDemoMode()) return { gcash: "GCash / Maya 0900-000-0000 · JJ Enterprises (demo)", bank: "Demo Bank · account 0000-0000-0000 · JJ Enterprises (demo)" };
+  return { gcash: process.env.SHOP_GCASH_DETAILS?.trim() || null, bank: process.env.SHOP_BANK_DETAILS?.trim() || null };
+}
+
+/** What the next payment should be: the rest of the 30% (or of the full price), minus what is already waiting to be checked. */
+function suggestedAmount(v: Awaited<ReturnType<typeof customerOwnedOrder>>["view"]): number | null {
+  const pending = v.payments.filter((x) => x.state === "pending").reduce((s, x) => s + x.amount, 0);
+  const target = v.payment_plan === "full" ? v.payment.remaining_furniture_balance
+    : v.payment_plan === "down_30" ? v.payment.standard_down_payment_due - v.payment.furniture_paid : 0;
+  const left = Math.round((target - pending) * 100) / 100;
+  return left > 0 ? left : null;
+}
+
+const PAY_STATE = { pending: "Being checked", verified: "Verified", rejected: "Not accepted" } as const;
 
 export const metadata = { title: "My order" };
 
@@ -64,13 +85,49 @@ export default async function CustomerOrderDetail({ params }: { params: Promise<
                   <dt className="text-muted-foreground">Delivery fee</dt><dd className="tabular-nums">{spec.quoted_delivery_fee === 0 ? "FREE" : formatPeso(spec.quoted_delivery_fee)}</dd>
                 </dl>
               )}
-              {v.status === "Waiting for Confirmation" && (
-                <p className="rounded-lg bg-accent-soft p-2">To accept this quotation, open the review link in the latest email from JJ Enterprises.</p>
-              )}
+              {spec?.quoted_furniture_price == null && <p className="text-muted-foreground">The price appears here once the shop issues your quotation.</p>}
             </CardContent>
           </Card>
           {spec && <FurniturePreviewSlot spec={spec.spec} legacyDimensions={spec.legacy_dimensions_text} />}
         </div>
+        <section aria-labelledby="next-title" data-testid="customer-next-step" className="grid gap-4 border-y border-border py-6">
+          <h2 id="next-title" className="text-2xl">
+            {v.spec_state === "submitted" ? "We received your order"
+              : v.spec_state === "awaiting_quotation" ? "Your order is confirmed"
+              : v.spec_state === "awaiting_acceptance" ? "Accept your quotation"
+              : v.spec_state === "accepted" || v.spec_state === "locked" ? "Payments" : "Quotation"}
+          </h2>
+          {v.spec_state === "submitted" && <p>The shop is checking your design. You will get an email once your order <b>{v.order_code}</b> is confirmed.</p>}
+          {v.spec_state === "awaiting_quotation" && <p>The shop is preparing your official quotation. It will appear here, and you will get an email when it is ready.</p>}
+          {(v.spec_state === "proposal_under_review" || v.spec_state === "needs_shop_review") && <p>The shop is reviewing a change on your order and will send you an updated quotation.</p>}
+          {v.spec_state === "quote_expired" && <p>This quotation has expired. The shop will send you a fresh one; you can also call the shop with your Order ID {v.order_code}.</p>}
+          {v.spec_state === "awaiting_acceptance" && v.current?.quoted_furniture_price != null && (
+            <AcceptQuotation orderCode={v.order_code} revisionNumber={v.current.revision_number}
+              price={v.current.quoted_furniture_price} fee={v.current.quoted_delivery_fee ?? 0} down={p.standard_down_payment_due} />
+          )}
+          {(v.spec_state === "accepted" || v.spec_state === "locked") && (<>
+            {v.payment_plan && <p>Your terms: <b>{PAYMENT_PLAN_LABEL[v.payment_plan]}</b>{v.preferred_payment_method && <> · {v.preferred_payment_method}</>}.</p>}
+            {v.payment_plan === "installment" && v.spec_state === "accepted" && <p className="text-sm text-muted-foreground">The owner reviews installment terms before production starts.</p>}
+            {p.remaining_furniture_balance > 0 && v.status !== "Delivered" && (<>
+              <SubmitPayment orderCode={v.order_code} max={p.remaining_furniture_balance} preferred={v.preferred_payment_method} accounts={shopAccounts()}
+                suggested={suggestedAmount(v)} />
+              <p className="text-sm text-muted-foreground">Paying cash? Bring it to the shop in Poblacion, Valencia City. The staff records it for you.</p>
+            </>)}
+          </>)}
+          {v.payments.length > 0 && (
+            <ul className="divide-y divide-border border-y border-border" data-testid="customer-payments">
+              {v.payments.map((x) => (
+                <li key={x.id} className="flex flex-wrap items-center gap-x-4 gap-y-1 py-3 text-sm">
+                  <b className="tabular-nums">{formatPeso(x.amount)}</b>
+                  <span className="text-muted-foreground">{x.payment_method}{x.reference_number && ` · ref. ${x.reference_number}`} · {formatDateTime(x.paid_at)}</span>
+                  <span className={cn("ml-auto rounded-full px-3 py-1 text-xs font-bold",
+                    x.state === "verified" ? "bg-success-soft text-success" : x.state === "rejected" ? "bg-destructive/10 text-destructive" : "bg-warning-soft text-warning")}>{PAY_STATE[x.state]}</span>
+                  {x.rejection_reason && <span className="w-full text-destructive">{x.rejection_reason}</span>}
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
         {v.spec_state === "locked" && (
           <Card data-testid="post-confirmation">
             <CardHeader><CardTitle>Need a change or a repair?</CardTitle></CardHeader>
@@ -90,7 +147,7 @@ export default async function CustomerOrderDetail({ params }: { params: Promise<
         <Card data-testid="payment-summary" className="gap-0 py-0">
           <CardHeader className="border-b bg-secondary py-3"><CardTitle>Payment summary</CardTitle></CardHeader>
           <CardContent className="bg-background py-4">
-            {p.furniture_price == null ? <p className="text-sm text-muted-foreground">No price yet — your quotation will be emailed to you.</p> : (
+            {p.furniture_price == null ? <p className="text-sm text-muted-foreground">No price yet. Your quotation will appear here after the shop confirms your order.</p> : (
               <dl className="grid gap-1 text-sm">
                 <div className="flex justify-between"><dt>Furniture price</dt><dd className="font-semibold tabular-nums">{formatPeso(p.furniture_price)}</dd></div>
                 <div className="flex justify-between"><dt>30% down payment</dt><dd className="tabular-nums">{formatPeso(p.standard_down_payment_due)}</dd></div>

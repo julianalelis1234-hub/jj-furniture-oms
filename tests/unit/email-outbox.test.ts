@@ -13,7 +13,7 @@ import { cronAuthorized } from "@/lib/server/request-meta";
 import { demoCustomerAuth, sha256, type CustomerAuthProvider } from "@/lib/services/customer-auth";
 import { acceptFromReview, issueReviewLink, openReviewLink } from "@/lib/services/customer-portal";
 import { createOrder } from "@/lib/services/orders";
-import { actors, seededStore, validOrderInput } from "./helpers";
+import { actors, seededStore, validOrderInput, readyForAcceptance } from "./helpers";
 
 const b64key = () => randomBytes(32).toString("base64");
 const err = async (p: Promise<unknown>) => {
@@ -37,10 +37,13 @@ const accepted = (id = "msg-1"): SendOutcome => ({ kind: "accepted", providerMes
 const timeout: SendOutcome = { kind: "retry", error: "Resend request did not complete (TimeoutError)" };
 const due = (store: MemoryStore) => { for (const o of store.t.notification_outbox) o.next_retry_at = new Date(Date.now() - 1000).toISOString(); };
 
+/** A confirmed + quoted order with an explicitly sent review link (no longer sent automatically since migration 009). */
 async function emailOrder(email = "outbox.buyer@example.com") {
   const store = (await seededStore()) as MemoryStore;
   const { order } = await createOrder(store, actors.staff, validOrderInput({ customer_email: email, furniture_price: "20000" }));
-  return { store, order, email };
+  await readyForAcceptance(store, order.id);
+  await issueReviewLink(store, order.id);
+  return { store, order: (await store.getOrder(order.id))!, email };
 }
 
 afterEach(() => {
@@ -290,8 +293,12 @@ describe("6. templates and log hygiene", () => {
     expect(q.html).not.toContain("<script>");
     expect(q.html).toContain("&lt;script&gt;");
     expect(q.html).toContain("Review &amp; Accept Quotation");
-    expect(renderEmail("order_confirmed_new_customer", d, "https://x").html).toContain("Set Your Password &amp; Track Order");
-    expect(renderEmail("order_confirmed_returning_customer", d, "https://x/customer/login").html).toContain("Log In to Track Your Order");
+    expect(renderEmail("order_confirmed_new_customer", d, "https://x").html).toContain("Create Your Password");
+    expect(renderEmail("order_confirmed_returning_customer", d, "https://x/login").html).toContain("Log In to Your Account");
+    const pay = renderEmail("quotation_payment_request", d, "https://x/customer/orders/JJ-2026-0150");
+    expect(pay.html).toContain("Review Quotation &amp; Pay");
+    expect(pay.text).toMatch(/30% down payment, installment or full payment/);
+    expect(pay.html).not.toContain("<script>");
     for (const c of ["#2B1D17", "#6B4A3A", "#C48A5A", "#FAF6F0"]) expect(q.html).toContain(c);
   });
   it("sanitized errors never contain links, tokens or addresses", () => {
@@ -320,12 +327,16 @@ describe("review fixes", () => {
     expect(pickClientIp("6.6.6.6, 203.0.113.7, 10.0.0.2", null, 2)).toBe("203.0.113.7");
     expect(pickClientIp(null, "198.51.100.4", 1)).toBe("198.51.100.4");
   });
-  it("account-setup resend is refused until the customer has accepted the quotation", async () => {
-    const { store, order, email } = await emailOrder("notyet.buyer@example.com");
-    const raw = store.t.demo_mailbox.find((m) => m.to === email)!.text.match(/token=([A-Za-z0-9_-]+)/)![1];
-    await openReviewLink(store, raw); // email verified, NOT accepted
+  it("account-setup resend is refused until the shop has confirmed the order", async () => {
+    const store = (await seededStore()) as MemoryStore;
+    const email = "notyet.buyer@example.com";
+    const { order } = await createOrder(store, actors.staff, validOrderInput({ customer_email: email, furniture_price: "20000" }));
     expect(((await err(resendForOrder(store, demoCustomerAuth(store), actors.staff, order.id, "account_setup"))) as DomainError).code).toBe("VALIDATION");
     expect(store.t.customer_accounts.some((a) => a.email === email)).toBe(false);
+    await readyForAcceptance(store, order.id);
+    await resendForOrder(store, demoCustomerAuth(store), actors.staff, order.id, "account_setup");
+    expect(store.t.customer_accounts.filter((a) => a.email === email)).toHaveLength(1); // a password-less login + set-up email
+    expect((await store.getOrder(order.id))!.customer_user_id).toBeNull(); // linked only once the inbox owner signs in
   });
   it("a delayed (cron) delivery of the set-up email updates the order's account status", async () => {
     const { store, order, email } = await emailOrder("late.buyer@example.com");

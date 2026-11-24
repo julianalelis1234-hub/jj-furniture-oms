@@ -62,11 +62,16 @@ export function ownerKpis(
 }
 
 export interface StaffTasks {
-  /** Option 2 customer self-service requests waiting for the official quotation */
-  quoteRequests: Order[];
-  /** Confirmed + 30% verified (or owner exception) + no blocking items: ready to release to the workshop */
+  /** submitted orders (online or walk-in) waiting for the shop to confirm them */
+  toConfirm: Order[];
+  /** confirmed orders whose official quotation has not been issued yet */
+  toQuote: Order[];
+  /** quotation issued; the customer has not accepted it yet */
+  awaitingAcceptance: Order[];
+  /** accepted + 30% verified (or owner exception) + no blocking items: ready to release to the workshop */
   readyForProduction: Order[];
-  needsConfirmation: Order[];
+  /** customer-submitted online / bank payments to check and verify or reject */
+  paymentsToVerify: { payment: Payment; order: Order }[];
   specProposals: OrderException[];
   needsDownPayment: { order: Order; shortfall: number }[];
   missingFields: { order: Order; missing: string[] }[];
@@ -99,14 +104,23 @@ export function staffTasks(
   const proposals = exceptions.filter((e) => e.status === "Pending" && isCustomerProposal(e));
   const blocked = (orderId: string) => exceptions.some((e) => e.order_id === orderId && e.status === "Pending" && e.is_production_blocking);
   return {
-    quoteRequests: orders.filter((o) => o.status === "Quote Requested").sort((a, b) => a.created_at.localeCompare(b.created_at)),
+    toConfirm: orders
+      .filter((o) => (o.status === "Quote Requested" || o.status === "Waiting for Confirmation") && !proposals.some((p) => p.order_id === o.id))
+      .sort((a, b) => a.created_at.localeCompare(b.created_at)),
+    toQuote: orders.filter((o) => o.status === "Confirmed" && !o.quotation_issued_at && !proposals.some((p) => p.order_id === o.id)),
+    awaitingAcceptance: orders.filter((o) => o.status === "Confirmed" && !!o.quotation_issued_at && !o.specs_confirmed && !proposals.some((p) => p.order_id === o.id)),
     readyForProduction: orders.filter(
       (o) =>
         o.status === "Confirmed" &&
+        o.specs_confirmed &&
         !blocked(o.id) &&
         (o.payment_exception_approved || downPaymentShortfall(o, payments) === 0),
     ),
-    needsConfirmation: orders.filter((o) => o.status === "Waiting for Confirmation" && !proposals.some((p) => p.order_id === o.id)),
+    paymentsToVerify: payments
+      .filter((p) => !p.verified_by_owner_or_staff && !p.rejected_at && !!p.submitted_by)
+      .sort((a, b) => a.paid_at.localeCompare(b.paid_at))
+      .map((payment) => ({ payment, order: byId.get(payment.order_id)! }))
+      .filter((x) => x.order),
     specProposals: proposals,
     needsDownPayment: orders
       .filter((o) => o.status !== "Delivered" && o.specs_confirmed && !o.payment_exception_approved)
@@ -123,7 +137,7 @@ export function staffTasks(
       .map((delivery) => ({ delivery, order: byId.get(delivery.order_id)! }))
       .filter((x) => x.order),
     cashHandovers: payments
-      .filter((p) => !p.verified_by_owner_or_staff)
+      .filter((p) => !p.verified_by_owner_or_staff && !p.rejected_at && !p.submitted_by)
       .map((payment) => ({ payment, order: byId.get(payment.order_id)! }))
       .filter((x) => x.order),
     touchUps: exceptions.filter((e) => e.category === "On-Site Scratch Touch-Up / Repair" && e.status === "Pending"),
@@ -132,12 +146,15 @@ export function staffTasks(
 }
 
 // ------------------------------------------------ 3-zone office workspace ----
-/** Stage filters of the Staff / Owner order queue. "Quote Requested" is intake, never one of the 7 stages. */
+/**
+ * Stage filters of the Staff / Owner order queue, in the order work happens (migration 009):
+ * confirm the submission, then quotation + payment, then the workshop, then delivery.
+ */
 export const QUEUE_FILTERS = [
-  { key: "active", label: "All Active", statuses: ["Quote Requested", "Waiting for Confirmation", "Confirmed", "In Production", "Completed / For Inspection", "Ready for Delivery", "Out for Delivery"] },
-  { key: "needs_quote", label: "Needs Quote", statuses: ["Quote Requested"] },
-  { key: "waiting", label: "Waiting Confirmation", statuses: ["Waiting for Confirmation"] },
-  { key: "production", label: "In Production", statuses: ["Confirmed", "In Production", "Completed / For Inspection"] },
+  { key: "active", label: "All active", statuses: ["Quote Requested", "Waiting for Confirmation", "Confirmed", "In Production", "Completed / For Inspection", "Ready for Delivery", "Out for Delivery"] },
+  { key: "to_confirm", label: "To confirm", statuses: ["Quote Requested", "Waiting for Confirmation"] },
+  { key: "quote_payment", label: "Quotation & payment", statuses: ["Confirmed"] },
+  { key: "production", label: "In production", statuses: ["In Production", "Completed / For Inspection"] },
   { key: "delivery", label: "Delivery", statuses: ["Ready for Delivery", "Out for Delivery"] },
   { key: "delivered", label: "Delivered", statuses: ["Delivered"] },
 ] as const satisfies readonly { key: string; label: string; statuses: readonly OrderStatus[] }[];
@@ -153,8 +170,9 @@ export function workspaceMetrics(orders: Order[], payments: Payment[]) {
   const count = (statuses: readonly OrderStatus[]) => orders.filter((o) => statuses.includes(o.status)).length;
   const active = new Set(orders.filter((o) => o.status !== "Delivered").map((o) => o.id));
   return {
-    needsQuoteOrAction: count(["Quote Requested", "Waiting for Confirmation"]),
-    inWorkshop: count(["Confirmed", "In Production", "Completed / For Inspection"]),
+    toConfirm: count(["Quote Requested", "Waiting for Confirmation"]),
+    quotationAndPayment: count(["Confirmed"]),
+    inWorkshop: count(["In Production", "Completed / For Inspection"]),
     delivery: count(["Ready for Delivery", "Out for Delivery"]),
     collectedDeposits: furniturePaidFrom(payments.filter((p) => active.has(p.order_id))),
     filterCounts: Object.fromEntries(QUEUE_FILTERS.map((f) => [f.key, count(f.statuses)])) as Record<QueueFilterKey, number>,

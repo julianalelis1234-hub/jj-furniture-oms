@@ -1,4 +1,4 @@
-import { ClipboardList, Hammer, Plus, Truck, Wallet } from "lucide-react";
+import { ClipboardList, Hammer, Plus, Receipt, Truck, Wallet } from "lucide-react";
 import type { ReactNode } from "react";
 import { LinkButton } from "@/components/link-button";
 import { OrderDrawer } from "@/components/office/order-drawer";
@@ -74,9 +74,10 @@ export async function OfficeWorkspace({ actor, data, title, description, basePat
         </div>
         <LinkButton href="/staff/new" variant="default" size="xl" className="rounded-full"><Plus aria-hidden /> New Walk-In / Phone Order</LinkButton>
       </div>
-      <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4" data-testid="kpi-strip">
-        <Metric testid="kpi-needs-quote" label="Needs quote / action" value={m.needsQuoteOrAction} sub="quote requests + awaiting acceptance" icon={<ClipboardList />} />
-        <Metric testid="kpi-workshop" label="In workshop" value={m.inWorkshop} sub="confirmed, building or inspection" icon={<Hammer />} />
+      <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-5" data-testid="kpi-strip">
+        <Metric testid="kpi-to-confirm" label="To confirm" value={m.toConfirm} sub="new orders to check" icon={<ClipboardList />} />
+        <Metric testid="kpi-quote-payment" label="Quotation & payment" value={m.quotationAndPayment} sub="confirmed, before production" icon={<Receipt />} />
+        <Metric testid="kpi-workshop" label="In workshop" value={m.inWorkshop} sub="building or inspection" icon={<Hammer />} />
         <Metric testid="kpi-delivery" label="Out / ready for delivery" value={m.delivery} sub="ready or on the road" icon={<Truck />} />
         <Metric testid="kpi-deposits" label="Collected deposits" value={formatPeso(m.collectedDeposits)} sub="verified furniture payments · active orders" icon={<Wallet />} />
       </div>

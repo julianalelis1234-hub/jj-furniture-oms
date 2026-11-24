@@ -49,7 +49,7 @@ export function validOrderInput(overrides: Record<string, unknown> = {}) {
 
 import type { DataStore } from "@/lib/data/store";
 import { customerAcceptQuote } from "@/lib/services/customer";
-import { recordConfirmation } from "@/lib/services/orders";
+import { recordConfirmation, transitionOrder } from "@/lib/services/orders";
 import { standardDownPayment } from "@/lib/domain/finance";
 
 /** Quote of a given revision as shown to the person accepting it. */
@@ -60,8 +60,43 @@ async function quoteOf(store: DataStore, orderId: string, revisionNumber?: numbe
   return { n, rev };
 }
 
+/** The shop confirms the submitted order (Waiting for Confirmation -> Confirmed), straight on the store. */
+export async function shopConfirm(store: DataStore, orderId: string) {
+  const o = (await store.getOrder(orderId))!;
+  if (o.status !== "Waiting for Confirmation") return o;
+  return transitionOrder(store, actors.staff, orderId, "Confirmed", { notes: "Order confirmed by the shop" });
+}
+
+/** The shop issues the quotation of a Confirmed order (a revised_quote with the current spec and price). */
+export async function issueQuotation(store: DataStore, orderId: string, price?: number) {
+  const o = (await store.getOrder(orderId))!;
+  const rev = (await store.listRevisions(orderId)).find((r) => r.revision_number === o.current_revision)!;
+  return store.addSpecRevision({
+    order_id: orderId, type: "revised_quote", expected_revision: o.current_revision, created_by_role: "staff", created_by_id: null,
+    spec: {
+      furniture_category: rev.furniture_category!, design_variant: rev.design_variant!, width_cm: rev.width_cm!, height_cm: rev.height_cm!,
+      depth_cm: rev.depth_cm!, wood_type: rev.wood_type, custom_wood_note: rev.custom_wood_note, color_finish: rev.color_finish, quantity: rev.quantity,
+      quoted_furniture_price: price ?? rev.quoted_furniture_price ?? o.furniture_price ?? 10000, quoted_delivery_fee: rev.quoted_delivery_fee ?? o.delivery_fee,
+    },
+    paper_slip_number: o.paper_slip_number ?? `S-${o.order_code}`,
+    estimated_completion_date: o.estimated_completion_date ?? new Date(Date.now() + 14 * 86_400_000).toISOString().slice(0, 10),
+  });
+}
+
+/**
+ * Migration 009: acceptance needs a Confirmed order with an issued quotation.
+ * Brings a submitted order there (confirm + issue) unless it already is.
+ */
+export async function readyForAcceptance(store: DataStore, orderId: string) {
+  await shopConfirm(store, orderId);
+  const o = (await store.getOrder(orderId))!;
+  const latest = (await store.listRevisions(orderId)).find((r) => r.revision_number === o.current_revision);
+  if (o.status === "Confirmed" && (!o.quotation_issued_at || latest?.revision_type === "customer_proposal")) await issueQuotation(store, orderId);
+}
+
 /** Customer presses [Accept Quote & Confirm Specifications] on revision n (default: latest). */
 export async function customerAccept(store: DataStore, orderId: string, revisionNumber?: number, key = crypto.randomUUID()) {
+  if (revisionNumber === undefined) await readyForAcceptance(store, orderId);
   const { n, rev } = await quoteOf(store, orderId, revisionNumber);
   return customerAcceptQuote(store, orderId, {
     revision_id: rev.revision_id,
@@ -76,6 +111,7 @@ export async function customerAccept(store: DataStore, orderId: string, revision
 
 /** Staff record an in-store / Messenger acceptance of revision n (default: latest). */
 export async function staffAccept(store: DataStore, actor: Actor, orderId: string, method: "Signed Paper Slip" | "Messenger Reply" | "Customer Portal PIN" = "Signed Paper Slip", revisionNumber?: number) {
+  if (revisionNumber === undefined) await readyForAcceptance(store, orderId);
   const { n, rev } = await quoteOf(store, orderId, revisionNumber);
   return recordConfirmation(store, actor, {
     order_id: orderId,

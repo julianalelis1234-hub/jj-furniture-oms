@@ -6,7 +6,7 @@ import { classifyOrderChange, visibleTo, type LiveEvent } from "@/lib/realtime/e
 import { createCustomerRequest } from "@/lib/services/customer";
 import { liveFeedFor } from "@/lib/services/live";
 import { createOrder, editOrderDetails, startProduction } from "@/lib/services/orders";
-import { actors, customerAccept, payDown, seededStore, staffAccept, validOrderInput } from "./helpers";
+import { actors, customerAccept, payDown, seededStore, staffAccept, validOrderInput, readyForAcceptance } from "./helpers";
 
 let n = 0;
 const ev = (p: Partial<LiveEvent>): LiveEvent => ({
@@ -39,14 +39,18 @@ describe("live feed: the demo store emits exactly what the SQL triggers emit", (
     expect(edits.every((e) => toastFor(e, "owner") === null && toastFor(e, "customer") === null)).toBe(true); // never "quotation confirmed"
   });
 
-  it("acceptance -> quote_accepted (with the committed confirmation); production -> stage_progress", async () => {
+  it("confirmation -> stage_progress; acceptance -> a confirmation event (no status change); production -> stage_progress", async () => {
     const store = (await seededStore()) as MemoryStore;
     const { order } = await createOrder(store, actors.staff, validOrderInput({ customer_email: "rt.accept@example.com", furniture_price: "20000" }));
     const mark = store.t.live_events.at(-1)!.id;
+    await readyForAcceptance(store, order.id);
+    const conf = since(store, mark).filter((e) => e.transition === "stage_progress");
+    expect(conf).toEqual([expect.objectContaining({ prev_status: "Waiting for Confirmation", status: "Confirmed" })]);
+    const m1 = store.t.live_events.at(-1)!.id;
     await customerAccept(store, order.id);
-    const acc = since(store, mark);
+    const acc = since(store, m1);
     expect(acc.map((e) => e.source)).toEqual(["order_confirmations", "orders"]);
-    expect(acc[1]).toMatchObject({ transition: "quote_accepted", prev_status: "Waiting for Confirmation", status: "Confirmed" });
+    expect(acc.every((e) => e.transition === null)).toBe(true); // the status stays Confirmed (migration 009)
     const m2 = store.t.live_events.at(-1)!.id;
     await payDown(store, order.id);
     await withActorRole("owner", () => startProduction(store, actors.owner, order.id));
@@ -144,7 +148,7 @@ describe("client live state: dedup, ordering, verified notifications", () => {
     expect(toastFor(ev({ transition: null }), "owner")).toBeNull();
     expect(toastFor(ev({ transition: "quote_accepted", actor_role: "staff" }), "staff")).toBeNull();
     expect(toastFor(ev({ transition: "quote_accepted", actor_role: "system" }), "staff")?.title).toBe("Quotation accepted");
-    expect(toastFor(ev({ op: "INSERT", status: "Quote Requested", prev_status: null, transition: "quote_requested" }), "owner")?.title).toBe("New quote request");
+    expect(toastFor(ev({ op: "INSERT", status: "Quote Requested", prev_status: null, transition: "quote_requested" }), "owner")?.title).toBe("New online order");
     expect(toastFor(ev({ op: "INSERT", status: "Quote Requested", prev_status: null, transition: "quote_requested" }), "customer")).toBeNull();
     expect(toastFor(ev({ source: "payments", payment_verified: false, transition: null }), "customer")).toBeNull();
     expect(toastFor(ev({ transition: "stage_progress", status: "In Production" }), "craftsman")).toBeNull();

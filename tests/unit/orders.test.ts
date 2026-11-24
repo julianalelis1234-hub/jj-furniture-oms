@@ -18,7 +18,7 @@ import {
 } from "@/lib/services/orders";
 import { decideException, requestException } from "@/lib/services/exceptions";
 import { scheduleDelivery } from "@/lib/services/deliveries";
-import { actors, payDown, seededStore, staffAccept, validOrderInput } from "./helpers";
+import { actors, issueQuotation, payDown, seededStore, staffAccept, validOrderInput } from "./helpers";
 
 const err = async (p: Promise<unknown>) => {
   try {
@@ -68,10 +68,11 @@ describe("1. form & input validation", () => {
     const e = await err(createOrder(store, actors.staff, validOrderInput({ paper_slip_number: "0145" })));
     expect(e.code).toBe("DUPLICATE_SLIP");
   });
-  it("creates a draft order with a DR code, normalized unverified email (no PIN) and history", async () => {
+  it("creates an order with its permanent JJ code at once, normalized unverified email (no PIN) and history", async () => {
     const store = await seededStore();
-    const { order } = await createOrder(store, actors.staff, validOrderInput());
-    expect(order.order_code).toMatch(/^DR-\d{4}$/);
+    const { order, reviewLink } = await createOrder(store, actors.staff, validOrderInput());
+    expect(order.order_code).toMatch(new RegExp(`^JJ-${new Date().getFullYear()}-\\d{4}$`));
+    expect(reviewLink).toBeNull(); // nothing is emailed before the shop confirms
     expect(order.current_revision).toBe(1);
     expect(order.dimensions).toBe("120.0 × 76.0 × 80.0 cm (W × H × D)");
     expect(order.item_name).toBe("4-Seater Rectangular Dining Table");
@@ -108,9 +109,10 @@ describe("2. the 7-stage status machine", () => {
     const store = await seededStore();
     const { order } = await createOrder(store, actors.staff, validOrderInput());
     let o = await staffAccept(store, actors.staff, order.id);
-    expect(o.approved_revision_number).toBe(1);
+    expect(o.approved_revision_number).toBe(2); // revision 2 = the quotation issued after confirmation
     expect(o.status).toBe("Confirmed");
-    expect(o.order_code).toMatch(/^JJ-\d{4}-\d{4}$/);
+    expect(o.payment_plan).toBe("down_30");
+    expect(o.order_code).toBe(order.order_code); // one Order ID from submission
     expect((await err(transitionOrder(store, actors.craftsman, o.id, "In Production"))).code).toBe("FORBIDDEN");
     expect((await err(startProduction(store, actors.staff, o.id))).code).toBe("DOWN_PAYMENT_REQUIRED");
     await logPayment(store, actors.staff, {
@@ -131,17 +133,19 @@ describe("2. the 7-stage status machine", () => {
     expect(new Set(history.map((h) => h.to_status))).toEqual(new Set(WORKSHOP_STAGES));
   });
 
-  it("blocks In Production while specs_confirmed is false (hard gate)", async () => {
+  it("blocks In Production until the quotation is issued AND accepted (hard gate)", async () => {
     const store = await seededStore();
     const { order } = await createOrder(store, actors.staff, validOrderInput());
-    const e = await err(transitionOrder(store, actors.owner, order.id, "Confirmed"));
-    expect(e.code).toBe("SPECS_NOT_CONFIRMED");
+    expect((await err(store.updateOrder(order.id, { status: "In Production" }))).code).toBe("INVALID_TRANSITION");
+    // the shop confirms without any acceptance (migration 009)
+    const c = await transitionOrder(store, actors.owner, order.id, "Confirmed");
+    expect(c.status).toBe("Confirmed");
+    expect(c.confirmed_at).not.toBeNull();
+    expect((await err(transitionOrder(store, actors.owner, order.id, "In Production"))).code).toBe("PENDING_REVIEW"); // no quotation yet
+    await issueQuotation(store, order.id);
+    expect((await err(transitionOrder(store, actors.owner, order.id, "In Production"))).code).toBe("SPECS_NOT_CONFIRMED");
     // even forcing the row at store level is rejected, like the DB trigger
-    const e2 = await err(store.updateOrder(order.id, { status: "Confirmed" }));
-    expect(e2.code).toBe("SPECS_NOT_CONFIRMED");
-    const e3 = await err(store.updateOrder(order.id, { status: "In Production" }));
-    expect(e3.code).toBe("INVALID_TRANSITION");
-    const e4 = await err(store.updateOrder(order.id, { specs_confirmed: true, status: "Confirmed" }));
+    const e4 = await err(store.updateOrder(order.id, { specs_confirmed: true, status: "In Production" }));
     expect(e4.code).toBe("STALE_REVISION"); // flipping the flag alone never unlocks production
   });
 

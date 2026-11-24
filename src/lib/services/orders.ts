@@ -4,19 +4,25 @@ import { formatDate } from "@/lib/domain/dates";
 import { DomainError } from "@/lib/domain/errors";
 import { formatPeso, money } from "@/lib/domain/finance";
 import { quoteValidityDays } from "@/lib/domain/gate";
-import { assertTransition, isValidTransition, rolesAllowedFor } from "@/lib/domain/status";
-import type {
-  Actor,
-  ConfirmationMethod,
-  Order,
-  OrderStatus,
-  PaymentExceptionType,
-  PriorityLabel,
+import { assertTransition, isProductionLocked, isValidTransition, rolesAllowedFor } from "@/lib/domain/status";
+import {
+  PAYMENT_PLAN_LABEL,
+  PAYMENT_PLANS,
+  CUSTOMER_PAYMENT_METHODS,
+  type Actor,
+  type ConfirmationMethod,
+  type Order,
+  type OrderStatus,
+  type PaymentExceptionType,
+  type PaymentMethod,
+  type PaymentPlan,
+  type PriorityLabel,
 } from "@/lib/domain/types";
 import { editOrderSchema, newOrderSchema, specRevisionSchema, type NewOrderInput } from "@/lib/domain/validation";
 import { describeDiff, dimensionsText, itemNameFor, normalizeSpec, type Dims, type SpecDiff } from "@/lib/domain/furniture";
-import { nextDraftCode, nextOrderCode } from "./codes";
-import { afterQuoteIssued } from "./customer-portal";
+import { nextOrderCode } from "./codes";
+import { afterQuotationIssued, provisionOnConfirm } from "./customer-portal";
+import type { CustomerAuthProvider } from "./customer-auth";
 import { ensureRole } from "./guard";
 import { notifyCustomer } from "./notify";
 
@@ -52,7 +58,8 @@ export async function createOrder(store: DataStore, actor: Actor, raw: unknown) 
   });
   // Email authentication replaces the 4-digit PIN for new orders (migration 005).
   const order = await store.insertOrder({
-    order_code: nextDraftCode(existing),
+    // one permanent Order ID from submission (migration 009)
+    order_code: nextOrderCode(existing, new Date().getFullYear()),
     paper_slip_number: input.paper_slip_number,
     encoded_by_id: input.encoded_by_id,
     customer_name: input.customer_name,
@@ -104,13 +111,32 @@ export async function createOrder(store: DataStore, actor: Actor, raw: unknown) 
     from_status: null,
     to_status: order.status,
     changed_by_id: actor.id,
-    notes: `Encoded from paper slip #${order.paper_slip_number} · specification revision 1`,
+    notes: `Encoded from paper slip #${order.paper_slip_number} · specification revision 1 · waiting for confirmation`,
     client_transaction_id: null,
     changed_at: new Date().toISOString(),
   });
-  // emailed single-use review link for the staff draft quotation (unverified email; never blocks the save)
-  const reviewLink = await afterQuoteIssued(store, order.id);
-  return { order: await mustGetOrder(store, order.id), reviewLink };
+  // nothing is emailed yet: the customer hears from the shop once the order is confirmed
+  return { order: await mustGetOrder(store, order.id), reviewLink: null };
+}
+
+// ------------------------------------------------------------ confirm ------
+/**
+ * The shop confirms a submitted order (Waiting for Confirmation -> Confirmed).
+ * No price is needed yet. Then the customer is emailed: a "create your
+ * password" link for a new customer, or a "log in" email for a returning one.
+ * The email step runs after the committed confirmation and can never undo it.
+ */
+export async function confirmOrder(store: DataStore, actor: Actor, auth: CustomerAuthProvider, orderId: string, expectedVersion?: number) {
+  ensureRole(actor, ["owner", "staff"], "confirm orders");
+  const order = await mustGetOrder(store, orderId);
+  if (order.status !== "Waiting for Confirmation")
+    throw new DomainError("INVALID_TRANSITION", "Only orders waiting for confirmation can be confirmed.");
+  const confirmed = await transitionOrder(store, actor, orderId, "Confirmed", {
+    notes: "Order confirmed by the shop · quotation to follow",
+    expectedVersion,
+  });
+  const provisioning = await provisionOnConfirm(store, auth, orderId);
+  return { order: await mustGetOrder(store, confirmed.id), provisioning };
 }
 
 // --------------------------------------------------------- acceptance ------
@@ -124,6 +150,9 @@ export interface AcceptanceInput {
   accepted_furniture_price: number;
   accepted_delivery_fee: number;
   client_idempotency_key: string;
+  /** migration 009: terms and channel chosen with the acceptance */
+  payment_plan?: PaymentPlan;
+  payment_method?: PaymentMethod | null;
 }
 
 /**
@@ -138,6 +167,11 @@ export async function recordConfirmation(store: DataStore, actor: Actor | null, 
     throw new DomainError("FORBIDDEN", "Only the customer can accept through the customer portal.");
   if (!actor && input.confirmation_method !== "Customer Portal PIN") throw new DomainError("FORBIDDEN", "Not allowed.");
 
+  const plan = input.payment_plan ?? "down_30";
+  if (!PAYMENT_PLANS.includes(plan)) throw new DomainError("VALIDATION", "Choose 30% down payment, installment or full payment.");
+  const method = input.payment_method ?? null;
+  if (method && !(CUSTOMER_PAYMENT_METHODS as readonly string[]).includes(method))
+    throw new DomainError("VALIDATION", "Choose cash, online payment (GCash / Maya) or bank transfer.");
   const order = await mustGetOrder(store, input.order_id);
   // Checks run in the same order as accept_order_revision(): idempotent replay, stale revision,
   // issued quotation, status, expiry, amounts — all inside the store's single locked operation.
@@ -147,7 +181,7 @@ export async function recordConfirmation(store: DataStore, actor: Actor | null, 
   if (!revisionId) throw new DomainError("STALE_REVISION", "That revision no longer exists. Please reload.");
   const already = (await store.listConfirmations(order.id)).find((c) => c.client_idempotency_key === input.client_idempotency_key);
   const newCode =
-    !already && order.status === "Waiting for Confirmation" && order.order_code.startsWith("DR-")
+    !already && order.order_code.startsWith("DR-") // legacy draft codes only
       ? nextOrderCode(await store.listOrders(), Number(new Date().getFullYear()), order.order_code)
       : null;
   const res = await store.acceptOrderRevision({
@@ -162,24 +196,28 @@ export async function recordConfirmation(store: DataStore, actor: Actor | null, 
     confirmed_by_name: input.confirmed_by_name,
     recorded_by: actor?.id ?? null,
     new_order_code: newCode,
+    payment_plan: plan,
+    payment_method: method,
   });
   const confirmed = await mustGetOrder(store, order.id);
   if (res.duplicate) return confirmed; // idempotent replay: nothing new happened
   await store.insertHistory({
     order_id: order.id,
     from_status: order.status,
-    to_status: "Confirmed",
+    to_status: confirmed.status,
     changed_by_id: actor?.id ?? null,
-    notes: `Specification + quotation of revision ${res.revision_number} accepted via ${input.confirmation_method}${newCode ? `; order ID ${order.order_code} → ${newCode}` : ""}`,
+    notes: `Quotation (revision ${res.revision_number}) accepted via ${input.confirmation_method} · ${PAYMENT_PLAN_LABEL[plan]}${method ? `, ${method}` : ""}${newCode ? `; order ID ${order.order_code} → ${newCode}` : ""}`,
     client_transaction_id: null,
     changed_at: new Date().toISOString(),
   });
   await notifyCustomer(
     store,
     confirmed,
-    `JJ Enterprises: ${confirmed.order_code} (${confirmed.item_name}) is confirmed. Production starts after your 30% down payment of ${formatPeso(
-      confirmed.standard_down_payment_due,
-    )} is verified. ${confirmed.customer_email ? "Follow it in your JJ Enterprises account." : `Questions? Call the shop with your Order ID ${confirmed.order_code}.`}`,
+    `JJ Enterprises: quotation for ${confirmed.order_code} accepted (${PAYMENT_PLAN_LABEL[plan]}). ${
+      plan === "installment"
+        ? "The owner will review your installment terms."
+        : `Production starts after your ${plan === "full" ? "payment" : `30% down payment of ${formatPeso(confirmed.standard_down_payment_due)}`} is verified.`
+    } ${confirmed.customer_email ? "Submit your payment in your JJ Enterprises account." : `Questions? Call the shop with your Order ID ${confirmed.order_code}.`}`,
   );
   return confirmed;
 }
@@ -209,28 +247,31 @@ export async function reviseSpecs(store: DataStore, actor: Actor, orderId: strin
     paper_slip_number: v.paper_slip_number || null,
     estimated_completion_date: v.estimated_completion_date || null,
   });
-  const firstQuote = order.status === "Quote Requested";
+  const updated = await mustGetOrder(store, orderId);
+  // migration 009: a shop revision of a CONFIRMED order is the issued quotation
+  const issued = updated.status === "Confirmed";
+  const reissue = issued && !!order.quotation_issued_at;
   await store.insertHistory({
     order_id: orderId,
     from_status: order.status,
-    to_status: "Waiting for Confirmation",
+    to_status: updated.status,
     changed_by_id: actor.id,
-    notes: `${firstQuote ? "Official quotation issued" : "Revised quote issued"} as specification revision ${res.revision_number}${
-      !firstQuote && Object.keys(res.changed_fields).length ? ` (${describeDiff(res.changed_fields as SpecDiff)})` : ""
-    }${res.expires_at ? ` — valid until ${formatDate(res.expires_at.slice(0, 10))}` : ""}; customer must accept it`,
+    notes: `${issued ? (reissue ? "Quotation re-issued" : "Quotation issued") : "Draft quote updated"} as specification revision ${res.revision_number}${
+      Object.keys(res.changed_fields).length && order.current_revision > 0 ? ` (${describeDiff(res.changed_fields as SpecDiff)})` : ""
+    }${res.expires_at ? ` — valid until ${formatDate(res.expires_at.slice(0, 10))}` : ""}${issued ? "; customer must accept it and choose payment terms" : ""}`,
     client_transaction_id: null,
     changed_at: new Date().toISOString(),
   });
-  const updated = await mustGetOrder(store, orderId);
-  await afterQuoteIssued(store, orderId); // single-use review link to the customer's email (walk-ins: none)
-  if (firstQuote)
+  if (issued) {
+    await afterQuotationIssued(store, orderId, res.revision_number); // "choose how to pay" email (walk-ins: none)
     await notifyCustomer(
       store,
       updated,
       `JJ Enterprises: Your quotation for ${updated.order_code} is ready: ${formatPeso(updated.furniture_price)} + delivery ${formatPeso(
         updated.delivery_fee,
-      )}. Valid until ${formatDate(res.expires_at?.slice(0, 10) ?? null)}. ${updated.customer_email ? "We emailed you a link to review and accept it." : "Please visit the shop to accept it."}`,
+      )}. Valid until ${formatDate(res.expires_at?.slice(0, 10) ?? null)}. ${updated.customer_email ? "Log in to accept it and choose how to pay." : "Please visit the shop to accept it."}`,
     );
+  }
   return updated;
 }
 
@@ -244,8 +285,8 @@ export async function editOrderDetails(store: DataStore, actor: Actor, orderId: 
     throw new DomainError("VALIDATION", "Enter the distance-based delivery fee for deliveries outside Valencia City.");
   const newFee = v.municipality === "Valencia City" ? 0 : v.delivery_fee;
   const feeChanged = newFee !== order.delivery_fee;
-  if (feeChanged && order.status !== "Waiting for Confirmation" && order.status !== "Quote Requested")
-    throw new DomainError("SPEC_LOCKED", "The delivery fee is part of the confirmed quote. Use a change request to adjust it.");
+  if (feeChanged && isProductionLocked(order.status))
+    throw new DomainError("SPEC_LOCKED", "The delivery fee is locked once production starts. Use a change request to adjust it.");
   const email = v.has_no_email ? null : v.customer_email || null;
   if (!email && !v.has_no_email && !order.legacy_contact_unknown)
     throw new DomainError("VALIDATION", "Enter the customer's email, or tick Walk-In / No Email (paper slip only).",
@@ -268,7 +309,7 @@ export async function editOrderDetails(store: DataStore, actor: Actor, orderId: 
   );
   if (!res.ok) throw new DomainError("VERSION_CONFLICT", "This order was changed by someone else. Please refresh.");
   // A fee change is a new quote: record it as a revision the customer must confirm.
-  if (feeChanged && res.order.status === "Waiting for Confirmation" && !res.order.is_legacy_incomplete && res.order.furniture_category) {
+  if (feeChanged && ["Waiting for Confirmation", "Confirmed"].includes(res.order.status) && res.order.furniture_price != null && !res.order.is_legacy_incomplete && res.order.furniture_category) {
     const o = res.order;
     await store.addSpecRevision({
       order_id: o.id,
@@ -283,11 +324,10 @@ export async function editOrderDetails(store: DataStore, actor: Actor, orderId: 
       created_by_id: actor.id,
       quote_validity_days: quoteValidityDays(),
     });
-    await afterQuoteIssued(store, o.id);
-    return mustGetOrder(store, o.id);
+    const after = await mustGetOrder(store, o.id);
+    if (after.status === "Confirmed" && after.quotation_issued_at) await afterQuotationIssued(store, o.id, after.current_revision);
+    return after;
   }
-  // a newly added / changed email starts unverified; send it the current quotation's review link
-  if (emailChanged && email && res.order.status === "Waiting for Confirmation") await afterQuoteIssued(store, orderId);
   return res.order;
 }
 

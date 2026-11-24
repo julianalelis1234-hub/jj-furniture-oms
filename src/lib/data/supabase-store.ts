@@ -258,6 +258,8 @@ export class SupabaseStore implements DataStore {
       p_confirmed_by_name: input.confirmed_by_name,
       p_recorded_by: input.recorded_by,
       p_new_order_code: input.new_order_code,
+      p_payment_plan: input.payment_plan,
+      p_payment_method: input.payment_method,
     });
     if (error) fail(error);
     return data as AcceptRevisionResult;
@@ -395,6 +397,11 @@ export class SupabaseStore implements DataStore {
     const { data, error } = await this.db.rpc("link_customer_account", { p_order_id: orderId, p_user_id: userId });
     if (error) fail(error);
     return data as { linked: boolean; already: boolean };
+  }
+  async claimCustomerOrders(userId: string) {
+    const { data, error } = await this.db.rpc("claim_customer_orders", { p_user_id: userId });
+    if (error) fail(error);
+    return Number(data ?? 0);
   }
   async listCustomerOrders(userId: string) {
     const { data, error } = await this.db.from("orders").select("*").eq("customer_user_id", userId).order("created_at", { ascending: false });

@@ -49,8 +49,8 @@ export function toastFor(e: LiveEvent, role: LiveViewerRole): LiveToast | null {
   const office = role === "owner" || role === "staff";
   const base = { order_id: e.order_id, key: `${e.order_id}:${e.transition}:${e.status}:${e.source === "payments" ? e.record_id : ""}` };
   if (office) {
-    if (e.transition === "quote_requested" && e.op === "INSERT" && e.status === "Quote Requested")
-      return { ...base, title: "New quote request", description: `${code} is waiting for a quotation.` };
+    if (e.transition === "quote_requested" && e.op === "INSERT")
+      return { ...base, title: "New online order", description: `${code} is waiting for confirmation.` };
     if (e.transition === "quote_accepted" && e.status === "Confirmed")
       return { ...base, title: "Quotation accepted", description: `${code} is now Confirmed (specification + quotation accepted).` };
     if (e.transition === "stage_progress" && e.status)

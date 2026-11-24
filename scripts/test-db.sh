@@ -86,6 +86,11 @@ else
   echo "TEST FAILED: SKIP LOCKED claim (w1=$W1OUT w2=$W2 ${MS}ms)"; exit 1
 fi
 
+# 1c'. Migration 009 (confirm -> quotation -> accept + plan -> payments) on top of all that data
+run "$DB" supabase/migrations/009a_payment_channel_enums.sql
+run "$DB" supabase/migrations/009b_confirm_quote_pay_flow.sql 2>/dev/null
+psql "$PGURL/$DB" -v ON_ERROR_STOP=1 -f supabase/tests/12_confirm_quote_pay_flow.sql 2>&1 | grep -E "ok -|FAILED|ERROR|PASSED"
+
 # 1d. Race: two sessions open the same review link at the same moment ---------
 RORDER=$(psql "$PGURL/$DB" -Atc "insert into public.orders (order_code, paper_slip_number, customer_name, customer_phone, delivery_address, municipality, item_name, quantity, dimensions, wood_type, color_finish, furniture_price, estimated_completion_date, furniture_category, design_variant, width_cm, height_cm, depth_cm, customer_email) values ('DR-0710','S-710','C','09000000710','Purok 1, Poblacion','Valencia City','Door',1,'-','Mahogany','Natural Varnish',9000,current_date,'Panel Door','Classic 2-Panel',80,210,4.5,'race@example.com') returning id" | head -1)
 psql "$PGURL/$DB" -qAtc "select public.add_spec_revision('$RORDER','staff_draft','$SPEC'::jsonb,null,'staff')" >/dev/null
@@ -134,6 +139,11 @@ run "$DB2" supabase/migrations/007_enable_supabase_realtime.sql
 run "$DB2" supabase/migrations/007_enable_supabase_realtime.sql
 run "$DB2" supabase/migrations/008_harden_notification_outbox.sql
 run "$DB2" supabase/migrations/008_harden_notification_outbox.sql
+run "$DB2" supabase/migrations/009a_payment_channel_enums.sql
+run "$DB2" supabase/migrations/009b_confirm_quote_pay_flow.sql 2>/dev/null
+run "$DB2" supabase/migrations/009b_confirm_quote_pay_flow.sql 2>/dev/null
+LIVE9=$(psql "$PGURL/$DB2" -Atc "select count(*) from public.orders where status not in ('Quote Requested','Waiting for Confirmation') and (confirmed_at is null or quotation_issued_at is null)")
+if [[ "$LIVE9" == "0" ]]; then echo "NOTICE:  ok - migration 009 (twice) on the live data: every confirmed-or-later order is backfilled as confirmed and quoted"; else echo "TEST FAILED: 009 backfill left $LIVE9 orders"; exit 1; fi
 OB=$(psql "$PGURL/$DB2" -Atc "select count(*) from pg_constraint where conrelid = 'public.notification_outbox'::regclass and contype = 'c'")
 if [[ "$OB" == "8" ]]; then echo "NOTICE:  ok - migration 008 is idempotent on the live data (8 outbox checks, no duplicates)"; else echo "TEST FAILED: 008 re-run checks=$OB"; exit 1; fi
 PUB=$(psql "$PGURL/$DB2" -Atc "select count(*) from pg_publication_tables where pubname = 'supabase_realtime' and tablename = 'order_live_events'")
@@ -154,6 +164,6 @@ run "$DB3" supabase/tests/00_supabase_stub.sql
 migrate_all "$DB3"
 npx tsx scripts/seed-sql.ts --curated | psql "$PGURL/$DB3" -q -v ON_ERROR_STOP=1 2>&1 | grep -E "ok -|FAILED|ERROR"
 CUR=$(psql "$PGURL/$DB3" -Atc "select string_agg(order_code || ':' || status, ',' order by order_code) from public.orders")
-if [[ "$CUR" == "JJ-2026-1001:In Production,JJ-2026-1002:Waiting for Confirmation,JJ-2026-1003:Quote Requested,JJ-2026-1004:Ready for Delivery,JJ-2026-1005:Confirmed" ]]; then
+if [[ "$CUR" == "JJ-2026-1001:In Production,JJ-2026-1002:Confirmed,JJ-2026-1003:Waiting for Confirmation,JJ-2026-1004:Ready for Delivery,JJ-2026-1005:Confirmed" ]]; then
   echo "NOTICE:  ok - curated demo dataset: exactly the 5 specified orders and stages load into the real schema"
 else echo "TEST FAILED: curated dataset = $CUR"; exit 1; fi

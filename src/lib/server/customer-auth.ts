@@ -34,7 +34,8 @@ export function supabaseCustomerAuth(store: DataStore): CustomerAuthProvider {
   if (!admin) throw new DomainError("BACKEND", "Customer accounts need SUPABASE_SERVICE_ROLE_KEY on the server.");
   return {
     async createAccount(email, fullName) {
-      // email_confirm: ownership was just proven by opening the emailed review link
+      // email_confirm: the login has NO password; one can only be set through the recovery link
+      // sent to this inbox, so signing in later is what proves ownership (orders link only then)
       const { data, error } = await admin.auth.admin.createUser({ email, email_confirm: true, app_metadata: { portal: "customer" } });
       if (error || !data.user) throw new DomainError("BACKEND", error?.message ?? "Could not create the account.");
       try {

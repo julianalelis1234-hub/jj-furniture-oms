@@ -65,7 +65,8 @@ export function ReviewQuote({ view }: { view: ReviewView }) {
     );
   if (!view.scope_current)
     return <p className="rounded-xl border border-warning/50 bg-warning-soft p-4 text-sm">A newer quotation was issued for this order. Please open the link in the most recent email from JJ Enterprises.</p>;
-  if (view.order.status !== "Waiting for Confirmation" || !cur || !config || !initial)
+  // migration 009: a quotation is accepted while the order is Confirmed and not yet accepted
+  if (view.order.spec_state !== "awaiting_acceptance" && view.order.spec_state !== "quote_expired" || !cur || !config || !initial)
     return <p className="rounded-xl border bg-card p-4 text-sm">This quotation is no longer waiting for acceptance. Log in to see your order.</p>;
   if (view.quote_expired)
     return (

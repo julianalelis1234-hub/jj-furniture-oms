@@ -19,8 +19,8 @@ describe("curated Demo Mode dataset (5 orders)", () => {
       .map((o) => [o.order_code, o.customer_name, o.item_name, `${o.width_cm}×${o.height_cm}×${o.depth_cm}`, o.color_finish, o.status]);
     expect(rows).toEqual([
       ["JJ-2026-1001", "Juliana Lelis", "Narra 6-Seater Dining Table", "200×76×95", "Natural Matte Varnish", "In Production"],
-      ["JJ-2026-1002", "Rea Caday", "Solid Mahogany King Platform Bed", "190×110×210", "Warm Espresso Stain", "Waiting for Confirmation"],
-      ["JJ-2026-1003", "Julian Marte", "Gmelina Modular Wardrobe Cabinet", "180×210×60", "Satin Caramel Finish", "Quote Requested"],
+      ["JJ-2026-1002", "Rea Caday", "Solid Mahogany King Platform Bed", "190×110×210", "Warm Espresso Stain", "Confirmed"],
+      ["JJ-2026-1003", "Julian Marte", "Gmelina Modular Wardrobe Cabinet", "180×210×60", "Satin Caramel Finish", "Waiting for Confirmation"],
       ["JJ-2026-1004", "Riezbell Naquinez", "Acacia L-Shaped Executive Study Desk", "160×75×140", "Natural Oil Finish", "Ready for Delivery"],
       ["JJ-2026-1005", "Bon Ortizano", "Molave Accent Lounge Chair Pair", "72×82×78", "Mocha Hand-Rubbed Finish", "Confirmed"],
     ]);
@@ -40,22 +40,29 @@ describe("curated Demo Mode dataset (5 orders)", () => {
     expect(await f("JJ-2026-1005")).toMatchObject({ price: 19600, verified: 0, down: 5880 });
   });
 
-  it("accounts: four verified + linked customers, Bon Ortizano is an unlinked walk-in; the demo login is Juliana", async () => {
+  it("accounts: three linked customers, Julian (unconfirmed) has none yet, Bon Ortizano is a walk-in; the demo login is Juliana", async () => {
     const s = await curated();
     const linked = (await s.listOrders()).filter((o) => o.customer_user_id && o.email_verified_at).map((o) => o.order_code).sort();
-    expect(linked).toEqual(["JJ-2026-1001", "JJ-2026-1002", "JJ-2026-1003", "JJ-2026-1004"]);
+    expect(linked).toEqual(["JJ-2026-1001", "JJ-2026-1002", "JJ-2026-1004"]);
+    expect(s.t.customer_accounts.some((a) => a.email === "julian.marte@example.com")).toBe(false);
+    const julian = (await s.getOrderByCode("JJ-2026-1003"))!;
+    expect(julian.paper_slip_number).toBe("JJ-2026-1003"); // online order: the code is the slip
     const bon = (await s.getOrderByCode("JJ-2026-1005"))!;
     expect(bon).toMatchObject({ has_no_email: true, customer_user_id: null, customer_email: null });
     expect(s.t.customer_accounts.find((a) => a.email === CURATED_CUSTOMER_LOGIN.email)?.full_name).toBe("Juliana Lelis");
-    // JJ-2026-1002's quotation link is waiting in the Demo Inbox
-    expect(s.t.demo_mailbox.some((m) => m.to === "rea.caday@example.com" && m.text.includes("/customer/review?token="))).toBe(true);
+    // JJ-2026-1002: confirmed + quoted; the create-password and choose-how-to-pay emails are in the Demo Inbox
+    const rea = (await s.getOrderByCode("JJ-2026-1002"))!;
+    expect(rea).toMatchObject({ specs_confirmed: false, payment_plan: null });
+    expect(rea.quotation_issued_at).not.toBeNull();
+    expect(s.t.demo_mailbox.some((m) => m.to === "rea.caday@example.com" && m.text.includes("/customer/set-password?token="))).toBe(true);
+    expect(s.t.demo_mailbox.some((m) => m.to === "rea.caday@example.com" && m.text.includes("/customer/orders/JJ-2026-1002"))).toBe(true);
   });
 
-  it("KPI strip and filter counts are computed, Quote Requested stays intake (not one of the 7 stages)", async () => {
+  it("KPI strip and filter counts follow the flow: to confirm, quotation & payment, workshop, delivery", async () => {
     const s = await curated();
     const m = workspaceMetrics(await s.listOrders(), await s.listPayments());
-    expect(m).toMatchObject({ needsQuoteOrAction: 2, inWorkshop: 2, delivery: 1, collectedDeposits: 25000 });
-    expect(m.filterCounts).toEqual({ active: 5, needs_quote: 1, waiting: 1, production: 2, delivery: 1, delivered: 0 });
+    expect(m).toMatchObject({ toConfirm: 1, quotationAndPayment: 2, inWorkshop: 1, delivery: 1, collectedDeposits: 25000 });
+    expect(m.filterCounts).toEqual({ active: 5, to_confirm: 1, quote_payment: 2, production: 1, delivery: 1, delivered: 0 });
     expect(QUEUE_FILTERS.find((f) => f.key === "production")!.statuses).not.toContain("Quote Requested");
   });
 

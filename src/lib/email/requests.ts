@@ -5,7 +5,7 @@ import { DomainError } from "@/lib/domain/errors";
 import type { Actor } from "@/lib/domain/types";
 import { hmacId } from "@/lib/server/token";
 import type { CustomerAuthProvider } from "@/lib/services/customer-auth";
-import { issueReviewLink, provisionCustomerAccount } from "@/lib/services/customer-portal";
+import { issueReviewLink, provisionCustomerAccount, provisionOnConfirm } from "@/lib/services/customer-portal";
 import { enqueueEmail, kickOutbox } from "./outbox";
 
 /** The ONLY answer the public setup-link endpoint ever gives for a well-formed request. */
@@ -46,7 +46,10 @@ export async function requestSetupLink(
       if (!acct?.is_active) return;
       if (!(await auth.emailVerified(acct.id))) return;
       const linked = (await db.listCustomerOrders(acct.id)).some((o) => o.customer_user_id === acct.id && !!o.email_verified_at && o.customer_email === email);
-      if (!linked) return;
+      // migration 009: the account exists from the shop's confirmation, before any order is linked.
+      // The link only ever goes to this inbox, so a confirmed order for it is reason enough.
+      const confirmedFor = linked || (await db.listOrders()).some((o) => o.customer_email === email && !o.has_no_email && !!o.confirmed_at);
+      if (!confirmedFor) return;
       const { row } = await enqueueEmail(db, {
         kind: "account_setup_link", order_id: null, recipient_email: email, customer_user_id: acct.id,
         template_data: { customer_name: acct.full_name }, idempotency_key: `setup:${crypto.randomUUID()}`,
@@ -75,15 +78,18 @@ export async function resendForOrder(store: DataStore, auth: CustomerAuthProvide
   const okUser = await db.hitRateLimit(`resend:user:${actor.id}`, RESEND_LIMITS.perUser.windowS, RESEND_LIMITS.perUser.max);
   if (!okOrder || !okUser) throw new DomainError("RATE_LIMITED", "Too many resends for this order. Please wait before trying again.");
   if (kind === "quote_review") {
-    if (o.status !== "Waiting for Confirmation") throw new DomainError("VALIDATION", "Only an order waiting for the customer's acceptance has a quotation link.");
+    if (o.status !== "Confirmed" || !o.quotation_issued_at || o.specs_confirmed)
+      throw new DomainError("VALIDATION", "Only a confirmed order whose quotation is waiting for the customer has a quotation link.");
     const r = await issueReviewLink(db, orderId, { requestedBy: actor.id });
     return { delivery: r.status };
   }
-  if (o.status === "Quote Requested" || o.status === "Waiting for Confirmation" || !o.approved_revision_number || !o.specs_confirmed)
-    throw new DomainError("VALIDATION", "Account emails are sent only after the customer has accepted the quotation.");
-  if (!o.email_verified_at || !o.customer_email || o.has_no_email)
-    throw new DomainError("VALIDATION", "The customer's email is not verified for this order yet.");
-  const r = await provisionCustomerAccount(db, auth, orderId, { requestedBy: actor.id });
+  if (o.status === "Quote Requested" || o.status === "Waiting for Confirmation")
+    throw new DomainError("VALIDATION", "Account emails are sent once the shop has confirmed the order.");
+  if (!o.customer_email || o.has_no_email) throw new DomainError("VALIDATION", "Walk-in order: no email on file.");
+  // migration 009: the confirmation email is the account email ("create your password" / "log in")
+  const r = o.customer_user_id || o.email_verified_at
+    ? await provisionCustomerAccount(db, auth, orderId, { requestedBy: actor.id })
+    : await provisionOnConfirm(db, auth, orderId, { requestedBy: actor.id });
   const mine = (await db.listOutbox({ orderId })).filter((x) => x.requested_by_user_id === actor.id).sort((a, b) => b.created_at.localeCompare(a.created_at))[0];
   const delivery = mine?.delivery_status === "sent" ? "sent" : mine?.delivery_status === "failed" || r.status === "failed" ? "failed" : "pending";
   return { delivery, provisioning: r.status };

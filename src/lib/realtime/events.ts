@@ -52,8 +52,11 @@ export function classifyOrderChange(
   prev: OrderStatus | null,
   next: OrderStatus,
   hasConfirmationForActiveRevision: boolean,
+  origin?: string,
 ): LiveTransition | null {
-  if (op === "INSERT") return next === "Quote Requested" ? "quote_requested" : null;
+  // a new online order (migration 009: it starts as Waiting for Confirmation) alerts the shop
+  if (op === "INSERT")
+    return next === "Quote Requested" || (next === "Waiting for Confirmation" && origin === "customer_self_service") ? "quote_requested" : null;
   if (op !== "UPDATE" || prev === next || prev === null) return null;
   if (prev === "Waiting for Confirmation" && next === "Confirmed" && hasConfirmationForActiveRevision) return "quote_accepted";
   if (MAIN_STAGES.has(prev) && MAIN_STAGES.has(next)) return "stage_progress";

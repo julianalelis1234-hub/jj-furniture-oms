@@ -19,10 +19,11 @@ export default async function StaffPage({ searchParams }: { searchParams: Promis
   const code = (id: string) => data.orders.find((o) => o.id === id)?.order_code ?? "";
   // one line per pending job; each opens that order's drawer on the right tab
   const inbox: { id: string; order: string; label: string; tab: string }[] = [
-    ...t.quoteRequests.map((o) => ({ id: o.id, order: o.order_code, label: "Issue the quotation (Option 2 request)", tab: "quotation" })),
+    ...t.toConfirm.map((o) => ({ id: o.id, order: o.order_code, label: o.order_origin === "customer_self_service" ? "Check and confirm the online order" : "Confirm the order", tab: "quotation" })),
     ...t.specProposals.map((e) => ({ id: e.order_id, order: code(e.order_id), label: "Review the customer's proposed changes", tab: "overview" })),
-    ...t.needsConfirmation.map((o) => ({ id: o.id, order: o.order_code, label: "Record the customer's acceptance", tab: "quotation" })),
-    ...t.needsDownPayment.map(({ order, shortfall }) => ({ id: order.id, order: order.order_code, label: `Log the 30% down payment (${formatPeso(shortfall)} short)`, tab: "payments" })),
+    ...t.toQuote.map((o) => ({ id: o.id, order: o.order_code, label: "Issue the quotation", tab: "quotation" })),
+    ...t.paymentsToVerify.map(({ payment, order }) => ({ id: order.id, order: order.order_code, label: `Verify a ${payment.payment_method} payment (${formatPeso(payment.amount)}, ref. ${payment.reference_number ?? "-"})`, tab: "payments" })),
+    ...t.needsDownPayment.map(({ order, shortfall }) => ({ id: order.id, order: order.order_code, label: `Waiting for the 30% down payment (${formatPeso(shortfall)} short)`, tab: "payments" })),
     ...t.readyForProduction.map((o) => ({ id: o.id, order: o.order_code, label: "Release to the workshop (30% verified)", tab: "payments" })),
     ...t.cashHandovers.map(({ payment, order }) => ({ id: order.id, order: order.order_code, label: `Verify cash handover (${formatPeso(payment.amount)})`, tab: "payments" })),
     ...t.specQuestions.map((e) => ({ id: e.order_id, order: code(e.order_id), label: "Answer a craftsman's question", tab: "overview" })),
