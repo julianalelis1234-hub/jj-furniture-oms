@@ -175,7 +175,8 @@ export function FurnitureConfigurator({
   const cat = value.furniture_category ? CATALOG[value.furniture_category] : null;
   const preview = configToPreview(value);
   const dims = formatDims(preview);
-  const [open, setOpen] = useState(false);
+  // mobile: the 3D view is pinned under the summary bar by default, so every choice shows at once
+  const [open, setOpen] = useState(!inDialog && !readOnly);
   const barRef = useRef<HTMLDivElement>(null);
   const [top, setTop] = useState(0);
 
@@ -226,13 +227,8 @@ export function FurnitureConfigurator({
   return (
     <div className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(280px,360px)] lg:items-start">
       {/* ---------------------------------------------- mobile compact bar */}
-      <div className="min-w-0 lg:hidden">
-        <div
-          ref={barRef}
-          style={{ top }}
-          className="sticky z-20 -mx-4 flex items-center gap-3 border-y bg-card/95 px-4 py-2 backdrop-blur sm:mx-0 sm:rounded-xl sm:border"
-          data-testid="configurator-bar"
-        >
+      <div ref={barRef} style={{ top }} className="sticky z-20 -mx-4 min-w-0 border-y bg-card/95 backdrop-blur sm:mx-0 sm:rounded-xl sm:border lg:hidden" data-testid="configurator-pin">
+        <div className="flex items-center gap-3 px-4 py-2 sm:px-3" data-testid="configurator-bar">
           <span
             className="size-10 shrink-0 rounded-md border"
             style={{ background: look.surface, transition: "background 200ms ease-out" }}
@@ -246,18 +242,20 @@ export function FurnitureConfigurator({
             className="flex h-10 items-center gap-1 rounded-lg border px-3 text-sm font-semibold"
           >
             {open ? <ChevronUp className="size-4" aria-hidden /> : <ChevronDown className="size-4" aria-hidden />}
-            {open ? "Hide" : "Preview"}
+            {open ? "Hide 3D" : "Show 3D"}
           </button>
         </div>
-        {/* expanded preview sits in the page flow (never over inputs) */}
-        {open && !isDesktop && <div className="mt-3">{previewCard}</div>}
+        {/* pinned 3D view: part of the sticky block, so scroll padding keeps focused inputs below it */}
+        {open && !isDesktop && <div className="px-2 pb-2" data-testid="pinned-preview"><FurniturePreviewSlot spec={preview} legacyDimensions={legacyDimensions} compact /></div>}
       </div>
+      {/* the size hint is too tall for the pinned view: on phones it sits in the page instead */}
+      {!isDesktop && <div className="-mt-2 lg:hidden"><FeasibilityWarning spec={preview} /></div>}
 
       {/* --------------------------------------------------------- controls */}
       <div className="grid min-w-0 grid-cols-1 gap-5">
         {readOnly && (
           <p className="flex items-center gap-2 rounded-lg border border-success/40 bg-success-soft p-3 text-sm font-semibold text-success">
-            <Lock className="size-4" aria-hidden /> {lockedLabel ?? "Locked — Confirmed for Workshop Production"}
+            <Lock className="size-4" aria-hidden /> {lockedLabel ?? "Locked for production — the specification can no longer change"}
           </p>
         )}
 
@@ -367,7 +365,8 @@ export function FurnitureConfigurator({
 
         <Group legend="Color / finish" step={5} error={errors.color_finish}>
           <div className="grid grid-cols-2 gap-2">
-            {FINISHES.map((f) => {
+            {/* a finish written on an older order (not one of the four) stays selectable, so re-quoting never changes it silently */}
+            {[...FINISHES, ...((FINISHES as readonly string[]).includes(value.color_finish) || !value.color_finish ? [] : [value.color_finish])].map((f) => {
               const l = finishLook(value.wood_type, f);
               return (
                 <Chip key={f} name="color_finish" value={f} checked={value.color_finish === f} onSelect={() => set({ color_finish: f })} disabled={readOnly} testId={`finish-${f}`}>

@@ -1,13 +1,13 @@
 "use client";
 
-import { CheckCircle2, KeyRound, Loader2, MailCheck, Send } from "lucide-react";
+import { Loader2, Send } from "lucide-react";
 import { useState } from "react";
-import { customerRequestAction } from "@/app/actions";
+import { customerRequestAction, type OrderSlip } from "@/app/actions";
+import { OrderSlipView } from "./order-slip";
+import { CustomizationAssistant } from "@/components/orders/customization-assistant";
 import { Field, NativeSelect, TextArea, TextInput, useServerAction } from "@/components/form";
-import { LinkButton } from "@/components/link-button";
 import { emptyConfig, FurnitureConfigurator, type ConfigValue } from "@/components/orders/FurnitureConfigurator";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { MUNICIPALITIES } from "@/lib/domain/types";
 import { newUuid } from "@/lib/uuid";
 
@@ -16,32 +16,12 @@ export function RequestForm() {
   const [config, setConfig] = useState<ConfigValue>(emptyConfig);
   // one idempotency key per form: a double tap or a retry never creates two requests
   const [requestKey] = useState(() => newUuid());
-  const [done, setDone] = useState<{ order_code: string; email: string } | null>(null);
+  const [done, setDone] = useState<OrderSlip | null>(null);
+  const [notes, setNotes] = useState("");
+  const [photoUrl, setPhotoUrl] = useState("");
   const err = (k: string) => errors[k];
 
-  if (done) {
-    return (
-      <Card className="mx-auto w-full max-w-xl border-success" data-testid="request-done">
-        <CardContent className="grid gap-3 pt-4 text-center">
-          <CheckCircle2 className="mx-auto size-10 text-success" aria-hidden />
-          <p className="text-lg font-bold">Request sent to JJ Furniture</p>
-          <div className="rounded-xl border bg-secondary p-3">
-            <p className="text-xs uppercase text-muted-foreground">Order ID</p>
-            <p className="font-mono text-xl font-black" data-testid="request-code">{done.order_code}</p>
-          </div>
-          <p className="flex items-start gap-2 text-left text-sm">
-            <MailCheck className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden />
-            <span>
-              The shop will check your design and email the official quotation to <b data-testid="request-email">{done.email}</b> with a secure link to review and
-              accept it. Opening that link confirms the email is yours; after you accept, you can create your password and log in.
-            </span>
-          </p>
-          <p className="text-xs text-muted-foreground">Keep the Order ID for reference when you talk to the shop. After you accept the quotation you can log in to follow this order.</p>
-          <LinkButton href="/customer/login" variant="outline"><KeyRound aria-hidden /> Customer login</LinkButton>
-        </CardContent>
-      </Card>
-    );
-  }
+  if (done) return <OrderSlipView slip={done} />;
 
   return (
     <form
@@ -60,30 +40,31 @@ export function RequestForm() {
         <input id="website" name="website" tabIndex={-1} autoComplete="off" defaultValue="" />
       </div>
 
-      <Card>
-        <CardHeader><CardTitle>1 · Design your furniture</CardTitle></CardHeader>
-        <CardContent className="grid gap-4">
+      {/* flat sections, no card: a clipping wrapper would stop the 3D view from staying in place */}
+      <section aria-labelledby="step-design" className="grid gap-4">
+        <h2 id="step-design" className="text-2xl">Design your furniture</h2>
+          <CustomizationAssistant value={config} onChange={setConfig} onUsePhoto={setPhotoUrl}
+            onNotes={(t) => setNotes((n) => (n.includes(t) ? n : [n, t].filter(Boolean).join("\n")))} />
           <FurnitureConfigurator value={config} onChange={setConfig} errors={errors} showQuantity />
           <div className="grid gap-3 sm:grid-cols-2">
             <Field label="Notes for the shop (optional)" htmlFor="special_instructions" className="sm:col-span-2"
               hint="e.g. number of drawers, handle style, where it will stand.">
-              <TextArea id="special_instructions" name="special_instructions" maxLength={1000} />
+              <TextArea id="special_instructions" name="special_instructions" maxLength={1000} value={notes} onChange={(e) => setNotes(e.target.value)} />
             </Field>
             <Field label="Reference photo link (optional)" htmlFor="reference_photo_url" error={err("reference_photo_url")} className="sm:col-span-2"
               hint="A Facebook / Google Drive / Messenger photo link of the style you like.">
-              <TextInput id="reference_photo_url" name="reference_photo_url" type="url" placeholder="https://…" invalid={!!err("reference_photo_url")} />
+              <TextInput id="reference_photo_url" name="reference_photo_url" type="url" placeholder="https://…" invalid={!!err("reference_photo_url")}
+                value={photoUrl} onChange={(e) => setPhotoUrl(e.target.value)} />
             </Field>
           </div>
-        </CardContent>
-      </Card>
+      </section>
 
-      <Card>
-        <CardHeader><CardTitle>2 · Your contact and delivery details</CardTitle></CardHeader>
-        <CardContent className="grid gap-3 sm:grid-cols-2">
+      <section aria-labelledby="step-contact" className="grid gap-3 border-t border-border pt-6 sm:grid-cols-2">
+        <h2 id="step-contact" className="text-2xl sm:col-span-2">Your contact and delivery details</h2>
           <Field label="Your name" htmlFor="customer_name" required error={err("customer_name")}>
             <TextInput id="customer_name" name="customer_name" autoComplete="name" invalid={!!err("customer_name")} />
           </Field>
-          <Field label="Customer Email" htmlFor="customer_email" required error={err("customer_email")} hint="Your quotation and a secure review link are sent here.">
+          <Field label="Customer Email" htmlFor="customer_email" required error={err("customer_email")} hint="Once the shop confirms your order, we email you here to create your password.">
             <TextInput id="customer_email" name="customer_email" type="email" inputMode="email" autoComplete="email" placeholder="name@example.com" invalid={!!err("customer_email")} />
           </Field>
           <Field label="Mobile number" htmlFor="customer_phone" required error={err("customer_phone")} hint="09XX XXX XXXX">
@@ -95,13 +76,13 @@ export function RequestForm() {
           <Field label="Delivery address" htmlFor="delivery_address" required error={err("delivery_address")} hint="Purok, barangay and a landmark.">
             <TextInput id="delivery_address" name="delivery_address" autoComplete="street-address" invalid={!!err("delivery_address")} />
           </Field>
-        </CardContent>
-      </Card>
+      </section>
 
       {errors._form && <p className="text-sm font-medium text-destructive">{errors._form}</p>}
-      <div className="sticky bottom-0 z-10 -mx-4 border-t bg-background/95 px-4 py-3 backdrop-blur sm:static sm:mx-0 sm:border-0 sm:bg-transparent sm:p-0">
+      {/* on phones it floats just above the bottom navigation (which sits at z-30) */}
+      <div className="sticky bottom-24 z-10 -mx-4 border-y bg-background/95 px-4 py-3 backdrop-blur sm:static sm:mx-0 sm:border-0 sm:bg-transparent sm:p-0">
         <Button type="submit" size="xl" className="h-auto min-h-12 w-full py-2 whitespace-normal sm:w-auto" disabled={pending}>
-          {pending ? <Loader2 className="animate-spin" aria-hidden /> : <Send aria-hidden />} Send request for quotation
+          {pending ? <Loader2 className="animate-spin" aria-hidden /> : <Send aria-hidden />} Submit order
         </Button>
       </div>
     </form>

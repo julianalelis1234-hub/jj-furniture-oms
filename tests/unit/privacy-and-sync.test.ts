@@ -23,7 +23,7 @@ describe("3. customer authentication & privacy", () => {
     expect(JSON.stringify(v)).not.toContain("pin_code");
     expect(v.payment.remaining_furniture_balance).toBe(19950);
   });
-  it("customers confirm specs from the portal (gate opens)", async () => {
+  it("customers accept the issued quotation from the portal (legacy DR code becomes a JJ code)", async () => {
     const store = await seededStore();
     const o = (await store.getOrderByCode("DR-0148"))!;
     const confirmed = await customerAccept(store, o.id);
@@ -31,8 +31,9 @@ describe("3. customer authentication & privacy", () => {
     expect(confirmed.order_code).toBe(`JJ-${new Date().getFullYear()}-0148`);
     const [c] = await store.listConfirmations(o.id);
     expect(c.confirmation_method).toBe("Customer Portal PIN");
-    expect(c.revision_number).toBe(1);
+    expect(c.revision_number).toBe(1); // DR-0148 was confirmed and its quotation (revision 1) issued
     expect(c.confirmed_specs_snapshot.furniture_price).toBe(18000);
+    expect(c.confirmed_specs_snapshot.payment_plan).toBe("down_30");
   });
   it("craftsman workshop data contains no financial or contact fields", async () => {
     const store = await seededStore();

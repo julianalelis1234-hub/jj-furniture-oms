@@ -3,9 +3,9 @@ import { DomainError } from "@/lib/domain/errors";
 import { computeFinancials } from "@/lib/domain/finance";
 import { dimensionsText, diffSpecs } from "@/lib/domain/furniture";
 import { assertProductionGate, blockingItems, isQuoteExpired, specOrQuoteChanged } from "@/lib/domain/gate";
-import { assertTransition } from "@/lib/domain/status";
+import { assertTransition, isProductionLocked } from "@/lib/domain/status";
 import { money } from "@/lib/domain/finance";
-import { QUOTE_REVISION_TYPES } from "@/lib/domain/types";
+import { PAYMENT_PLANS, QUOTE_REVISION_TYPES, REFERENCE_PAYMENT_METHODS, type LumberItem, type LumberMovement, type OrderStatus } from "@/lib/domain/types";
 import { currentActorRole } from "@/lib/realtime/actor-context";
 import { classifyOrderChange, classifyPaymentChange, type LiveEvent, type LiveOp, type LiveSource } from "@/lib/realtime/events";
 import type {
@@ -59,6 +59,11 @@ export interface MemoryTables {
   /** mirrors public.notification_outbox / rate_limit_hits (migration 008) */
   notification_outbox: OutboxRow[];
   rate_limit_hits: { bucket: string; at: number }[];
+  /** demo stand-in for the private payment-proofs bucket (migration 009) */
+  payment_proofs: { path: string; bytes: Uint8Array; content_type: string }[];
+  /** mirrors public.lumber_stock_items / lumber_movements (migration 010) */
+  lumber_stock_items: LumberItem[];
+  lumber_movements: LumberMovement[];
 }
 
 export function emptyTables(): MemoryTables {
@@ -78,6 +83,9 @@ export function emptyTables(): MemoryTables {
     demo_mailbox: [],
     live_events: [],
     notification_outbox: [],
+    payment_proofs: [],
+    lumber_stock_items: [],
+    lumber_movements: [],
     rate_limit_hits: [],
   };
 }
@@ -86,6 +94,10 @@ const clone = <T>(v: T): T => structuredClone(v);
 const now = () => new Date().toISOString();
 const WORKSHOP_STATUSES = new Set(["Confirmed", "In Production", "Completed / For Inspection", "Ready for Delivery"]);
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+const PRE_CONFIRM: readonly OrderStatus[] = ["Quote Requested", "Waiting for Confirmation"];
+/** Mirrors orders_quote_fields_required (009): price, slip and date once quoted or past Confirmed. */
+const needsQuoteFields = (status: OrderStatus, quotationIssuedAt: string | null) =>
+  !!quotationIssuedAt || !["Quote Requested", "Waiting for Confirmation", "Confirmed"].includes(status);
 
 /**
  * In-memory implementation used for Demo Mode without a Supabase project and
@@ -125,7 +137,7 @@ export class MemoryStore implements DataStore {
     const hasConf = this.t.order_confirmations.some((c) => c.order_id === o.id && c.revision_number === o.approved_revision_number);
     this.emit({
       source: "orders", op, record_id: o.id, order_id: o.id, order_code: o.order_code, status: o.status,
-      prev_status: op === "INSERT" ? null : prev, transition: classifyOrderChange(op, prev, o.status, hasConf),
+      prev_status: op === "INSERT" ? null : prev, transition: classifyOrderChange(op, prev, o.status, hasConf, o.order_origin),
       payment_verified: null, order_updated_at: o.updated_at,
     });
   }
@@ -318,7 +330,7 @@ export class MemoryStore implements DataStore {
       throw new DomainError("VALIDATION", `Order code ${row.order_code} already exists.`);
     if (row.client_request_key && this.t.orders.some((o) => o.client_request_key === row.client_request_key))
       throw new DomainError("DUPLICATE_REQUEST", "This request was already submitted.");
-    if (!["Quote Requested", "Waiting for Confirmation"].includes(row.status) && !row.specs_confirmed)
+    if (!PRE_CONFIRM.includes(row.status) && row.status !== "Confirmed" && !row.specs_confirmed)
       throw new DomainError("SPECS_NOT_CONFIRMED", "Customer must confirm specifications first.");
     const origin = row.order_origin ?? "staff_intake";
     const email = row.customer_email ?? null;
@@ -329,7 +341,7 @@ export class MemoryStore implements DataStore {
     if (!walkIn && !email) throw new DomainError("VALIDATION", "Enter the customer's email, or mark the order as Walk-In / No Email.");
     if (row.status === "Quote Requested" && (origin !== "customer_self_service" || row.specs_confirmed))
       throw new DomainError("VALIDATION", "Quote Requested is only for customer self-service requests.");
-    if (row.status !== "Quote Requested" && (row.furniture_price == null || !row.paper_slip_number || !row.estimated_completion_date))
+    if (needsQuoteFields(row.status, row.quotation_issued_at ?? null) && (row.furniture_price == null || !row.paper_slip_number || !row.estimated_completion_date))
       throw new DomainError("VALIDATION", "A quotation needs a price, a paper slip number and an estimated completion date.");
     if (row.furniture_price != null && !(row.furniture_price > 0)) throw new DomainError("VALIDATION", "Furniture price must be greater than ₱0.");
     if (!(row.quantity > 0)) throw new DomainError("VALIDATION", "Quantity must be at least 1.");
@@ -355,6 +367,10 @@ export class MemoryStore implements DataStore {
       approved_revision_number: null,
       spec_preview_config: {},
       is_legacy_incomplete: legacy,
+      confirmed_at: row.confirmed_at ?? (PRE_CONFIRM.includes(row.status) ? null : ts),
+      quotation_issued_at: row.quotation_issued_at ?? (PRE_CONFIRM.includes(row.status) ? null : ts),
+      payment_plan: row.payment_plan ?? null,
+      preferred_payment_method: row.preferred_payment_method ?? null,
       id: randomUUID(),
       standard_down_payment_due: 0,
       remaining_furniture_balance: 0,
@@ -402,24 +418,32 @@ export class MemoryStore implements DataStore {
     if (next.wood_type === "Other" && !next.custom_wood_note?.trim())
       throw new DomainError("VALIDATION", 'Describe the wood when "Other" is selected.');
     if (specOrQuoteChanged(current, next)) {
-      if (!["Quote Requested", "Waiting for Confirmation"].includes(current.status) && next.status !== "Waiting for Confirmation")
-        throw new DomainError("SPEC_LOCKED", "Specifications and quote are locked once confirmed; use a change request.");
+      // the production lock (mirrors 009 orders_before_write)
+      if (isProductionLocked(current.status))
+        throw new DomainError("SPEC_LOCKED", "Specifications and quote are locked once production starts; use a change request.");
       next.specs_confirmed = false;
       next.approved_revision_number = null;
     }
+    if (current.specs_confirmed && !next.specs_confirmed) next.payment_plan = null;
     if (patch.status && patch.status !== current.status) {
-      assertTransition(
-        { ...next, status: current.status, specs_confirmed: true },
-        patch.status,
-        this.t.payments.filter((p) => p.order_id === id),
-      );
-      if (patch.status === "Confirmed" || patch.status === "In Production") {
+      // same check order as orders_before_write (009): the acceptance gate, then the 30% gate
+      if (patch.status === "In Production" && current.status === "Confirmed") {
+        if (!next.quotation_issued_at) throw new DomainError("PENDING_REVIEW", "Issue the quotation before production can start.");
         assertProductionGate(next, this.t.order_specification_revisions, this.t.order_exceptions_and_repairs, current.status);
       }
+      assertTransition(next.status === "In Production" ? { ...next, status: current.status } : { ...next, status: current.status, specs_confirmed: true },
+        patch.status, this.t.payments.filter((p) => p.order_id === id));
+      if (patch.status === "Confirmed") {
+        if (next.is_legacy_incomplete)
+          throw new DomainError("VALIDATION", "Complete the structured specification (category, design, W × H × D) before confirming.");
+        if (blockingItems(id, this.t.order_exceptions_and_repairs).length > 0)
+          throw new DomainError("PENDING_REVIEW", "Resolve the open production-blocking items for this order first.");
+        next.confirmed_at = next.confirmed_at ?? now();
+      }
     }
-    if (!["Quote Requested", "Waiting for Confirmation"].includes(next.status) && !next.specs_confirmed)
+    if (!PRE_CONFIRM.includes(next.status) && next.status !== "Confirmed" && !next.specs_confirmed)
       throw new DomainError("SPECS_NOT_CONFIRMED", "Customer must confirm specifications first.");
-    if (next.status !== "Quote Requested" && (next.furniture_price == null || !next.paper_slip_number || !next.estimated_completion_date))
+    if (needsQuoteFields(next.status, next.quotation_issued_at) && (next.furniture_price == null || !next.paper_slip_number || !next.estimated_completion_date))
       throw new DomainError("VALIDATION", "A quotation needs a price, a paper slip number and an estimated completion date.");
 
     const typeChanged = next.payment_exception_type !== current.payment_exception_type;
@@ -434,7 +458,8 @@ export class MemoryStore implements DataStore {
 
   async listWorkshopOrders(): Promise<WorkshopOrder[]> {
     return this.t.orders
-      .filter((o) => WORKSHOP_STATUSES.has(o.status))
+      // mirrors 009: a Confirmed order reaches the workshop only once its quotation is accepted
+      .filter((o) => WORKSHOP_STATUSES.has(o.status) && (o.status !== "Confirmed" || o.specs_confirmed))
       .map((o) => {
         const hist = this.t.order_status_history
           .filter((h) => h.order_id === o.id)
@@ -511,8 +536,8 @@ export class MemoryStore implements DataStore {
         throw new DomainError("VALIDATION", `${input.type} is only valid as revision 1.`);
     }
     if (
-      (input.type === "customer_request" && o.status !== "Quote Requested") ||
-      (input.type === "customer_proposal" && o.status !== "Waiting for Confirmation") ||
+      (input.type === "customer_request" && !PRE_CONFIRM.includes(o.status)) ||
+      (input.type === "customer_proposal" && !["Waiting for Confirmation", "Confirmed"].includes(o.status)) ||
       (shop && !["Quote Requested", "Waiting for Confirmation", "Confirmed"].includes(o.status))
     )
       throw new DomainError("SPEC_LOCKED", "Specifications are locked for workshop production.");
@@ -566,7 +591,7 @@ export class MemoryStore implements DataStore {
     this.emitChild("order_specification_revisions", "INSERT", rev.revision_id, o.id);
     const prevStatus = o.status;
     if (!shop) {
-      Object.assign(o, { current_revision: num, specs_confirmed: false, approved_revision_number: null });
+      Object.assign(o, { current_revision: num, specs_confirmed: false, approved_revision_number: null, payment_plan: null });
     } else {
       Object.assign(o, {
         current_revision: num, furniture_category: sp.furniture_category, design_variant: rev.design_variant,
@@ -574,7 +599,9 @@ export class MemoryStore implements DataStore {
         quantity: qty, furniture_price: price, delivery_fee: fee, paper_slip_number: slip, estimated_completion_date: est,
         dimensions: dimensionsText({ width_cm: w, height_cm: h, depth_cm: d }),
         spec_preview_config: input.preview_config ?? {}, is_legacy_incomplete: false, specs_confirmed: false,
-        approved_revision_number: null, status: "Waiting for Confirmation",
+        approved_revision_number: null, payment_plan: null,
+        status: o.status === "Quote Requested" ? "Waiting for Confirmation" : o.status,
+        quotation_issued_at: o.status === "Confirmed" ? now() : o.quotation_issued_at,
       });
       this.recompute(o);
     }
@@ -601,11 +628,15 @@ export class MemoryStore implements DataStore {
       throw new DomainError("STALE_REVISION", "This is not the latest revision of the order.");
     if (!QUOTE_REVISION_TYPES.includes(rev.revision_type))
       throw new DomainError("PENDING_REVIEW", "The shop must review this request and issue a quotation first.");
-    if (o.status !== "Waiting for Confirmation") throw new DomainError("INVALID_TRANSITION", "Order is not waiting for confirmation.");
-    if (o.is_legacy_incomplete)
-      throw new DomainError("VALIDATION", "Complete the structured specification (category, design, W × H × D) with a revised quote before confirming.");
+    if (!PAYMENT_PLANS.includes(input.payment_plan))
+      throw new DomainError("VALIDATION", "Choose 30% down payment, installment or full payment.");
+    if (o.status !== "Confirmed")
+      throw new DomainError("INVALID_TRANSITION", "Only a confirmed order with an issued quotation can be accepted.");
+    if (!o.quotation_issued_at) throw new DomainError("PENDING_REVIEW", "The shop has not issued the quotation yet.");
+    if (o.specs_confirmed && o.approved_revision_number === rev.revision_number)
+      throw new DomainError("ALREADY_ACCEPTED", "This quotation was already accepted.");
     if (isQuoteExpired(rev))
-      throw new DomainError("QUOTE_EXPIRED", "This quotation has expired. Ask JJ Furniture for a fresh quotation.");
+      throw new DomainError("QUOTE_EXPIRED", "This quotation has expired. Ask JJ Enterprises for a fresh quotation.");
     const qp = rev.quoted_furniture_price!, qf = rev.quoted_delivery_fee!;
     if (money(input.accepted_furniture_price) !== qp || money(input.accepted_delivery_fee) !== qf || money(input.accepted_total_amount) !== money(qp + qf))
       throw new DomainError("AMOUNT_MISMATCH", "The accepted amounts do not match the quotation. Please reload.");
@@ -619,18 +650,24 @@ export class MemoryStore implements DataStore {
       confirmed_specs_snapshot: {
         ...this.specJson(rev), item_name: o.item_name, dimensions: o.dimensions, wood_type: rev.wood_type,
         color_finish: rev.color_finish, quantity: rev.quantity, furniture_price: qp, expires_at: rev.expires_at,
+        payment_plan: input.payment_plan, payment_method: input.payment_method,
       },
       confirmation_method: input.method, confirmed_by_name: input.confirmed_by_name.trim() || o.customer_name,
       recorded_by_staff_id: input.recorded_by, confirmed_at: ts,
       specification_accepted_at: ts, quotation_accepted_at: ts,
       accepted_furniture_price: qp, accepted_delivery_fee: qf, accepted_total_amount: money(qp + qf), client_idempotency_key: key,
     };
-    const next: Order = { ...o, approved_revision_number: rev.revision_number, specs_confirmed: true, status: "Confirmed", order_code: input.new_order_code ?? o.order_code };
-    assertProductionGate(next, this.t.order_specification_revisions, this.t.order_exceptions_and_repairs, o.status);
+    const next: Order = {
+      ...o, approved_revision_number: rev.revision_number, specs_confirmed: true, order_code: input.new_order_code ?? o.order_code,
+      payment_plan: input.payment_plan, preferred_payment_method: input.payment_method,
+      payment_exception_type: input.payment_plan === "installment" ? "Installment" : o.payment_exception_type,
+    };
+    const typeChanged = next.payment_exception_type !== o.payment_exception_type;
     const prevStatus = o.status;
     this.t.order_confirmations.push(conf);
     this.emitChild("order_confirmations", "INSERT", conf.id, o.id);
     Object.assign(o, next, { version: o.version + 1, updated_at: ts });
+    if (typeChanged) this.exceptionGate(o);
     this.emitOrder("UPDATE", o, prevStatus);
     return { confirmation_id: conf.id, revision_id: rev.revision_id, revision_number: rev.revision_number, duplicate: false };
   }
@@ -648,6 +685,8 @@ export class MemoryStore implements DataStore {
     const existing = this.t.payments.find((p) => p.client_transaction_id === row.client_transaction_id);
     if (existing) return { payment: clone(existing), duplicate: true };
     if (!(row.amount > 0)) throw new DomainError("VALIDATION", "Amount must be greater than ₱0.");
+    if (REFERENCE_PAYMENT_METHODS.includes(row.payment_method) && !row.reference_number?.trim())
+      throw new DomainError("VALIDATION", "Online and bank payments need the transaction reference number.");
     this.find(this.t.orders, row.order_id, "Order");
     const p = { ...row, id: row.id ?? randomUUID() } as Payment;
     this.t.payments.push(p);
@@ -660,9 +699,17 @@ export class MemoryStore implements DataStore {
   async updatePayment(id: string, patch: Partial<Payment>) {
     const p = this.find(this.t.payments, id, "Payment");
     // audit-safe ledger (mirrors private.payments_guard): only verification and appended notes may change
-    const allowed = new Set(["verified_by_owner_or_staff", "notes"]);
+    const allowed = new Set(["verified_by_owner_or_staff", "notes", "rejected_at", "rejected_by_id", "rejection_reason"]);
     if (Object.keys(patch).some((k) => !allowed.has(k) && patch[k as keyof Payment] !== p[k as keyof Payment]))
-      throw new DomainError("IMMUTABLE_RECORD", "Only verification and appended notes may change on a payment.");
+      throw new DomainError("IMMUTABLE_RECORD", "Only verification, rejection and appended notes may change on a payment.");
+    if (p.rejected_at && (("rejected_at" in patch && patch.rejected_at !== p.rejected_at) || ("rejection_reason" in patch && patch.rejection_reason !== p.rejection_reason)))
+      throw new DomainError("IMMUTABLE_RECORD", "A payment can be rejected only once.");
+    if (p.rejected_at && patch.verified_by_owner_or_staff)
+      throw new DomainError("IMMUTABLE_RECORD", "A rejected payment cannot be verified; ask the customer to submit it again.");
+    if (p.verified_by_owner_or_staff && patch.rejected_at)
+      throw new DomainError("IMMUTABLE_RECORD", "A verified payment cannot be rejected; record a correcting entry instead.");
+    if (patch.rejected_at && !patch.rejection_reason?.trim())
+      throw new DomainError("VALIDATION", "Give a reason for rejecting the payment.");
     if (p.verified_by_owner_or_staff && patch.verified_by_owner_or_staff === false)
       throw new DomainError("IMMUTABLE_RECORD", "A verified payment cannot be un-verified.");
     if (p.notes && patch.notes !== undefined && !(patch.notes ?? "").startsWith(p.notes))
@@ -807,6 +854,78 @@ export class MemoryStore implements DataStore {
     Object.assign(o, { customer_user_id: userId, provisioning_status: "linked", version: o.version + 1, updated_at: now() });
     this.emitOrder("UPDATE", o, o.status);
     return { linked: true, already: false };
+  }
+
+  async claimCustomerOrders(userId: string) {
+    const acct = this.t.customer_accounts.find((a) => a.id === userId);
+    if (!acct || !acct.is_active) throw new DomainError("FORBIDDEN", "Not an active customer account.");
+    // demo equivalent of auth.users.email_confirmed_at: a password exists only after a set-up link to the inbox was completed
+    if (!acct.password_hash) throw new DomainError("FORBIDDEN", "The account email is not confirmed yet.");
+    const email = acct.email.trim().toLowerCase();
+    let n = 0;
+    for (const o of this.t.orders) {
+      if (o.customer_user_id || o.has_no_email || !o.confirmed_at || o.customer_email !== email) continue;
+      // only orders whose confirmation email was addressed to THIS account at this order's current email
+      const told = this.t.notification_outbox.some((n) => n.order_id === o.id && n.customer_user_id === userId && n.recipient_email === o.customer_email
+        && (n.kind === "order_confirmed_new_customer" || n.kind === "order_confirmed_returning_customer"));
+      if (!told) continue;
+      Object.assign(o, {
+        customer_user_id: userId, provisioning_status: "linked", email_verified_at: o.email_verified_at ?? now(),
+        version: o.version + 1, updated_at: now(),
+      });
+      this.emitOrder("UPDATE", o, o.status);
+      n += 1;
+    }
+    return n;
+  }
+
+  // ---------------------------------------------------- lumber (mirrors 010)
+  async listLumberItems() {
+    return clone(this.t.lumber_stock_items.sort((a, b) => a.wood_name.localeCompare(b.wood_name) || (a.size_note ?? "").localeCompare(b.size_note ?? "")));
+  }
+  async insertLumberItem(row: Pick<LumberItem, "wood_name" | "wood_type" | "size_note" | "reorder_level_bf">) {
+    // owner-only is enforced by the service (and by RLS + the items guard in Postgres)
+    const name = row.wood_name.trim();
+    if (name.length < 2 || name.length > 60) throw new DomainError("VALIDATION", "Enter the wood name (2–60 characters).");
+    if (!(row.reorder_level_bf >= 0)) throw new DomainError("VALIDATION", "The reorder level cannot be negative.");
+    const key = (n: string, s: string | null) => `${n.toLowerCase()}|${(s ?? "").toLowerCase()}`;
+    if (this.t.lumber_stock_items.some((i) => key(i.wood_name, i.size_note) === key(name, row.size_note)))
+      throw new DomainError("VALIDATION", "That wood and size is already in the inventory.");
+    const ts = now();
+    const item: LumberItem = { id: randomUUID(), wood_name: name, wood_type: row.wood_type, size_note: row.size_note?.trim() || null,
+      reorder_level_bf: money(row.reorder_level_bf), on_hand_bf: 0, is_active: true, created_at: ts, updated_at: ts };
+    this.t.lumber_stock_items.push(item);
+    return clone(item);
+  }
+  async updateLumberItem(id: string, patch: Partial<Pick<LumberItem, "wood_name" | "wood_type" | "size_note" | "reorder_level_bf" | "is_active">>) {
+    if ("on_hand_bf" in patch) throw new DomainError("IMMUTABLE_RECORD", "Stock on hand changes only through receive / use / adjust entries.");
+    const item = this.find(this.t.lumber_stock_items, id, "Lumber item");
+    if (patch.reorder_level_bf !== undefined && !(patch.reorder_level_bf >= 0)) throw new DomainError("VALIDATION", "The reorder level cannot be negative.");
+    Object.assign(item, patch, { updated_at: now() });
+    return clone(item);
+  }
+  async listLumberMovements(itemId?: string) {
+    return clone(this.t.lumber_movements.filter((m) => !itemId || m.item_id === itemId).sort((a, b) => b.created_at.localeCompare(a.created_at)));
+  }
+  async insertLumberMovement(row: Omit<LumberMovement, "id" | "created_at">) {
+    if (row.client_transaction_id) {
+      const dup = this.t.lumber_movements.find((m) => m.client_transaction_id === row.client_transaction_id);
+      if (dup) return { movement: clone(dup), duplicate: true };
+    }
+    const item = this.find(this.t.lumber_stock_items, row.item_id, "Lumber item");
+    if (!item.is_active) throw new DomainError("VALIDATION", "This lumber item is archived.");
+    const bf = money(row.board_feet);
+    if (!bf || Math.abs(bf) > 100000 || (row.kind !== "adjust" && bf < 0))
+      throw new DomainError("VALIDATION", "Enter the board feet (a positive amount; only adjustments may be negative).");
+    if (row.kind === "adjust" && !row.note?.trim()) throw new DomainError("VALIDATION", "Give a reason for the stock adjustment.");
+    const delta = row.kind === "use" ? -bf : bf;
+    if (item.on_hand_bf + delta < 0)
+      throw new DomainError("INSUFFICIENT_STOCK", `Only ${item.on_hand_bf} board feet of ${item.wood_name} on hand.`);
+    const m: LumberMovement = { ...row, board_feet: bf, note: row.note?.trim() || null, id: randomUUID(), created_at: now() };
+    this.t.lumber_movements.push(m);
+    item.on_hand_bf = money(item.on_hand_bf + delta);
+    item.updated_at = now();
+    return { movement: clone(m), duplicate: false };
   }
 
   async listCustomerOrders(userId: string) {

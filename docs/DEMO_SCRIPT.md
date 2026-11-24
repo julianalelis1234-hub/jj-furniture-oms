@@ -32,13 +32,13 @@ data and real application features. Nothing is faked except where it says
 |---|---|---|
 | **JJ-2026-0149** *(you create it in step 2)* | Rosalinda Abellana | Every portal, full 7-stage lifecycle |
 | JJ-2026-0145 | Maria Santos | Urgent dining table, In Production |
-| DR-0148 | Ramon dela Cruz (ramon.delacruz@example.com) | Waiting — review link in the Demo Inbox |
-| DR-0147 | Josefina Lagura | Quote Requested — Option 2 request awaiting the shop's quotation |
-| Customer login | **Demo Customer Login (Maria Santos)** button, or maria.santos@example.com / Narra-Table-2026 | Dashboard with JJ-2026-0145 |
+| DR-0148 | Ramon dela Cruz (ramon.delacruz@example.com) | Confirmed, quotation issued — a resent review link is in the Demo Inbox |
+| DR-0147 | Josefina Lagura | Quote Requested — an older online request (before migration 009) |
+| Customer login | **Demo Customer Login (Maria Santos)** button, or maria.santos@example.com / JJ-Demo-2026 | Dashboard with JJ-2026-0145 |
 | JJ-2026-0136 | Pedro & Ana Bautista | Out for Delivery (driver Jesse) |
 | JJ-2026-0133 | Lourdes Ybañez | Delivered, unpaid balance (approved credit); legacy order, no email, not linked to any account |
 
-New orders get the next slip number. After a reset, the first new order is **DR-0149**, which becomes **JJ-2026-0149** once the customer confirms.
+New orders get the next number. After a reset, the first new order is **JJ-2026-0149**: the Order ID is permanent from the moment it is saved.
 
 ---
 
@@ -80,65 +80,67 @@ Scroll to **What we found in the Discover phase**, then **One record, five porta
 4. Change **Municipality** to **Valencia City**. The fee becomes **FREE** and the amount to collect becomes **₱16,800**.
    **Say:** "Delivery inside Valencia City is free; provincial deliveries add a distance fee."
 5. Click **Save order**. The **printable confirmation slip** opens. Show:
-   - **Order ID** DR-0149, **Paper Slip #**, and *Customer updates: rosalinda.abellana@example.com* (no PIN — the review link was emailed).
+   - **Order ID** JJ-2026-0149, **Paper Slip #**, and *Customer updates: rosalinda.abellana@example.com* (no PIN).
    - The **QR code**.
    - **Estimated completion** and **Scheduled delivery**, shown as two separate dates.
    - The **payment breakdown**.
 
    Optional: click **Print** to show the print layout, then cancel.
 
-## 3. Customer Portal (CU-01) — 1:15
+## 3. Confirm → quotation → customer accepts and pays — 1:45
 
-1. Top bar → **Customer**. The portal shows **Option 1 · Log In to Track My Orders** (email + password, **Forgot Password?**) and **Option 2 · Customize & Request a Quote**.
-   **Say:** "No Order ID and PIN to type in or lose: customers log in with their email, and quotations come by email."
-2. Top bar → **Demo Inbox**. Open the newest email to **rosalinda.abellana@example.com** → **Open secure link** → **Open my quotation**.
-   **Say:** "The quotation link is single-use and opens only this order. Opening it proves the email is hers."
-3. Tap **Gmelina**: *"Your changes: Wood: Mahogany -> Gmelina"* appears with **Submit Specification Changes for Review**. Click **Undo my changes**.
-4. **Accept Quote & Confirm Specifications** → tick both boxes → **Accept quote & confirm**. The page says a password set-up email was sent.
-5. **Demo Inbox** → newest email → **Open secure link** → type a password twice → **Save password**. She lands on **My orders**.
-   **Say:** "No PIN to lose and no password ever emailed. Returning customers just log in and see every order."
-6. Optional: log out, then click **Demo Customer Login (Maria Santos)** (Demo Mode only) to show her dashboard; open JJ-2026-0145 → **Request Post-Confirmation Change / Repair**.
+**Staff: confirm, then issue the quotation (about 30 seconds)**
+1. Back on the order (**Back to order**): the **Next step** box says *New order — check the design, then confirm it*. Click **Confirm order** → OK.
+   **Say:** "Confirming needs no price yet. The customer is emailed a link to create their password."
+2. **Issue quotation** → check the configurator → **Issue quotation**. The order stays *Confirmed*; the customer is emailed to accept it and choose how to pay.
 
-**Staff: verified 30% → release to the workshop (about 20 seconds)**
-5. Top bar → **Staff** → **Log 30% down payment** → JJ-2026-0149 → **Log payment** (₱7,200 pre-filled) → **Save payment**.
-6. **Release to workshop (30% verified)** → JJ-2026-0149 → **Release to workshop** → the dialog shows *30% verified ✓* → **Start production**.
-   **Say:** "The server re-checks the verified 30%, the accepted latest revision, price drift and open spec questions before the specification locks."
+**Customer (about 60 seconds)**
+3. Top bar → **Demo Inbox**. Open the email to **rosalinda.abellana@example.com** titled *Order JJ-2026-0149 confirmed — create your JJ Enterprises password* → **Open secure link** → type a password twice → **Save password**. She lands on **My orders**.
+   **Say:** "No PIN to lose and no password ever emailed. Signing in proves the inbox is hers, so her confirmed order appears."
+4. Open **JJ-2026-0149** → **Accept your quotation**: choose **30% down payment**, **Installment** or **Full payment**, and **Cash**, **GCash / Maya** or **Bank transfer**; tick both boxes → **Accept quotation**.
+5. **Payments**: GCash is pre-selected with the shop's (demo) number and the 30% amount. Enter a reference number, add a receipt photo → **Send payment for checking**. It shows *Being checked*.
+   **Say:** "A submitted payment never counts until the shop verifies it."
+6. Optional: log out, then **Demo Customer Login (Maria Santos)** (Demo Mode only) to show her dashboard; open JJ-2026-0145 → **Request Post-Confirmation Change / Repair**.
 
-**Optional — Option 2 self-service (about 40 seconds)**
-* Top bar → **Customer** → **Customize & Request a Quote**. Pick a design, size, wood and finish, fill name / email / mobile / address → **Send request for quotation**. The Order ID appears, and the page says the quotation will be emailed to that address.
-* Or use the prepared request **DR-0147**. In **Staff → Customer quote requests (Option 2)** click **Issue quotation**, enter price, delivery fee and the paper slip # → **Send quotation**. The review link appears in the **Demo Inbox** for the customer to accept.
+**Staff: verify → release to the workshop (about 20 seconds)**
+7. Top bar → **Staff** → JJ-2026-0149 → **Payments & Gate**: **Open receipt**, then **Verify** → OK.
+8. **Release to workshop** → the dialog shows *30% verified ✓* → **Start production**.
+   **Say:** "The server re-checks the verified 30%, the accepted latest quotation, price drift and open spec questions before the specification locks."
+
+**Optional — an online order (about 40 seconds)**
+* Home → **Design your piece**. Pick a design, size, wood and finish, fill name / email / mobile / address → **Submit order**. The **order slip** appears at once with the permanent Order ID and *waiting for confirmation*; **Print or save slip** prints only the slip. It appears under **Staff → To confirm**.
 
 ## 4. Craftsmen Portal (C-01) and Owner Dashboard (O-01) — 2:00
 
 **Craftsmen**
-1. Top bar → **Craftsmen** (Nolito Remulta). **Say:** "Large cards sorted by the owner's priority. No prices or customer phone numbers are ever sent to this screen."
-2. **Up Next** tab: confirmed jobs show *"do not cut wood yet"*. **Say:** "Craftsmen cannot start production themselves; the office releases jobs after the 30% is verified."
+1. Top bar → **Craftsmen** (Nolito Remulta). **Say:** "One row per job, sorted by the owner's priority. No prices or customer phone numbers are ever sent to this screen."
+2. **Up Next** tab: jobs whose quotation was accepted show *"do not cut wood yet"*. **Say:** "Craftsmen never see a quotation that can still change, and cannot start production themselves; the office releases jobs after the 30% is verified."
 3. **In Progress** tab (JJ-2026-0149) → **Ask Spec Question** → type *"Should the table edge be rounded or square?"* → **Send question**. The job moves to **For Revision** because a question is open.
 4. **For Revision** tab → **Mark Ready for Owner Inspection** → tick the 4 checklist boxes → **Send to owner**.
 
 **Owner**
-5. Top bar → **Owner**. Walk through the **8 KPI cards**: Active Orders, Delayed/At Risk, In Production, Waiting Inspection, Deliveries to Watch, Balances Still to Collect, Unpaid After Delivery, Approvals Waiting.
-6. **Awaiting your decision** (approvals and inspections) — the craftsman question is answered in the order's drawer:
-   - Find the spec question → **Answer** → *"Rounded edges, 1cm radius — confirmed with the customer."* → **Send answer to workshop**.
-   - **JJ-2026-0140 Installment Approval** → **Approve** → **Approve**.
-7. **Planning Board**: on JJ-2026-0149 click **Urgent**. It jumps to #1, and the craftsmen see the same order. Optionally use the ↑ / ↓ buttons.
-8. Back in **Awaiting your decision**, find **Quality inspection · JJ-2026-0149** → **Pass** → **Passed — ready for delivery**. It's now stage 5/7, Ready for Delivery.
+5. Top bar → **Owner**. The **sidebar** lists Dashboard, Orders & Quotations, Staff, Craftsmen, Deliveries, Lumber & Inventory, Reports and Roles & Access, with live counts. On the **Dashboard**, walk through the 8 KPIs (to confirm, quotation & payment, workshop, delivery, deposits, balances, delayed, low lumber stock).
+6. Sidebar → **Orders & Quotations** → open JJ-2026-0149 → answer the craftsman's spec question: **Answer** → *"Rounded edges, 1cm radius — confirmed with the customer."* → **Send answer to workshop**.
+7. Sidebar → **Dashboard** → **Awaiting your decision**: **JJ-2026-0140 Installment Approval** → **Approve** → **Approve**.
+8. Sidebar → **Craftsmen**: workload per craftsman, the **Assign jobs** picker, and **Production priority** — on JJ-2026-0149 click **Urgent**. It jumps to #1, and the craftsmen see the same order.
+9. Sidebar → **Lumber & Inventory**: board feet on hand with the reorder tick; Gmelina and Acacia are flagged *Low · reorder*. Optionally **Receive** on Acacia: 10 pieces × 2 × 4 × 10 ft shows **= 66.67 board feet** → **Add to stock**. **Say:** "Stock changes only through these entries, and it can never go below zero."
+10. Sidebar → **Dashboard** → **Quality inspection · JJ-2026-0149** → **Pass** → **Passed — ready for delivery**. It's now stage 5/7, Ready for Delivery.
 
 **Staff hand-off (about 20 seconds, needed before the driver can leave)**
-9. Top bar → **Staff**:
+11. Top bar → **Staff**:
    - **Schedule driver & vehicle** → JJ-2026-0149 → **Schedule delivery** → Driver **Jesse Decena**, Vehicle **Multicab**, Date **today**, Time **1:00 PM - 3:00 PM** → **Schedule delivery**.
 
    **Say:** "The 30% was verified before production, so dispatch is allowed."
 
-## 5. Delivery Driver Portal (D-01) — 1:30
+## 5. Delivery Rider Portal (D-01) — 1:30
 
-1. Top bar → **Delivery Driver** (Jesse Decena). The badge shows **Online • Synced**. Show the JJ-2026-0149 card and its **COLLECT ON DELIVERY ₱16,800**.
+1. Top bar → **Delivery Rider** (Jesse Decena). The badge shows **Online • Synced**. Each trip is one row with a status pill (**On process**, **In transit**, **Delivered**) and the cash to collect. Tap the JJ-2026-0149 row to open the stop: address, **Call**, **Map**, and **Collect on delivery ₱16,800**.
 2. Click **Pre-Load Assignments for Offline Travel**. **Say:** "Before leaving the shop, his trips are saved on the phone."
 3. Turn on **Simulate Offline / Weak Signal**.
 4. On JJ-2026-0149: **Start Trip**, then **Mark Delivered & Log Cash Collected** (₱16,800 pre-filled) → **Save on phone**.
 5. Show the badge **Offline • Saved Locally (2 pending)** and the yellow rows **"Saved Locally — Pending Sync"**.
    **Say:** "It never pretends the data reached the shop."
-6. Turn **Simulate Offline** off. It syncs automatically: **Online • Synced**, a new **Last successful sync** time, and the trip moves to **Done + Failed**.
+6. Turn **Simulate Offline** off. It syncs automatically: **Online • Synced**, a new **Last successful sync** time, and, after **All deliveries**, the trip is under **Done** with a **Delivered** pill.
 
 ## 6. Final Overview — 1:00
 
@@ -154,7 +156,7 @@ Scroll to **What we found in the Discover phase**, then **One record, five porta
 
 ## Between takes / troubleshooting
 
-* Always click **Reset Demo Data** before a new take. It restores all 14 sample orders and the next new order is again DR-0149.
+* Always click **Reset Demo Data** before a new take. It restores all 14 sample orders and the next new order is again JJ-2026-0149.
 * **"Paper slip #0149 is already encoded"**: you didn't reset after the last take. Reset and start again.
 * **Driver doesn't see JJ-2026-0149**: the staff hand-off in step 4.9 was skipped (down payment + schedule for **today**).
 * **Phone instead of laptop:** the same flow works at 390 × 844. Open `http://<your-PC-IP>:3000` on the same Wi-Fi.

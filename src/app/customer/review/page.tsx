@@ -15,7 +15,7 @@ export default async function ReviewLandingPage({ searchParams }: PageProps<"/cu
     <AppShell portal="customer" actor={null}>
       <div className="mx-auto grid max-w-md gap-4 rounded-2xl border bg-card p-6 text-center shadow-sm">
         <ShieldCheck className="mx-auto size-10 text-primary" aria-hidden />
-        <h1 className="text-xl font-bold">Your JJ Furniture quotation</h1>
+        <h1 className="text-xl font-bold">Your JJ Enterprises quotation</h1>
         {valid ? (
           <>
             <p className="text-sm text-muted-foreground">
@@ -24,7 +24,7 @@ export default async function ReviewLandingPage({ searchParams }: PageProps<"/cu
             <OpenReviewButton token={token} />
           </>
         ) : (
-          <p className="text-sm">This link is incomplete. Open it again from your email, or ask JJ Furniture to send a new one.</p>
+          <p className="text-sm">This link is incomplete. Open it again from your email, or ask JJ Enterprises to send a new one.</p>
         )}
       </div>
     </AppShell>

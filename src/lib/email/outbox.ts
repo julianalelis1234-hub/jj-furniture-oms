@@ -58,6 +58,7 @@ const SUBJECT_HINT: Record<OutboxKindName, string> = {
   order_confirmed_new_customer: "Order confirmed + password set-up email",
   order_confirmed_returning_customer: "Order confirmed email (returning customer)",
   account_setup_link: "Password set-up email",
+  quotation_payment_request: "Quotation + payment options email",
 };
 
 export interface ProcessDeps {
@@ -100,7 +101,10 @@ async function linkFor(db: DataStore, row: OutboxRow, deps: ProcessDeps): Promis
       return { href: `${siteUrl()}/customer/review?token=${token}` };
     }
     case "order_confirmed_returning_customer":
-      return { href: `${siteUrl()}/customer/login` };
+      return { href: `${siteUrl()}/login` };
+    case "quotation_payment_request":
+      // no secret in this email: the order page requires the customer's own login
+      return { href: `${siteUrl()}/customer/orders/${encodeURIComponent(String(row.template_data?.order_code ?? ""))}` };
     case "order_confirmed_new_customer":
     case "account_setup_link": {
       if (row.encrypted_payload) {

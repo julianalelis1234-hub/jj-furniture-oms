@@ -1,7 +1,7 @@
 import bcrypt from "bcryptjs";
 import { createHash, randomBytes } from "node:crypto";
 import { addDays, todayISO } from "@/lib/domain/dates";
-import type { Municipality, Order, OrderStatus, PaymentType, Profile, SpecRevision, WoodType } from "@/lib/domain/types";
+import type { Municipality, Order, OrderStatus, OutboxRow, PaymentType, Profile, SpecRevision, WoodType } from "@/lib/domain/types";
 import { WORKSHOP_STAGES } from "@/lib/domain/types";
 import { dimensionsText, type FurnitureCategory } from "@/lib/domain/furniture";
 import { MemoryStore, type MemoryTables } from "./memory-store";
@@ -41,8 +41,11 @@ export const DEMO_PERSONA: Record<Profile["role"], string> = {
   driver: STAFF.jesse,
 };
 
+/** One shared password for every Demo Mode account (fictional; never used on the live site). */
+export const DEMO_ACCOUNT_PASSWORD = "JJ-Demo-2026";
+
 /** Demo customer login (fictional) — shown on /customer/login in Demo Mode only. */
-export const DEMO_CUSTOMER_LOGIN = { email: "maria.santos@example.com", password: "Narra-Table-2026", name: "Maria Santos" };
+export const DEMO_CUSTOMER_LOGIN = { email: "maria.santos@example.com", password: DEMO_ACCOUNT_PASSWORD, name: "Maria Santos" };
 
 /** Fictional customer emails (example.com is reserved for documentation). Walk-ins have none. */
 const SEED_EMAIL: Record<string, string | "walk-in"> = {
@@ -384,6 +387,34 @@ async function seedOrders(store: MemoryStore, list: SeedOrder[]) {
  * Regression-test dataset (15 orders covering every edge case). Used by the
  * unit / E2E suites and by the demo when DEMO_DATASET=fixtures.
  */
+
+/**
+ * Lumber & Inventory sample (migration 010): what a Valencia City lumber dealer stocks.
+ * Opening stock and history are real movements, so on-hand is computed, never typed.
+ * Gmelina 2×6 and Acacia are below their reorder levels (low-stock alerts).
+ */
+async function seedLumber(store: MemoryStore, orderId: (code: string) => string | null) {
+  const items: [string, WoodType, string, number, [number, "receive" | "use" | "adjust", number, string | null, string | null][]][] = [
+    ["Mahogany", "Mahogany", "2\" × 4\" × 10 ft", 200, [[21, "receive", 600, null, "Delivery from a Bukidnon supplier"], [12, "use", 96, "JJ-2026-1001", null], [6, "use", 54, null, "Door frames"]]],
+    ["Mahogany", "Mahogany", "1\" × 12\" × 8 ft", 150, [[25, "receive", 320, null, "Opening stock"], [9, "use", 64, null, "Table tops"]]],
+    ["Gmelina", "Gmelina", "2\" × 6\" × 8 ft", 200, [[30, "receive", 400, null, "Opening stock"], [14, "use", 152, null, "Sala set frames"], [5, "use", 88, null, "Cabinet carcasses"], [2, "adjust", -6, null, "Stock count: split boards"]]],
+    ["Narra", "Other", "1\" × 12\" × 8 ft", 50, [[40, "receive", 160, null, "Opening stock"], [12, "use", 72, "JJ-2026-1001", null]]],
+    ["Acacia", "Other", "2\" × 4\" × 8 ft", 40, [[35, "receive", 96, null, "Opening stock"], [20, "use", 64, null, "Study desk legs"]]],
+    ["Molave", "Other", "4\" × 4\" × 10 ft", 30, [[28, "receive", 133.33, null, "Opening stock (10 posts)"]]],
+  ];
+  const t = store.t;
+  for (const [name, wood, size, reorder, moves] of items) {
+    const item = await store.insertLumberItem({ wood_name: name, wood_type: wood, size_note: size, reorder_level_bf: reorder });
+    const row = t.lumber_stock_items.find((i) => i.id === item.id)!;
+    row.created_at = ts(45);
+    for (const [daysAgo, kind, bf, code, note] of moves.sort((a, b) => b[0] - a[0])) {
+      const { movement } = await store.insertLumberMovement({ item_id: item.id, kind, board_feet: bf, order_id: code ? orderId(code) : null, note,
+        recorded_by: STAFF.gilbert, client_transaction_id: null });
+      t.lumber_movements.find((m) => m.id === movement.id)!.created_at = ts(daysAgo, 10);
+    }
+  }
+}
+
 export async function buildFixtureTables(): Promise<MemoryTables> {
   const store = new MemoryStore();
   const t = store.t;
@@ -477,15 +508,25 @@ export async function buildFixtureTables(): Promise<MemoryTables> {
   });
   Object.assign(maria, { email_verified_at: ts(19), customer_user_id: mariaId, provisioning_status: "linked" });
 
-  // ---- DR-0148: the quotation's single-use review link is waiting in Ramon's (simulated) inbox
+  // ---- migration 009: these two were confirmed by the shop and their quotations issued; the customers have not accepted yet
+  for (const code of ["DR-0148", "JJ-2026-0144"]) {
+    const o = byCode(code);
+    const res = await store.updateOrder(o.id, { status: "Confirmed" });
+    if (!res.ok) throw new Error(`seed: could not confirm ${code}`);
+    Object.assign(o, { confirmed_at: ts(1, 8), quotation_issued_at: ts(1, 9) });
+    t.order_status_history.push({ id: crypto.randomUUID(), order_id: o.id, from_status: "Waiting for Confirmation", to_status: "Confirmed",
+      changed_by_id: STAFF.liza, notes: "Order confirmed by the shop · quotation issued", client_transaction_id: null, changed_at: ts(1, 8) });
+  }
+
+  // ---- DR-0148: staff re-sent the quotation's single-use review link; it is waiting in Ramon's (simulated) inbox
   const ramon = byCode("DR-0148");
   const rev148 = t.order_specification_revisions.find((r) => r.order_id === ramon.id && r.revision_number === ramon.current_revision)!;
   const raw148 = randomBytes(32).toString("base64url");
   await store.issueReviewToken({ order_id: ramon.id, revision_id: rev148.revision_id, token_hash: createHash("sha256").update(raw148).digest("hex"), ttl_hours: 72 });
   t.demo_mailbox.push({
     id: crypto.randomUUID(), to: ramon.customer_email!, order_id: ramon.id, created_at: ts(1, 9),
-    subject: `JJ Furniture quotation for ${ramon.order_code} — please review`,
-    text: `Hello ${ramon.customer_name},\n\nYour quotation for ${ramon.item_name} is ready: ₱${ramon.furniture_price!.toLocaleString("en-PH")} furniture price + ₱${ramon.delivery_fee.toLocaleString("en-PH")} delivery.\n\nReview the exact specification and accept it here (single-use link):\n/customer/review?token=${raw148}\n\nIf you did not order from JJ Furniture, ignore this email.`,
+    subject: `JJ Enterprises quotation for ${ramon.order_code} — please review`,
+    text: `Hello ${ramon.customer_name},\n\nYour quotation for ${ramon.item_name} is ready: ₱${ramon.furniture_price!.toLocaleString("en-PH")} furniture price + ₱${ramon.delivery_fee.toLocaleString("en-PH")} delivery.\n\nReview the exact specification and accept it here (single-use link):\n/customer/review?token=${raw148}\n\nIf you did not order from JJ Enterprises, ignore this email.`,
   });
 
   // ---- notifications
@@ -493,16 +534,17 @@ export async function buildFixtureTables(): Promise<MemoryTables> {
     const o = byCode(code);
     t.notifications.push({ id: crypto.randomUUID(), order_id: o.id, recipient_phone: o.customer_phone, channel, message_body: body, delivery_status: status, created_at: ts(daysAgo, 10) });
   };
-  nt("JJ-2026-0145", "JJ Furniture: Your order JJ-2026-0145 (6-Seater Dining Table) is now In Production.", "Sent", 8);
-  nt("JJ-2026-0136", "JJ Furniture: Your Sala Set (JJ-2026-0136) is out for delivery today. Please prepare ₱32,700.", "Sent", 0);
-  nt("JJ-2026-0141", "JJ Furniture: Your specifications for JJ-2026-0141 are confirmed. Please settle the 30% down payment of ₱9,600.", "Failed", 2);
-  nt("JJ-2026-0133", "JJ Furniture: JJ-2026-0133 delivered. Thank you!", "Sent", 3, "Messenger");
+  nt("JJ-2026-0145", "JJ Enterprises: Your order JJ-2026-0145 (6-Seater Dining Table) is now In Production.", "Sent", 8);
+  nt("JJ-2026-0136", "JJ Enterprises: Your Sala Set (JJ-2026-0136) is out for delivery today. Please prepare ₱32,700.", "Sent", 0);
+  nt("JJ-2026-0141", "JJ Enterprises: Your specifications for JJ-2026-0141 are confirmed. Please settle the 30% down payment of ₱9,600.", "Failed", 2);
+  nt("JJ-2026-0133", "JJ Enterprises: JJ-2026-0133 delivered. Thank you!", "Sent", 3, "Messenger");
 
+  await seedLumber(store, (code) => t.orders.find((o) => o.order_code === code)?.id ?? null);
   return structuredClone(t);
 }
 
 // =============================================================================
-// Curated Demo Mode dataset: exactly five active orders for JJ Furniture Shop
+// Curated Demo Mode dataset: exactly five active orders for JJ Enterprises Shop
 // and Enterprises (Valencia City, Bukidnon). DEMO DATA ONLY — production reads
 // the real database and is never capped or seeded from here.
 // PRIVACY: fictional contact details (example.com, 0900-000-xxxx).
@@ -511,10 +553,27 @@ export type DemoDataset = "curated" | "fixtures";
 /** Demo Mode shows the curated five; the test suites start the server with DEMO_DATASET=fixtures. */
 export const demoDataset = (): DemoDataset => (process.env.DEMO_DATASET === "fixtures" ? "fixtures" : "curated");
 
-const DEMO_PASSWORD = "Narra-Table-2026";
+const DEMO_PASSWORD = DEMO_ACCOUNT_PASSWORD;
 export const CURATED_CUSTOMER_LOGIN = { email: "juliana.lelis@example.com", password: DEMO_PASSWORD, name: "Juliana Lelis" };
 /** The one-click Demo Customer Login for the active dataset. */
 export const demoCustomerLogin = () => (demoDataset() === "fixtures" ? DEMO_CUSTOMER_LOGIN : CURATED_CUSTOMER_LOGIN);
+
+/**
+ * The six Demo Mode accounts (fictional emails, shared DEMO_ACCOUNT_PASSWORD).
+ *  - "demo": one login for presentations; shows the role-switcher bar for every portal
+ *  - owner / staff / craftsman / rider: fixed logins that only ever see their own portal
+ *  - customer: the demo customer (standard customer login)
+ * The live site never uses these: its staff and customers sign in with real Supabase accounts.
+ */
+export type DemoAccount = { key: "demo" | "owner" | "staff" | "craftsman" | "rider" | "customer"; email: string; label: string; person: string; profileId?: string; all?: boolean };
+export const demoAccounts = (): DemoAccount[] => [
+  { key: "demo", email: "demo@jj-enterprises.example", label: "Demo (all roles)", person: "Switch between every portal", profileId: STAFF.owner, all: true },
+  { key: "owner", email: "owner@jj-enterprises.example", label: "Owner", person: "Mr. Vincris Lelis", profileId: STAFF.owner },
+  { key: "staff", email: "staff@jj-enterprises.example", label: "Staff", person: "Gilbert Decena", profileId: STAFF.gilbert },
+  { key: "craftsman", email: "craftsman@jj-enterprises.example", label: "Craftsman", person: "Nolito Remulta", profileId: STAFF.nolito },
+  { key: "rider", email: "rider@jj-enterprises.example", label: "Delivery Rider", person: "Jesse Decena", profileId: STAFF.jesse },
+  { key: "customer", email: demoCustomerLogin().email, label: "Customer", person: demoCustomerLogin().name },
+];
 
 const CURATED: SeedOrder[] = [
   {
@@ -559,9 +618,9 @@ async function buildCuratedTables(): Promise<MemoryTables> {
   await seedOrders(store, CURATED);
   const byCode = (c: string) => t.orders.find((o) => o.order_code === c)!;
 
-  // JJ-2026-1003 — Option 2 self-service intake awaiting the shop's pricing (pre-quotation, not one of the 7 stages)
+  // JJ-2026-1003 — an online order just submitted: its JJ code is also its slip no.; waiting for the shop to confirm
   const req = await store.insertOrder({
-    order_code: "JJ-2026-1003", paper_slip_number: null, encoded_by_id: null,
+    order_code: "JJ-2026-1003", paper_slip_number: "JJ-2026-1003", encoded_by_id: null,
     customer_email: "julian.marte@example.com", has_no_email: false,
     customer_name: "Julian Marte", customer_phone: "09000001003",
     delivery_address: "Purok 4, Brgy. Mailag", municipality: "Valencia City",
@@ -571,7 +630,7 @@ async function buildCuratedTables(): Promise<MemoryTables> {
     wood_type: "Gmelina", color_finish: "Satin Caramel Finish",
     furniture_category: "Custom Piece", design_variant: "Wardrobe / Aparador", width_cm: 180, height_cm: 210, depth_cm: 60,
     custom_wood_note: null, special_instructions: "Three modules: two hanging sections and one shelf tower with drawers.",
-    reference_photo_url: null, specs_confirmed: false, status: "Quote Requested", priority_rank: 99, priority_label: "Normal",
+    reference_photo_url: null, specs_confirmed: false, status: "Waiting for Confirmation", priority_rank: 99, priority_label: "Normal",
     assigned_craftsman_id: null, furniture_price: null, delivery_fee: 0, payment_exception_type: "Standard 30/70",
     payment_exception_approved: false, estimated_completion_date: null, scheduled_delivery_date: null,
     order_origin: "customer_self_service", client_request_key: "seed-request-1003",
@@ -584,21 +643,20 @@ async function buildCuratedTables(): Promise<MemoryTables> {
   Object.assign(byCode("JJ-2026-1003"), { created_at: ts(0, 8), version: 1 });
   t.order_specification_revisions.filter((r) => r.order_id === req.id).forEach((r) => (r.created_at = ts(0, 8)));
   t.order_status_history.push({
-    id: crypto.randomUUID(), order_id: req.id, from_status: null, to_status: "Quote Requested", changed_by_id: null,
-    notes: "Customer self-service request (Option 2) · specification revision 1", client_transaction_id: null, changed_at: ts(0, 8),
+    id: crypto.randomUUID(), order_id: req.id, from_status: null, to_status: "Waiting for Confirmation", changed_by_id: null,
+    notes: "Online order submitted · specification revision 1 · waiting for the shop to confirm", client_transaction_id: null, changed_at: ts(0, 8),
   });
   // keep the table in creation order like the database
   t.orders.sort((a, b) => a.order_code.localeCompare(b.order_code));
 
-  // verified customer accounts (Bon Ortizano is a walk-in: no email, no account, nothing linked)
+  // customer accounts. Bon Ortizano is a walk-in (no email, no account). Julian Marte's online order is not
+  // confirmed yet, so he has no account: confirming JJ-2026-1003 creates it and emails "create your password".
   const accounts: [string, string, string, number][] = [
     ["JJ-2026-1001", "c0000000-0000-4000-8000-000000001001", "Juliana Lelis", 13],
     ["JJ-2026-1002", "c0000000-0000-4000-8000-000000001002", "Rea Caday", 1],
-    ["JJ-2026-1003", "c0000000-0000-4000-8000-000000001003", "Julian Marte", 0],
     ["JJ-2026-1004", "c0000000-0000-4000-8000-000000001004", "Riezbell Naquinez", 23],
   ];
-  // Only the Demo Customer Login (Juliana) has a password already. The others are verified and linked but have
-  // never chosen one, so accepting a quotation (e.g. JJ-2026-1002) walks through "create your password".
+  // Only the Demo Customer Login (Juliana) has a password already; Rea's create-password link is in the Demo Inbox.
   const pw = bcrypt.hashSync(DEMO_PASSWORD, 6);
   for (const [code, id, name, daysAgo] of accounts) {
     const o = byCode(code);
@@ -614,18 +672,42 @@ async function buildCuratedTables(): Promise<MemoryTables> {
     dispatch_status: "Scheduled", failure_or_damage_notes: null, updated_at: ts(0),
   });
 
-  // JJ-2026-1002 — quotation Rev 1 issued; its single-use review link is in Rea's (simulated) inbox
+  // JJ-2026-1002 — the shop confirmed Rea's order yesterday and issued the quotation this morning. Her Demo Inbox
+  // holds the "create your password" email and the "choose how to pay" email; she has not accepted yet.
   const rea = byCode("JJ-2026-1002");
+  const confirmedRes = await store.updateOrder(rea.id, { status: "Confirmed" });
+  if (!confirmedRes.ok) throw new Error("seed: could not confirm JJ-2026-1002");
   const rev = t.order_specification_revisions.find((r) => r.order_id === rea.id && r.revision_number === rea.current_revision)!;
-  rev.quoted_at = ts(1, 9);
-  rev.expires_at = new Date(Date.parse(ts(1, 9)) + 7 * 86_400_000).toISOString();
-  const raw = randomBytes(32).toString("base64url");
-  await store.issueReviewToken({ order_id: rea.id, revision_id: rev.revision_id, token_hash: createHash("sha256").update(raw).digest("hex"), ttl_hours: 72 });
-  t.demo_mailbox.push({
-    id: crypto.randomUUID(), to: rea.customer_email!, order_id: rea.id, created_at: ts(1, 9),
-    subject: `Your JJ Furniture quotation for ${rea.order_code} is ready`,
-    text: `Hello ${rea.customer_name},\n\nYour quotation for ${rea.item_name} is ready: ₱44,000.00 (free delivery in Valencia City).\n\nReview the exact specification and accept it here (single-use link):\n/customer/review?token=${raw}\n\nNothing is ordered or charged until you accept.`,
-  });
+  rev.quoted_at = ts(0, 9);
+  rev.expires_at = new Date(Date.parse(ts(0, 9)) + 7 * 86_400_000).toISOString();
+  Object.assign(rea, { confirmed_at: ts(1, 15), quotation_issued_at: ts(0, 9), provisioning_status: "setup_email_sent" });
+  t.order_status_history.push(
+    { id: crypto.randomUUID(), order_id: rea.id, from_status: "Waiting for Confirmation", to_status: "Confirmed", changed_by_id: STAFF.liza,
+      notes: "Order confirmed by the shop · quotation to follow", client_transaction_id: null, changed_at: ts(1, 15) },
+    { id: crypto.randomUUID(), order_id: rea.id, from_status: "Confirmed", to_status: "Confirmed", changed_by_id: STAFF.liza,
+      notes: `Quotation issued as specification revision ${rev.revision_number} — valid 7 days; customer must accept it and choose payment terms`, client_transaction_id: null, changed_at: ts(0, 9) },
+  );
+  const reaAcct = t.customer_accounts.find((a) => a.email === rea.customer_email)!;
+  const setupRaw = randomBytes(32).toString("base64url");
+  t.password_tokens.push({ token_hash: createHash("sha256").update(setupRaw).digest("hex"), user_id: reaAcct.id, purpose: "setup",
+    expires_at: new Date(Date.now() + 24 * 3600_000).toISOString(), used_at: null });
+  t.notification_outbox.push(...(["order_confirmed_new_customer", "quotation_payment_request"] as const).map((kind, i) => ({
+    id: crypto.randomUUID(), kind, order_id: rea.id, recipient_email: rea.customer_email!, customer_user_id: kind === "order_confirmed_new_customer" ? reaAcct.id : null,
+    review_token_id: null, template_data: { customer_name: rea.customer_name, order_code: rea.order_code }, idempotency_key: `seed:${kind}:1002`,
+    encrypted_payload: null, requested_by_user_id: null, delivery_status: "sent", attempt_count: 1, max_attempts: 5,
+    next_retry_at: i === 0 ? ts(1, 15) : ts(0, 9), processing_lease_token: null, processing_lease_until: null,
+    provider_message_id: `demo:seed-${i}`, last_sanitized_error: null, is_permanent_failure: false,
+    created_at: i === 0 ? ts(1, 15) : ts(0, 9), updated_at: i === 0 ? ts(1, 15) : ts(0, 9), sent_at: i === 0 ? ts(1, 15) : ts(0, 9),
+  }) satisfies OutboxRow));
+  t.demo_mailbox.push(
+    { id: crypto.randomUUID(), to: rea.customer_email!, order_id: rea.id, created_at: ts(1, 15),
+      subject: `Order ${rea.order_code} confirmed — create your JJ Enterprises password`,
+      text: `Thank you, ${rea.customer_name}!\n\nOrder ${rea.order_code} is confirmed: ${rea.item_name}.\nYour quotation and payment options will appear in your account.\n\nCreate your password (single-use link):\n/customer/set-password?token=${setupRaw}\n\nJJ Enterprises will never email you a password.` },
+    { id: crypto.randomUUID(), to: rea.customer_email!, order_id: rea.id, created_at: ts(0, 9),
+      subject: `Quotation for ${rea.order_code}: choose how to pay`,
+      text: `Hello ${rea.customer_name},\n\nYour official quotation for ${rea.order_code} is ready.\nItem: ${rea.item_name}\nTotal: ₱44,000.00 (free delivery in Valencia City)\n30% down payment: ₱13,200.00\n\nLog in to accept it and choose 30% down payment, installment or full payment:\n/customer/orders/${rea.order_code}\n\nProduction starts once your down payment is verified.` },
+  );
+  await seedLumber(store, (code) => t.orders.find((o) => o.order_code === code)?.id ?? null);
   return structuredClone(t);
 }
 

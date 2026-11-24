@@ -4,7 +4,7 @@ import { CircleHelp, Hourglass, PackageCheck, Ruler } from "lucide-react";
 import { useState } from "react";
 import { requestExceptionAction, transitionAction } from "@/app/actions";
 import { ActionDialog } from "@/components/action-dialog";
-import { EmptyState } from "@/components/app-shell";
+import { EmptyState } from "@/components/empty-state";
 import { Field, TextArea } from "@/components/form";
 import { PriorityBadge } from "@/components/status";
 import { formatDate, todayISO, daysBetween } from "@/lib/domain/dates";
@@ -43,7 +43,7 @@ export function WorkshopBoard({ jobs, names, me, questions }: { jobs: WorkshopOr
       <div role="tablist" aria-label="Job status" className="sticky top-[60px] z-20 -mx-4 mb-4 grid grid-cols-4 gap-1 bg-background/95 px-4 py-2 backdrop-blur sm:static sm:mx-0 sm:px-0">
         {TABS.map((t) => (
           <button key={t.id} role="tab" aria-selected={tab === t.id} onClick={() => setTab(t.id)}
-            className={cn("flex h-14 flex-col items-center justify-center rounded-xl border text-sm font-semibold leading-tight",
+            className={cn("flex h-14 flex-col items-center justify-center rounded-2xl border text-sm font-semibold leading-tight",
               tab === t.id ? "border-primary bg-primary text-primary-foreground" : "bg-card")}>
             {t.label}
             <span className="text-lg font-black tabular-nums">{counts[t.id]}</span>
@@ -56,12 +56,12 @@ export function WorkshopBoard({ jobs, names, me, questions }: { jobs: WorkshopOr
           {tab === "todo" ? "Confirmed jobs appear here. The office releases them to production once the 30% down payment is verified." : undefined}
         </EmptyState>
       ) : (
-        <ul className="grid gap-3 md:grid-cols-2">
+        <ul className="divide-y divide-border border-y border-border">
           {shown.map((j) => {
             const due = j.estimated_completion_date ? daysBetween(today, j.estimated_completion_date) : 99;
             const myQs = questions.filter((q) => q.order_id === j.id);
             return (
-              <li key={j.id} className={cn("rounded-2xl border-2 bg-card p-4", j.priority_label === "Urgent" && "border-destructive", j.needs_revision && "border-warning")}>
+              <li key={j.id} className={cn("border-l-4 border-l-transparent py-4 pl-3 sm:pl-4", j.priority_label === "Urgent" && "border-l-destructive", j.needs_revision && "border-l-warning")}>
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="text-xl font-black">{j.order_code}</span>
                   <PriorityBadge label={j.priority_label} rank={j.priority_rank} />

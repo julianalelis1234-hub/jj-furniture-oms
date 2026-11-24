@@ -2,6 +2,7 @@
 
 import {
   AlertTriangle,
+  ArrowLeft,
   CheckCircle2,
   CloudDownload,
   CloudOff,
@@ -17,7 +18,8 @@ import {
 import { useCallback, useEffect, useRef, useState } from "react";
 import { LIVE_DOM_EVENT } from "@/components/live-sync-client";
 import { toast } from "sonner";
-import { EmptyState } from "@/components/app-shell";
+import { EmptyState } from "@/components/empty-state";
+import { DELIVERY_PILL, DeliveryPill } from "@/components/delivery-pill";
 import { DesignNote } from "@/components/design-note";
 import { Field, NativeSelect, TextArea, TextInput } from "@/components/form";
 import { Button } from "@/components/ui/button";
@@ -60,6 +62,8 @@ export function DriverApp({ driverId, initialManifest, serverTime }: { driverId:
   const [lastPreload, setLastPreload] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>("today");
   const [dialog, setDialog] = useState<{ kind: "delivered" | "failed"; entry: CachedEntry } | null>(null);
+  /** the delivery whose detail is open (rows → detail → back) */
+  const [openId, setOpenId] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
   const online = browserOnline && !simulateOffline;
   const onlineRef = useRef(online);
@@ -197,7 +201,7 @@ export function DriverApp({ driverId, initialManifest, serverTime }: { driverId:
   return (
     <div>
       {/* ------------------------------------------------ offline / sync bar */}
-      <div className="mb-4 grid gap-3 rounded-2xl border bg-card p-3 sm:p-4">
+      <div className="mb-5 grid gap-3 border-y border-border py-4">
         <div className="flex flex-wrap items-center gap-2">
           <SyncBadge state={state} pending={pending.length} />
           <label className="ml-auto flex cursor-pointer items-center gap-2 text-sm font-medium">
@@ -256,28 +260,36 @@ export function DriverApp({ driverId, initialManifest, serverTime }: { driverId:
         </section>
       )}
 
-      {/* ---------------------------------------------------------------- tabs */}
-      <div role="tablist" aria-label="Deliveries" className="mb-3 grid grid-cols-3 gap-1">
-        {([["today", "Today"], ["upcoming", "Upcoming"], ["done", "Done + Failed"]] as [Tab, string][]).map(([id, label]) => (
-          <button key={id} role="tab" aria-selected={tab === id} onClick={() => setTab(id)}
-            className={cn("h-14 rounded-xl border text-sm font-semibold", tab === id ? "border-primary bg-primary text-primary-foreground" : "bg-card")}>
-            {label} <span className="font-black tabular-nums">({groups[id].length})</span>
-          </button>
-        ))}
-      </div>
-
-      {groups[tab].length === 0 ? (
-        <EmptyState title={tab === "today" ? "No deliveries for today" : tab === "upcoming" ? "Nothing scheduled ahead" : "No finished trips yet"} />
-      ) : (
-        <ul className="grid gap-3 md:grid-cols-2">
-          {groups[tab].map((e) => (
-            <DeliveryCard key={e.delivery.id} entry={e} today={today}
-              onStart={() => record(e, "start_trip")}
-              onDelivered={() => setDialog({ kind: "delivered", entry: e })}
-              onFailed={() => setDialog({ kind: "failed", entry: e })} />
-          ))}
-        </ul>
-      )}
+      {(() => {
+        const open = openId ? entries.find((x) => x.delivery.id === openId) : null;
+        if (open)
+          return (
+            <DeliveryDetail entry={open} today={today} onBack={() => setOpenId(null)}
+              onStart={() => record(open, "start_trip")}
+              onDelivered={() => setDialog({ kind: "delivered", entry: open })}
+              onFailed={() => setDialog({ kind: "failed", entry: open })} />
+          );
+        return (
+          <>
+            {/* ------------------------------------------------------------ tabs */}
+            <div role="tablist" aria-label="Deliveries" className="mb-3 grid grid-cols-3 gap-2">
+              {([["today", "Today"], ["upcoming", "Upcoming"], ["done", "Done"]] as [Tab, string][]).map(([id, label]) => (
+                <button key={id} role="tab" aria-selected={tab === id} onClick={() => setTab(id)} title={id === "done" ? "Delivered and failed trips" : undefined}
+                  className={cn("h-11 rounded-full border px-2 text-sm font-semibold whitespace-nowrap", tab === id ? "border-primary bg-primary text-primary-foreground" : "border-border")}>
+                  {label} <span className="font-black tabular-nums">({groups[id].length})</span>
+                </button>
+              ))}
+            </div>
+            {groups[tab].length === 0 ? (
+              <EmptyState title={tab === "today" ? "No deliveries for today" : tab === "upcoming" ? "Nothing scheduled ahead" : "No finished trips yet"} />
+            ) : (
+              <ul className="divide-y divide-border border-y border-border" data-testid="delivery-rows">
+                {groups[tab].map((e) => <DeliveryRow key={e.delivery.id} entry={e} today={today} onOpen={() => setOpenId(e.delivery.id)} />)}
+              </ul>
+            )}
+          </>
+        );
+      })()}
 
       <DeliveredDialog entry={dialog?.kind === "delivered" ? dialog.entry : null} online={online} onClose={() => setDialog(null)}
         onSubmit={async (amount, method, notes) => { const e = dialog!.entry; setDialog(null); await record(e, "delivered", { amount_collected: amount, payment_method: method, notes }); }} />
@@ -307,15 +319,40 @@ function SyncBadge({ state, pending }: { state: SyncState; pending: number }) {
   );
 }
 
-function DeliveryCard({ entry: e, today, onStart, onDelivered, onFailed }: { entry: CachedEntry; today: string; onStart: () => void; onDelivered: () => void; onFailed: () => void }) {
+/** One flat row per delivery: who, where, when, how much — tap to open the detail. */
+function DeliveryRow({ entry: e, today, onOpen }: { entry: CachedEntry; today: string; onOpen: () => void }) {
+  const d = e.delivery;
+  const o = e.order;
+  return (
+    <li data-code={o.order_code}>
+      <button type="button" onClick={onOpen} data-testid="delivery-row" aria-label={`${o.order_code}, ${o.customer_name}, ${DELIVERY_PILL[d.dispatch_status].label}: open details`}
+        className="grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 px-1 py-4 text-left transition-colors hover:bg-accent-soft/60 focus-visible:bg-accent-soft focus-visible:outline-none sm:px-3">
+        <span className="flex min-w-0 flex-wrap items-center gap-2">
+          <b className="text-lg tabular-nums">{o.order_code}</b>
+          {e.local_pending && <span className="rounded-full bg-warning px-2 py-0.5 text-xs font-bold text-warning-foreground">Saved Locally</span>}
+        </span>
+        <DeliveryPill status={d.dispatch_status} />
+        <span className="min-w-0 truncate text-sm">{o.customer_name} · <b>{o.municipality}</b></span>
+        <b className="text-right tabular-nums">{formatPeso(o.collectible_on_delivery)}</b>
+        <span className="col-span-2 text-xs text-muted-foreground">{d.scheduled_date === today ? "Today" : formatDate(d.scheduled_date)} · {d.time_window ?? "any time"} · {d.vehicle_type}</span>
+      </button>
+    </li>
+  );
+}
+
+/** Everything for one stop, full width: address, call / map, cash to collect, and the trip actions. */
+function DeliveryDetail({ entry: e, today, onBack, onStart, onDelivered, onFailed }: { entry: CachedEntry; today: string; onBack: () => void; onStart: () => void; onDelivered: () => void; onFailed: () => void }) {
   const d = e.delivery;
   const o = e.order;
   const maps = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${o.delivery_address}, ${o.municipality}, Bukidnon`)}`;
   return (
-    <li className={cn("rounded-2xl border-2 bg-card p-4", d.dispatch_status === "Out for Delivery" && "border-info", d.dispatch_status === "Failed / Reschedule" && "border-destructive")}>
+    <article className="grid gap-1" data-testid="delivery-detail" data-code={o.order_code} aria-labelledby="delivery-title">
+      <button type="button" onClick={onBack} className="mb-2 inline-flex h-11 w-fit items-center gap-1.5 rounded-full border px-4 text-sm font-semibold" data-testid="delivery-back">
+        <ArrowLeft className="size-4" aria-hidden /> All deliveries
+      </button>
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-xl font-black">{o.order_code}</span>
-        <span className="rounded-full border px-2 py-0.5 text-xs font-bold">{d.dispatch_status}</span>
+        <h2 id="delivery-title" className="text-2xl font-black">{o.order_code}</h2>
+        <DeliveryPill status={d.dispatch_status} />
         {e.local_pending && <span className="rounded-full bg-warning px-2 py-0.5 text-xs font-bold text-warning-foreground">Saved Locally</span>}
       </div>
       <p className="mt-1 text-sm text-muted-foreground">
@@ -328,7 +365,7 @@ function DeliveryCard({ entry: e, today, onStart, onDelivered, onFailed }: { ent
       {d.failure_or_damage_notes && <p className="mt-1 text-sm text-destructive">{d.failure_or_damage_notes}</p>}
 
       <div className="mt-3 rounded-xl bg-foreground p-3 text-center text-background">
-        <p className="text-xs font-semibold tracking-widest uppercase">Collect on delivery</p>
+        <p className="text-sm font-semibold">Collect on delivery</p>
         <p className="text-3xl font-black tabular-nums">{formatPeso(o.collectible_on_delivery)}</p>
         <p className="text-xs opacity-80">balance {formatPeso(o.remaining_furniture_balance)} + delivery fee {o.delivery_fee === 0 ? "FREE" : formatPeso(o.delivery_fee)}</p>
       </div>
@@ -352,7 +389,7 @@ function DeliveryCard({ entry: e, today, onStart, onDelivered, onFailed }: { ent
         )}
         {d.dispatch_status === "Scheduled" && <Button size="touch" variant="ghost" onClick={onFailed}>Can&apos;t go? Report failed / reschedule</Button>}
       </div>
-    </li>
+    </article>
   );
 }
 

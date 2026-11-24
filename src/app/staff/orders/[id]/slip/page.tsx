@@ -19,7 +19,7 @@ export default async function SlipPage({ params, searchParams }: PageProps<"/sta
   const store = await getStore();
   const o = await store.getOrder(id);
   if (!o) notFound();
-  if (o.status === "Quote Requested") redirect(`/staff/orders/${o.id}`); // no quotation, no slip yet
+  if (o.status === "Quote Requested" || o.furniture_price == null) redirect(`/staff/orders/${o.id}`); // no price yet, nothing to print
   const profiles = await store.listProfiles();
   const h = await headers();
   const origin = process.env.NEXT_PUBLIC_SITE_URL || `${h.get("x-forwarded-proto") ?? "http"}://${h.get("host")}`;

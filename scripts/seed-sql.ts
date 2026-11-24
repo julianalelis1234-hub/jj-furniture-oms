@@ -32,6 +32,15 @@ buildSeedTables(process.argv.includes("--curated") ? "curated" : "fixtures").the
     ...(["order_specification_revisions", "order_confirmations", "payments", "order_status_history", "delivery_assignments", "order_exceptions_and_repairs", "notifications", "quote_review_tokens"] as const).map(
       (tbl) => `insert into public.${tbl} select * from jsonb_populate_recordset(null::public.${tbl}, ${q(t[tbl])});`,
     ),
+    // lumber (migration 010): items start at 0; the movement trigger rebuilds on-hand, which must equal the TS engine's
+    `insert into public.lumber_stock_items select * from jsonb_populate_recordset(null::public.lumber_stock_items, ${q(t.lumber_stock_items.map((i) => ({ ...i, on_hand_bf: 0 })))});`,
+    `insert into public.lumber_movements select * from jsonb_populate_recordset(null::public.lumber_movements, ${q([...t.lumber_movements].sort((a, b) => a.created_at.localeCompare(b.created_at)))}) order by created_at;`,
+    `do $$ declare n int; begin
+       select count(*) into n from jsonb_to_recordset(${q(t.lumber_stock_items.map((i) => ({ id: i.id, on_hand: i.on_hand_bf })))}) as x(id uuid, on_hand numeric)
+         join public.lumber_stock_items l on l.id = x.id where l.on_hand_bf <> x.on_hand;
+       if n > 0 then raise exception 'TEST FAILED: % lumber item(s) differ between the DB ledger and the TS engine', n; end if;
+       raise notice 'ok - lumber ledger replays into the real schema; on-hand board feet match the TS engine for % items', (select count(*) from public.lumber_stock_items);
+     end $$;`,
     `create temp table expected as select * from jsonb_to_recordset(${q(t.orders.map((o) => ({ code: o.order_code, collectible: o.collectible_on_delivery, remaining: o.remaining_furniture_balance, down: o.standard_down_payment_due, fee: o.delivery_fee })))}) as x(code text, collectible numeric, remaining numeric, down numeric, fee numeric);`,
     `do $$ declare n int; begin
        select count(*) into n from expected e join public.orders o on o.order_code = e.code

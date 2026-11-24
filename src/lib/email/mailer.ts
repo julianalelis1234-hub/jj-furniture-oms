@@ -163,7 +163,7 @@ export function mailConfig(env: Record<string, string | undefined> = process.env
 export function selectMailProvider(store: DataStore, env: Record<string, string | undefined> = process.env): MailProvider | null {
   const c = mailConfig(env);
   if (c.provider === "resend") return resendProvider(env.RESEND_API_KEY!, env.EMAIL_FROM!);
-  if (c.provider === "gmail") return gmailProvider(addressOf(env.GMAIL_SMTP_USER!)!, env.GMAIL_SMTP_APP_PASSWORD!.replace(/\s/g, ""), env.EMAIL_FROM_NAME || "JJ Furniture");
+  if (c.provider === "gmail") return gmailProvider(addressOf(env.GMAIL_SMTP_USER!)!, env.GMAIL_SMTP_APP_PASSWORD!.replace(/\s/g, ""), env.EMAIL_FROM_NAME || "JJ Enterprises");
   if (c.provider === "demo") return demoPreviewProvider(store);
   return null;
 }

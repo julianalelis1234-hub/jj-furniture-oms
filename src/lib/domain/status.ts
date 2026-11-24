@@ -4,7 +4,7 @@ import { ORDER_STATUSES } from "./types";
 import { furniturePaidFrom } from "./finance";
 import type { Payment } from "./types";
 
-/** Mirrors private.is_valid_transition() (migration 004b). */
+/** Mirrors private.is_valid_transition() (migration 004b; 009 uses Confirmed -> In Production only). */
 export const TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
   "Quote Requested": ["Waiting for Confirmation"], // official quotation issued
   "Waiting for Confirmation": ["Confirmed"],
@@ -46,7 +46,8 @@ export function rolesAllowedFor(from: OrderStatus, to: OrderStatus): Role[] {
  * store (to mirror the DB) and by services (to fail fast with clear messages).
  */
 export function assertTransition(
-  order: Pick<Order, "status" | "specs_confirmed" | "standard_down_payment_due" | "payment_exception_approved" | "id">,
+  order: Pick<Order, "status" | "specs_confirmed" | "standard_down_payment_due" | "payment_exception_approved" | "id"> &
+    Partial<Pick<Order, "quotation_issued_at">>,
   to: OrderStatus,
   payments: Payment[],
 ): void {
@@ -54,11 +55,14 @@ export function assertTransition(
   if (!isValidTransition(order.status, to)) {
     throw new DomainError("INVALID_TRANSITION", `Cannot move an order from "${order.status}" to "${to}".`);
   }
-  if ((to === "Confirmed" || to === "In Production") && !order.specs_confirmed) {
-    throw new DomainError(
-      "SPECS_NOT_CONFIRMED",
-      "The customer must confirm the specifications before production can start.",
-    );
+  // migration 009: Confirmed is the shop's confirmation; acceptance comes after the quotation
+  if (to === "In Production" && order.status === "Confirmed") {
+    if (!order.quotation_issued_at) {
+      throw new DomainError("PENDING_REVIEW", "Issue the quotation before production can start.");
+    }
+    if (!order.specs_confirmed) {
+      throw new DomainError("SPECS_NOT_CONFIRMED", "The customer must accept the quotation before production can start.");
+    }
   }
   assertDownPaymentGate(order, to, payments);
   if (to === "Out for Delivery") {
@@ -70,6 +74,19 @@ export function assertTransition(
       );
     }
   }
+}
+
+/** The production lock: from In Production on, specification and price never change. */
+export function isProductionLocked(status: OrderStatus): boolean {
+  return !["Quote Requested", "Waiting for Confirmation", "Confirmed"].includes(status);
+}
+
+/** Where a Confirmed order is in the quotation and payment steps (migration 009). */
+export type QuoteStep = "awaiting_quotation" | "awaiting_acceptance" | "accepted";
+export function quoteStep(order: Pick<Order, "status" | "quotation_issued_at" | "specs_confirmed">): QuoteStep | null {
+  if (order.status !== "Confirmed") return null;
+  if (!order.quotation_issued_at) return "awaiting_quotation";
+  return order.specs_confirmed ? "accepted" : "awaiting_acceptance";
 }
 
 /**
@@ -105,11 +122,11 @@ export const STATUS_SHORT: Record<OrderStatus, string> = {
 
 export const STATUS_CUSTOMER_COPY: Record<OrderStatus, string> = {
   "Quote Requested": "We received your design. The shop will check it and send you an official quotation.",
-  "Waiting for Confirmation": "We are waiting for you to accept the specifications and the quotation.",
-  Confirmed: "Your order is confirmed. Production starts once your 30% down payment is verified.",
+  "Waiting for Confirmation": "We received your order. The shop is checking your design and will confirm it soon.",
+  Confirmed: "Your order is confirmed. Accept the quotation and pay your down payment so production can start.",
   "In Production": "Our craftsmen are building your furniture.",
   "Completed / For Inspection": "Building is done. The owner is checking the quality.",
   "Ready for Delivery": "Your furniture passed inspection and is ready for delivery.",
   "Out for Delivery": "Your furniture is on the way.",
-  Delivered: "Delivered. Thank you for ordering from JJ Furniture!",
+  Delivered: "Delivered. Thank you for ordering from JJ Enterprises!",
 };

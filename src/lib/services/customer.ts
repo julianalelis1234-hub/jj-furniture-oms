@@ -2,9 +2,9 @@ import type { DataStore } from "@/lib/data/store";
 import { DomainError } from "@/lib/domain/errors";
 import { effectiveDeliveryFee, furniturePaidFrom, feePaidFrom } from "@/lib/domain/finance";
 import { blockingItems, isQuoteExpired } from "@/lib/domain/gate";
-import { QUOTE_REVISION_TYPES, type Order, type OrderStatus, type SpecRevision } from "@/lib/domain/types";
+import { QUOTE_REVISION_TYPES, type Order, type OrderStatus, type Payment, type PaymentMethod, type PaymentPlan, type SpecRevision } from "@/lib/domain/types";
 import { recordConfirmation } from "./orders";
-import { nextDraftCode } from "./codes";
+import { nextOrderCode } from "./codes";
 import { describeDiff, dimensionsText, itemNameFor, normalizeSpec, type Dims, type FurnitureSpec, type SpecDiff } from "@/lib/domain/furniture";
 import { customerProposalSchema, customerRequestSchema } from "@/lib/domain/validation";
 
@@ -22,14 +22,29 @@ export interface CustomerSpecView {
   expires_at: string | null;
 }
 
+/** Where the order is in submit -> confirm -> quotation -> accept + pay (migration 009). */
 export type SpecState =
-  | "quote_requested" // Option 2 request: the shop is preparing the official quotation
-  | "quote_expired" // the latest quotation expired; the shop must issue a fresh one
-  | "awaiting_confirmation" // latest revision is a valid shop quote; customer may accept or propose changes
-  | "proposal_under_review" // customer's proposal waits for the shop's revised quote
-  | "needs_shop_review" // other open review items (e.g. owner approval) must be resolved first
+  | "submitted" // waiting for the shop to confirm the order (legacy Quote Requested too)
+  | "awaiting_quotation" // confirmed; the shop is preparing the official quotation
+  | "awaiting_acceptance" // quotation issued; the customer may accept it (and choose terms) or propose changes
+  | "quote_expired" // the issued quotation expired; the shop must issue a fresh one
+  | "proposal_under_review" // the customer's proposal waits for the shop's revised quotation
+  | "needs_shop_review" // other open review items must be resolved first
   | "legacy_needs_spec" // pre-configurator order: shop must issue a structured quote
-  | "locked"; // confirmed for workshop production (read-only)
+  | "accepted" // quotation accepted: pay the down payment, production follows
+  | "locked"; // in production or later: specification is locked (read-only)
+
+/** A payment as the customer sees it (their own order only). */
+export interface CustomerPaymentView {
+  id: string;
+  amount: number;
+  payment_type: Payment["payment_type"];
+  payment_method: PaymentMethod;
+  reference_number: string | null;
+  paid_at: string;
+  state: "pending" | "verified" | "rejected";
+  rejection_reason: string | null;
+}
 
 export interface CustomerOrderView {
   order_code: string;
@@ -53,6 +68,11 @@ export interface CustomerOrderView {
   quote: CustomerSpecView | null;
   approved_revision_number: number | null;
   spec_state: SpecState;
+  confirmed_at: string | null;
+  quotation_issued_at: string | null;
+  payment_plan: PaymentPlan | null;
+  preferred_payment_method: PaymentMethod | null;
+  payments: CustomerPaymentView[];
   revisions: { revision_number: number; revision_type: string; created_at: string; changes: string }[];
   payment: {
     furniture_price: number | null;
@@ -109,19 +129,23 @@ export async function customerOrderView(publicStore: DataStore, orderId: string)
   const current = revisions.find((r) => r.revision_number === o.current_revision) ?? null;
   const quote = [...revisions].reverse().find((r) => QUOTE_REVISION_TYPES.includes(r.revision_type)) ?? null;
   const spec_state: SpecState =
-    o.status === "Quote Requested"
-      ? "quote_requested"
-      : o.status !== "Waiting for Confirmation"
+    o.status === "Quote Requested" || o.status === "Waiting for Confirmation"
+      ? "submitted"
+      : o.status !== "Confirmed"
         ? "locked"
-        : current?.revision_type === "customer_proposal"
-          ? "proposal_under_review"
-          : o.is_legacy_incomplete
-            ? "legacy_needs_spec"
-            : blockingItems(o.id, exceptions).length > 0
-              ? "needs_shop_review"
-              : current && isQuoteExpired(current)
-                ? "quote_expired"
-                : "awaiting_confirmation";
+        : o.specs_confirmed
+          ? "accepted"
+          : current?.revision_type === "customer_proposal"
+            ? "proposal_under_review"
+            : !o.quotation_issued_at
+              ? "awaiting_quotation"
+              : o.is_legacy_incomplete
+                ? "legacy_needs_spec"
+                : blockingItems(o.id, exceptions).length > 0
+                  ? "needs_shop_review"
+                  : current && isQuoteExpired(current)
+                    ? "quote_expired"
+                    : "awaiting_acceptance";
   return {
     order_code: o.order_code,
     customer_name: o.customer_name,
@@ -142,6 +166,18 @@ export async function customerOrderView(publicStore: DataStore, orderId: string)
     quote: quote ? toSpecView(quote) : null,
     approved_revision_number: o.approved_revision_number,
     spec_state,
+    confirmed_at: o.confirmed_at,
+    quotation_issued_at: o.quotation_issued_at,
+    payment_plan: o.payment_plan,
+    preferred_payment_method: o.preferred_payment_method,
+    payments: payments
+      .sort((a, b) => b.paid_at.localeCompare(a.paid_at))
+      .map((p) => ({
+        id: p.id, amount: p.amount, payment_type: p.payment_type, payment_method: p.payment_method,
+        reference_number: p.reference_number ?? null, paid_at: p.paid_at,
+        state: p.verified_by_owner_or_staff ? "verified" : p.rejected_at ? "rejected" : "pending",
+        rejection_reason: p.rejection_reason ?? null,
+      })),
     revisions: revisions.map((r) => ({
       revision_number: r.revision_number,
       revision_type: r.revision_type,
@@ -190,6 +226,8 @@ export async function customerAcceptQuote(
     client_idempotency_key: string;
     accept_specification: boolean;
     accept_quotation: boolean;
+    payment_plan?: PaymentPlan;
+    payment_method?: PaymentMethod | null;
   },
 ) {
   if (!input.accept_specification || !input.accept_quotation)
@@ -206,6 +244,8 @@ export async function customerAcceptQuote(
     accepted_furniture_price: input.accepted_furniture_price,
     accepted_delivery_fee: input.accepted_delivery_fee,
     client_idempotency_key: input.client_idempotency_key,
+    payment_plan: input.payment_plan,
+    payment_method: input.payment_method,
   });
 }
 
@@ -229,10 +269,11 @@ export async function createCustomerRequest(publicStore: DataStore, raw: unknown
   if (replay) throw new DomainError("DUPLICATE_REQUEST", `This request was already sent as ${replay.order_code}.`);
   const since = Date.now() - 24 * 3600_000;
   const recent = existing.filter(
-    (o) => o.status === "Quote Requested" && o.customer_phone === v.customer_phone && Date.parse(o.created_at) > since,
+    (o) => ["Quote Requested", "Waiting for Confirmation"].includes(o.status) && o.order_origin === "customer_self_service" &&
+      o.customer_phone === v.customer_phone && Date.parse(o.created_at) > since,
   );
   if (recent.length >= MAX_OPEN_REQUESTS_PER_PHONE)
-    throw new DomainError("RATE_LIMITED", "You already have open requests. JJ Furniture will contact you with your quotations.");
+    throw new DomainError("RATE_LIMITED", "You already have open requests. JJ Enterprises will contact you with your quotations.");
 
   const spec = normalizeSpec({
     furniture_category: v.furniture_category,
@@ -245,9 +286,11 @@ export async function createCustomerRequest(publicStore: DataStore, raw: unknown
     color_finish: v.color_finish,
     quantity: v.quantity,
   });
+  // one permanent Order ID from submission; it is also the online order's paper slip number (migration 009)
+  const code = nextOrderCode(existing, new Date().getFullYear());
   const order = await store.insertOrder({
-    order_code: nextDraftCode(existing),
-    paper_slip_number: null,
+    order_code: code,
+    paper_slip_number: code,
     encoded_by_id: null,
     customer_name: v.customer_name,
     customer_phone: v.customer_phone,
@@ -271,7 +314,7 @@ export async function createCustomerRequest(publicStore: DataStore, raw: unknown
     special_instructions: v.special_instructions || null,
     reference_photo_url: v.reference_photo_url || null,
     specs_confirmed: false,
-    status: "Quote Requested",
+    status: "Waiting for Confirmation",
     priority_rank: 99,
     priority_label: "Normal",
     assigned_craftsman_id: null,
@@ -295,9 +338,9 @@ export async function createCustomerRequest(publicStore: DataStore, raw: unknown
   await store.insertHistory({
     order_id: order.id,
     from_status: null,
-    to_status: "Quote Requested",
+    to_status: "Waiting for Confirmation",
     changed_by_id: null,
-    notes: "Customer self-service request (Option 2) · specification revision 1",
+    notes: "Online order submitted · specification revision 1 · waiting for the shop to confirm",
     client_transaction_id: null,
     changed_at: new Date().toISOString(),
   });
@@ -305,7 +348,7 @@ export async function createCustomerRequest(publicStore: DataStore, raw: unknown
     order_id: order.id,
     recipient_phone: null,
     channel: "In-App",
-    message_body: `Staff/Owner: new quote request ${order.order_code} from ${order.customer_name} — ${order.item_name}, ${order.dimensions}, ${order.wood_type}, ${order.color_finish}. Check feasibility, then issue the quotation.`,
+    message_body: `Staff/Owner: new online order ${order.order_code} from ${order.customer_name} — ${order.item_name}, ${order.dimensions}, ${order.wood_type}, ${order.color_finish}. Check the design, then confirm the order.`,
     delivery_status: "Sent",
     created_at: new Date().toISOString(),
   });
@@ -382,7 +425,7 @@ export async function customerRequestRepair(
   const o = await store.getOrder(orderId);
   if (!o) throw new DomainError("NOT_FOUND", "Order not found.");
   if (o.status === "Waiting for Confirmation" || o.status === "Quote Requested")
-    throw new DomainError("VALIDATION", "Your order is not confirmed yet — edit the specifications above instead.");
+    throw new DomainError("VALIDATION", "Your order is not confirmed yet. The shop will contact you if anything needs to change.");
   const open = (await store.listExceptions(orderId)).filter((e) => e.status === "Pending" && e.requested_by === "Customer (portal)");
   if (open.length >= 3) throw new DomainError("RATE_LIMITED", "You already have open requests. The shop will contact you.");
   return store.insertException({

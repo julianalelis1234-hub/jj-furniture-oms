@@ -1,5 +1,6 @@
 "use server";
 
+import { refresh } from "next/cache";
 import { redirect } from "next/navigation";
 import { after } from "next/server";
 import { requestSetupLink, SETUP_LINK_GENERIC } from "@/lib/email/requests";
@@ -23,7 +24,10 @@ import {
   getReviewSession,
   setReviewSession,
 } from "@/lib/server/customer-auth";
-import { acceptFromReview, customerOwnedRequest, openReviewLink, proposeFromReview, type ProvisionResult } from "@/lib/services/customer-portal";
+import { acceptFromReview, customerOwnedAccept, customerOwnedRequest, openReviewLink, proposeFromReview, type ProvisionResult } from "@/lib/services/customer-portal";
+import { submitCustomerPayment, PROOF_MAX_BYTES } from "@/lib/services/payments";
+import { getProofStore } from "@/lib/server/proof-store";
+import type { PaymentMethod, PaymentPlan } from "@/lib/domain/types";
 
 function fail(e: unknown): { ok: false; message: string; code?: string; fieldErrors?: Record<string, string> } {
   if (e instanceof DomainError) {
@@ -86,7 +90,7 @@ export async function reviewProposeAction(fd: FormData): Promise<ActionResult<{ 
   if (!scope) return { ok: false, message: "Your review session ended. Open the link from your email again, or ask the shop for a new one." };
   try {
     const r = await proposeFromReview(await getPublicStore(), scope, Object.fromEntries(fd));
-    return { ok: true, data: { revision_number: r.revision_number }, message: "Your changes were sent to JJ Furniture. They will email you a revised quotation." };
+    return { ok: true, data: { revision_number: r.revision_number }, message: "Your changes were sent to JJ Enterprises. They will email you a revised quotation." };
   } catch (e) {
     return fail(e);
   }
@@ -130,6 +134,59 @@ export async function customerOrderRequestAction(orderCode: string, kind: "chang
     return fail(e);
   }
   return { ok: true, message: kind === "change" ? "Change request sent. The shop will review it and contact you." : "Request sent. The shop will contact you to schedule the touch-up." };
+}
+
+/** Accept the issued quotation of an OWN order and choose 30% / installment / full + channel (migration 009). */
+export async function customerAcceptQuotationAction(orderCode: string, input: {
+  expected_revision_number: number;
+  accepted_furniture_price: number;
+  accepted_delivery_fee: number;
+  client_idempotency_key: string;
+  accept_specification: boolean;
+  accept_quotation: boolean;
+  payment_plan: PaymentPlan;
+  payment_method: PaymentMethod | null;
+}): Promise<ActionResult> {
+  const customer = await getCustomer();
+  if (!customer) return { ok: false, code: "UNAUTHENTICATED", message: "Please log in again." };
+  try {
+    await customerOwnedAccept(await getCustomerStore(), customer.id, orderCode, input);
+  } catch (e) {
+    return fail(e);
+  }
+  refresh();
+  return {
+    ok: true,
+    message: input.payment_plan === "installment"
+      ? "Quotation accepted. The owner will review your installment terms; you can already submit a first payment."
+      : "Quotation accepted. Submit your payment below, or pay cash at the shop.",
+  };
+}
+
+/** Submit an online / bank payment (reference no. + receipt) for an OWN order. Saved unverified until staff check it. */
+export async function customerSubmitPaymentAction(orderCode: string, fd: FormData): Promise<ActionResult> {
+  const customer = await getCustomer();
+  if (!customer) return { ok: false, code: "UNAUTHENTICATED", message: "Please log in again." };
+  try {
+    const file = fd.get("proof");
+    let proof: { bytes: Uint8Array; type: string; size: number } | null = null;
+    if (file instanceof File && file.size > 0) {
+      if (file.size > PROOF_MAX_BYTES) throw new DomainError("VALIDATION", "The receipt file is larger than 5 MB. Take a smaller photo or screenshot.");
+      proof = { bytes: new Uint8Array(await file.arrayBuffer()), type: file.type, size: file.size };
+    }
+    await submitCustomerPayment(await getCustomerStore(), customer.id, {
+      order_code: orderCode,
+      client_transaction_id: String(fd.get("client_transaction_id") ?? ""),
+      amount: Number(fd.get("amount")),
+      payment_method: String(fd.get("payment_method") ?? "") as PaymentMethod,
+      reference_number: String(fd.get("reference_number") ?? ""),
+      proof,
+    }, getProofStore());
+  } catch (e) {
+    return fail(e);
+  }
+  refresh();
+  return { ok: true, message: "Payment sent. The shop will check your reference number and receipt, then verify it." };
 }
 
 /** "Forgot Password?" — same service, limits and generic answer as POST /api/auth/request-setup-link. */

@@ -3,7 +3,7 @@ import { DomainError } from "@/lib/domain/errors";
 import { formatDate } from "@/lib/domain/dates";
 import { formatPeso } from "@/lib/domain/finance";
 import { isQuoteExpired } from "@/lib/domain/gate";
-import { QUOTE_REVISION_TYPES, type ConsumeReviewResult, type Order, type ProvisioningStatus } from "@/lib/domain/types";
+import { QUOTE_REVISION_TYPES, type ConsumeReviewResult, type Order, type PaymentMethod, type PaymentPlan, type ProvisioningStatus } from "@/lib/domain/types";
 import { customerAcceptQuote, customerOrderView, customerProposeChanges, customerRequestRepair, type CustomerOrderView } from "./customer";
 import type { CustomerAuthProvider } from "./customer-auth";
 import { newSecret, sha256 } from "./customer-auth";
@@ -84,33 +84,11 @@ export async function issueReviewLink(publicStore: DataStore, orderId: string, o
   return { status, expires_at, sent_to: sent_to_email, outbox_id: row.id };
 }
 
-/**
- * Called after every issued quotation. Never throws: a missing email or a
- * delivery problem must not undo the committed quotation.
- */
-export async function afterQuoteIssued(store: DataStore, orderId: string) {
-  try {
-    const o = await store.elevated().getOrder(orderId);
-    if (!o || o.has_no_email || !o.customer_email) return null;
-    return await issueReviewLink(store, orderId);
-  } catch (e) {
-    console.warn("[review link] not issued:", e instanceof Error ? e.message : e);
-    try {
-      // make the problem visible to staff on the order (no link, no secret)
-      await store.elevated().insertNotification({
-        order_id: orderId, recipient_phone: null, channel: "Email", delivery_status: "Failed", created_at: new Date().toISOString(),
-        message_body: `Quotation review email not queued: ${e instanceof DomainError ? e.message : "server error"}`,
-      });
-    } catch { /* ignore */ }
-    return null;
-  }
-}
-
 const REASONS: Record<Exclude<ConsumeReviewResult, { ok: true }>["reason"], string> = {
   invalid: "This review link is not valid.",
-  used: "This review link was already used. Ask JJ Furniture to send a new one, or log in if you already set a password.",
+  used: "This review link was already used. Ask JJ Enterprises to send a new one, or log in if you already set a password.",
   replaced: "A newer quotation was sent for this order. Please use the most recent email.",
-  expired: "This review link has expired. Ask JJ Furniture to send a new one.",
+  expired: "This review link has expired. Ask JJ Enterprises to send a new one.",
   email_changed: "The email on this order changed, so this link no longer works.",
 };
 
@@ -274,8 +252,103 @@ export async function provisionCustomerAccount(
   }
 }
 
+// ------------------------------------------------- confirm + quotation emails (009) ----
+/**
+ * After the shop CONFIRMS an order (migration 009). Idempotent, never throws:
+ *  - walk-in / no email          -> not_applicable
+ *  - staff email                 -> failed (never turned into a customer login)
+ *  - account with a password     -> "order confirmed, log in" email
+ *  - no account / no password    -> login created WITHOUT a password + "create your password" email
+ * The order is NOT linked here: the email is unproven. It is linked by
+ * claim_customer_orders() once the inbox owner signs in (a password exists only
+ * after the set-up link sent to that inbox was completed).
+ */
+export async function provisionOnConfirm(
+  publicStore: DataStore,
+  auth: CustomerAuthProvider,
+  orderId: string,
+  opts: { requestedBy?: string | null } = {},
+): Promise<ProvisionResult> {
+  const store = publicStore.elevated();
+  try {
+    const o = await store.getOrder(orderId);
+    if (!o) return { status: "failed", new_account: false, detail: "Order not found" };
+    if (o.has_no_email || !o.customer_email) return { status: "not_applicable", new_account: false };
+    const email = o.customer_email;
+    if (await store.emailBelongsToStaff(email)) {
+      await setStatus(store, orderId, "failed");
+      return { status: "failed", new_account: false, detail: "This email belongs to a staff login; use a different customer email." };
+    }
+    let account = await store.findCustomerAccountByEmail(email);
+    if (!account) {
+      try {
+        account = await store.getCustomerAccount(await auth.createAccount(email, o.customer_name));
+      } catch {
+        account = await store.findCustomerAccountByEmail(email); // created concurrently: reuse it
+      }
+    }
+    if (!account) throw new Error("Account could not be created");
+    const tpl = orderTemplateData(o);
+    const key = (auto: string) => (opts.requestedBy ? `resend:${crypto.randomUUID()}` : auto);
+    if (await auth.hasPassword(account.id)) {
+      const { row } = await enqueueEmail(store, {
+        kind: "order_confirmed_returning_customer", order_id: orderId, recipient_email: email, customer_user_id: account.id,
+        template_data: tpl, idempotency_key: key(`order_confirmed_returning:${orderId}:${account.id}`), requested_by_user_id: opts.requestedBy ?? null,
+      });
+      await kickOutbox(store, row.id, { auth });
+      return { status: "pending", new_account: false };
+    }
+    // the set-up link is generated by the outbox at send time (never stored in plaintext)
+    const { row } = await enqueueEmail(store, {
+      kind: "order_confirmed_new_customer", order_id: orderId, recipient_email: email, customer_user_id: account.id,
+      template_data: tpl, idempotency_key: key(`order_confirmed_new:${orderId}:${account.id}`), requested_by_user_id: opts.requestedBy ?? null,
+    });
+    const status: ProvisioningStatus = (await kickOutbox(store, row.id, { auth })) === "sent" ? "setup_email_sent" : "setup_email_pending";
+    await setStatus(store, orderId, status);
+    return { status, new_account: true };
+  } catch (e) {
+    console.warn("[provisioning] failed:", e instanceof Error ? e.message : e);
+    try { await setStatus(store, orderId, "failed"); } catch { /* the confirmation stays committed */ }
+    return { status: "failed", new_account: false, detail: e instanceof Error ? e.message : "Provisioning failed" };
+  }
+}
+
+/**
+ * After the quotation is issued for a Confirmed order: the "choose how to pay"
+ * email. It carries no secret: the link opens the order page, which requires
+ * the customer's own login. Never throws.
+ */
+export async function afterQuotationIssued(publicStore: DataStore, orderId: string, revisionNumber: number) {
+  const store = publicStore.elevated();
+  try {
+    const o = await store.getOrder(orderId);
+    if (!o || o.has_no_email || !o.customer_email) return null;
+    const rev = (await store.listRevisions(orderId)).find((r) => r.revision_number === revisionNumber);
+    const { row } = await enqueueEmail(store, {
+      kind: "quotation_payment_request", order_id: orderId, recipient_email: o.customer_email,
+      template_data: orderTemplateData(o, rev), idempotency_key: `quotation_payment:${orderId}:${revisionNumber}`,
+    });
+    return deliveryOf(await kickOutbox(store, row.id));
+  } catch (e) {
+    console.warn("[quotation email] not queued:", e instanceof Error ? e.message : e);
+    return null;
+  }
+}
+
 // ----------------------------------------------------------------- dashboard ----
-/** Orders of a signed-in customer — only those linked to their verified account. */
+/**
+ * A SIGNED-IN customer proved ownership of their inbox (their password could only
+ * be set through a link sent to it), so the shop-confirmed orders that carry that
+ * email are linked to them now (claim_customer_orders). Never throws.
+ */
+async function claimForSignedInCustomer(customerStore: DataStore, userId: string) {
+  try {
+    await customerStore.elevated().claimCustomerOrders(userId);
+  } catch (e) {
+    console.warn("[claim] skipped:", e instanceof DomainError ? e.message : "server error");
+  }
+}
+
 /**
  * A signed-in customer's orders. `customerStore` must be the customer-scoped
  * store (getCustomerStore): in production its reads carry the customer's JWT,
@@ -284,6 +357,7 @@ export async function provisionCustomerAccount(
  * (revisions, payments, history) are then loaded elevated for those ids only.
  */
 export async function customerDashboard(customerStore: DataStore, userId: string) {
+  await claimForSignedInCustomer(customerStore, userId);
   const owned = (await customerStore.listCustomerOrders(userId)).filter((o) => o.customer_user_id === userId);
   const store = customerStore.elevated();
   return Promise.all(owned.map((o) => customerOrderView(store, o.id).then((v) => ({ id: o.id, view: v }))));
@@ -291,9 +365,37 @@ export async function customerDashboard(customerStore: DataStore, userId: string
 
 /** One order for a signed-in customer; anything not linked to them is NOT_FOUND (no existence leak). */
 export async function customerOwnedOrder(customerStore: DataStore, userId: string, orderCode: string): Promise<{ order: Order; view: CustomerOrderView }> {
+  await claimForSignedInCustomer(customerStore, userId);
   const o = await customerStore.getOrderByCode(orderCode); // RLS-filtered in production
   if (!o || o.customer_user_id !== userId) throw new DomainError("NOT_FOUND", "Order not found.");
   return { order: o, view: await customerOrderView(customerStore.elevated(), o.id) };
+}
+
+/**
+ * A signed-in customer accepts the ISSUED quotation of their own Confirmed order
+ * and chooses the payment terms + channel (migration 009). The revision id is
+ * taken from the server's view of the order, never from the browser.
+ */
+export async function customerOwnedAccept(
+  customerStore: DataStore,
+  userId: string,
+  orderCode: string,
+  input: {
+    expected_revision_number: number;
+    accepted_furniture_price: number;
+    accepted_delivery_fee: number;
+    client_idempotency_key: string;
+    accept_specification: boolean;
+    accept_quotation: boolean;
+    payment_plan: PaymentPlan;
+    payment_method: PaymentMethod | null;
+  },
+) {
+  const { order } = await customerOwnedOrder(customerStore, userId, orderCode);
+  const store = customerStore.elevated();
+  const rev = (await store.listRevisions(order.id)).find((r) => r.revision_number === input.expected_revision_number);
+  if (!rev) throw new DomainError("STALE_REVISION", "This quotation changed. Please reload the page.");
+  return customerAcceptQuote(store, order.id, { ...input, revision_id: rev.revision_id });
 }
 
 /** "Request Post-Confirmation Change / Repair" from the signed-in dashboard: own orders only. */

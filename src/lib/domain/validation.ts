@@ -150,6 +150,8 @@ export const editOrderSchema = z.object({
 export const specRevisionSchema = z
   .object({
     ...furnitureSpecShape,
+    // staff may keep a finish already written on the order, even if it is not one of the configurator's four
+    color_finish: z.string().trim().min(2, { error: "Choose a finish." }).max(60),
     furniture_price: z.coerce.number().positive({ error: "Furniture price must be greater than ₱0." }).max(99_999_999),
     delivery_fee: pesos("Delivery fee").max(999_999).default(0),
     paper_slip_number: z.string().trim().max(40).optional().default(""),

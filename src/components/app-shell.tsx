@@ -1,11 +1,15 @@
 import { LogOut } from "lucide-react";
+import Image from "next/image";
+import { cn } from "@/lib/utils";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { signOut } from "@/app/actions";
 import { isDemoMode } from "@/lib/config";
+import { demoSwitcherAllowed } from "@/lib/server/context";
 import type { Actor, Role } from "@/lib/domain/types";
 import { Button } from "@/components/ui/button";
 import { DemoBar } from "./demo-bar";
+import { MobileNav } from "./mobile-nav";
 import { ThemeToggle } from "./theme-toggle";
 
 const PORTAL_LABEL: Record<Role | "customer", { title: string; code: string }> = {
@@ -18,25 +22,28 @@ const PORTAL_LABEL: Record<Role | "customer", { title: string; code: string }> =
 
 export function Logo() {
   return (
-    <Link href="/" className="flex items-center gap-2.5" aria-label="JJ Furniture Shop and Enterprises — home">
-      <span className="flex size-9 items-center justify-center rounded-xl bg-primary font-brand text-base font-extrabold text-primary-foreground">JJ</span>
-      {/* rounded-sans wordmark */}
-      <span className="font-brand leading-none">
-        <span className="block text-[1.2rem] font-extrabold tracking-tight">JJ Furniture</span>
-        <span className="block pt-0.5 text-[0.72rem] font-bold tracking-[0.06em] text-muted-foreground">Shop and Enterprises</span>
+    <Link href="/" className="flex items-center gap-2.5" aria-label="JJ Enterprises — Furniture and Lumber Dealer — home">
+      {/* the carved emblem, background removed (public/brand/jj-enterprises-logo.png) */}
+      <Image src="/brand/jj-enterprises-logo-128.png" alt="" width={40} height={42} priority className="size-10 object-contain" />
+      <span className="leading-none">
+        <span className="block text-[1.15rem] font-extrabold tracking-[-0.02em]">JJ Enterprises</span>
+        <span className="block pt-0.5 text-[0.72rem] font-semibold text-muted-foreground">Furniture and Lumber Dealer</span>
       </span>
     </Link>
   );
 }
 
-export function AppShell({
+export async function AppShell({
   portal,
   actor,
   headerExtra,
   live,
+  wide = false,
   children,
 }: {
   portal: Role | "customer";
+  /** wider page (owner dashboard with its sidebar) */
+  wide?: boolean;
   actor: Actor | null;
   headerExtra?: ReactNode;
   /** live-sync indicator + subscription for this page: pass <LiveSync /> (server component) */
@@ -44,13 +51,14 @@ export function AppShell({
   children: ReactNode;
 }) {
   const demo = isDemoMode();
+  const switcher = await demoSwitcherAllowed(); // role-switcher bar: the all-roles Demo account only
   const p = PORTAL_LABEL[portal];
   return (
     <div className="flex min-h-dvh flex-col">
-      {demo && <DemoBar current={portal} />}
+      {switcher && <DemoBar current={portal} />}
       {/* Espresso navigation anchor in both modes: the `dark` class scopes the dark tokens to the header */}
       <header className="dark no-print sticky top-0 z-30 border-b border-border bg-background/95 text-foreground backdrop-blur">
-        <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-2.5">
+        <div className={cn("mx-auto flex items-center gap-3 px-4 py-2.5", wide ? "max-w-[90rem]" : "max-w-6xl")}>
           <Logo />
           <div className="ml-1 hidden border-l pl-3 sm:block">
             <p className="text-sm font-semibold">{p.title}</p>
@@ -76,10 +84,12 @@ export function AppShell({
           </p>
         </div>
       </header>
-      <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-4 sm:py-6">{children}</main>
-      <footer className="no-print border-t py-4 text-center text-xs text-muted-foreground">
-        JJ Furniture Shop and Enterprises · Poblacion, Valencia City, Bukidnon
+      {/* bottom padding on phones keeps content clear of the floating nav */}
+      <main className={cn("mx-auto w-full flex-1 px-4 pt-4 pb-28 sm:pt-6 md:pb-6", wide ? "max-w-[90rem]" : "max-w-6xl")}>{children}</main>
+      <footer className="no-print border-t py-4 pb-28 text-center text-xs text-muted-foreground md:pb-4">
+        JJ Enterprises — Furniture and Lumber Dealer · Poblacion, Valencia City, Bukidnon
       </footer>
+      <MobileNav portal={portal} />
     </div>
   );
 }
@@ -112,11 +122,4 @@ export function Section({ title, count, children, action }: { title: string; cou
   );
 }
 
-export function EmptyState({ title, children }: { title: string; children?: ReactNode }) {
-  return (
-    <div className="rounded-xl border border-dashed bg-card p-6 text-center">
-      <p className="font-semibold">{title}</p>
-      {children && <p className="mt-1 text-sm text-muted-foreground">{children}</p>}
-    </div>
-  );
-}
+export { EmptyState } from "./empty-state";

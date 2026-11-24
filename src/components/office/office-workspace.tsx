@@ -1,5 +1,6 @@
-import { ClipboardList, Hammer, Plus, Truck, Wallet } from "lucide-react";
+import { ClipboardList, Hammer, Plus, Receipt, Truck, Wallet } from "lucide-react";
 import type { ReactNode } from "react";
+import { cn } from "@/lib/utils";
 import { LinkButton } from "@/components/link-button";
 import { OrderDrawer } from "@/components/office/order-drawer";
 import { OrderQueue, type QueueRow } from "@/components/office/order-queue";
@@ -32,13 +33,14 @@ export function queueRows(orders: Order[], payments: Payment[]): QueueRow[] {
   });
 }
 
-function Metric({ label, value, sub, icon, testid }: { label: string; value: ReactNode; sub: string; icon: ReactNode; testid: string }) {
+/** A flat KPI: hairline on top, big number, no card. Exported for the owner dashboard. */
+export function Metric({ label, value, sub, icon, testid, tone }: { label: string; value: ReactNode; sub: string; icon: ReactNode; testid: string; tone?: "warning" | "danger" }) {
   return (
-    <div className="jj-surface flex items-start gap-3 rounded-2xl border bg-card p-4" data-testid={testid}>
-      <span className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-live/40 bg-accent-soft text-primary [&_svg]:size-5" aria-hidden>{icon}</span>
+    <div className={cn("flex min-w-0 items-start gap-3 border-t-2 pt-3", tone === "danger" ? "border-destructive" : tone === "warning" ? "border-warning" : "border-foreground/80")} data-testid={testid}>
+      <span className="mt-1 shrink-0 text-primary [&_svg]:size-5" aria-hidden>{icon}</span>
       <span className="min-w-0">
-        <span className="block text-xs font-semibold tracking-[0.08em] text-muted-foreground uppercase">{label}</span>
-        <span className="block text-2xl font-extrabold tabular-nums">{value}</span>
+        <span className="block text-[13px] font-semibold text-muted-foreground">{label}</span>
+        <span className="block text-3xl leading-tight font-extrabold tracking-[-0.02em] tabular-nums">{value}</span>
         <span className="block text-xs text-muted-foreground">{sub}</span>
       </span>
     </div>
@@ -74,9 +76,10 @@ export async function OfficeWorkspace({ actor, data, title, description, basePat
         </div>
         <LinkButton href="/staff/new" variant="default" size="xl" className="rounded-full"><Plus aria-hidden /> New Walk-In / Phone Order</LinkButton>
       </div>
-      <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4" data-testid="kpi-strip">
-        <Metric testid="kpi-needs-quote" label="Needs quote / action" value={m.needsQuoteOrAction} sub="quote requests + awaiting acceptance" icon={<ClipboardList />} />
-        <Metric testid="kpi-workshop" label="In workshop" value={m.inWorkshop} sub="confirmed, building or inspection" icon={<Hammer />} />
+      <div className="mb-8 grid grid-cols-2 gap-x-6 gap-y-5 lg:grid-cols-5" data-testid="kpi-strip">
+        <Metric testid="kpi-to-confirm" label="To confirm" value={m.toConfirm} sub="new orders to check" icon={<ClipboardList />} />
+        <Metric testid="kpi-quote-payment" label="Quotation & payment" value={m.quotationAndPayment} sub="confirmed, before production" icon={<Receipt />} />
+        <Metric testid="kpi-workshop" label="In workshop" value={m.inWorkshop} sub="building or inspection" icon={<Hammer />} />
         <Metric testid="kpi-delivery" label="Out / ready for delivery" value={m.delivery} sub="ready or on the road" icon={<Truck />} />
         <Metric testid="kpi-deposits" label="Collected deposits" value={formatPeso(m.collectedDeposits)} sub="verified furniture payments · active orders" icon={<Wallet />} />
       </div>

@@ -22,7 +22,7 @@ export default async function CustomerLoginPage() {
     <AppShell portal="customer" actor={null}>
       <div className="mx-auto grid max-w-5xl gap-4">
         <div>
-          <Eyebrow>Customer portal • JJ Furniture</Eyebrow>
+          <Eyebrow>Customer portal • JJ Enterprises</Eyebrow>
           <h1 className="mt-3 text-2xl font-bold sm:text-3xl">Welcome back</h1>
           <p className="mt-1 text-muted-foreground">Follow the orders on your account, or design a new piece and ask for a quotation.</p>
         </div>
@@ -35,7 +35,7 @@ export default async function CustomerLoginPage() {
             <p className="text-sm text-muted-foreground">See every order on your account: status, approved specification, quotation and payments.</p>
             <LoginForm demoName={demo} />
             <p className="text-xs text-muted-foreground">
-              No account yet? You get one after you accept a quotation from the secure link JJ Furniture emails you.
+              No account yet? You get one after you accept a quotation from the secure link JJ Enterprises emails you.
             </p>
           </section>
           <section aria-labelledby="opt2" className="grid min-w-0 gap-3 rounded-2xl border bg-secondary/55 p-5 sm:p-6">
@@ -46,7 +46,7 @@ export default async function CustomerLoginPage() {
             <p className="text-sm">Choose the furniture type, design, exact size, wood and finish. The live preview shows it next to a 165 cm person for scale.</p>
             <ol className="grid gap-1 text-sm text-muted-foreground">
               <li>1. Design your piece and enter your email.</li>
-              <li>2. JJ Furniture checks it and emails you the official quotation with a secure link.</li>
+              <li>2. JJ Enterprises checks it and emails you the official quotation with a secure link.</li>
               <li>3. Accept it from that link, then create your password to follow your orders here.</li>
             </ol>
             <LinkButton href="/customer/customize" variant="accent" size="xl" className="w-full rounded-full" data-testid="option-2">

@@ -13,7 +13,7 @@ import {
   reviewView,
 } from "@/lib/services/customer-portal";
 import { createOrder, editOrderDetails, reviseSpecs, startProduction } from "@/lib/services/orders";
-import { actors, payDown, seededStore, staffAccept, validOrderInput } from "./helpers";
+import { actors, payDown, readyForAcceptance, seededStore, staffAccept, validOrderInput } from "./helpers";
 
 const err = async (p: Promise<unknown>) => {
   try {
@@ -32,10 +32,17 @@ const linkIn = (text: string, path: string) => {
 };
 const lastReviewToken = (store: MemoryStore, to: string) => linkIn(mailbox(store, to)[0].text, "/customer/review");
 
+/**
+ * The single-use review link (migration 005) is no longer sent automatically: since
+ * migration 009 the customer accepts while signed in. It stays available as an
+ * explicit staff resend, which these tests exercise on a confirmed + quoted order.
+ */
 async function emailOrder(email = "new.buyer@example.com") {
   const store = (await seededStore()) as MemoryStore;
   const { order } = await createOrder(store, actors.staff, validOrderInput({ customer_email: email, furniture_price: "20000" }));
-  return { store, order, email };
+  await readyForAcceptance(store, order.id);
+  await issueReviewLink(store, order.id);
+  return { store, order: (await store.getOrder(order.id))!, email };
 }
 const acceptInput = (price = 20000, fee = 0) => ({
   accepted_furniture_price: price, accepted_delivery_fee: fee, client_idempotency_key: crypto.randomUUID(),
@@ -78,7 +85,7 @@ describe("Step 1 — email capture and scoped review links", () => {
     const raw = lastReviewToken(store, email);
     const scope = await openReviewLink(store, raw);
     expect(scope.order_id).toBe(order.id);
-    expect(scope.revision_id).toBe((await store.listRevisions(order.id))[0].revision_id);
+    expect(scope.revision_id).toBe((await store.listRevisions(order.id)).find((r) => r.revision_number === order.current_revision)!.revision_id);
     expect((await store.getOrder(order.id))!.email_verified_at).toBeTruthy();
     expect((await err(openReviewLink(store, raw))).message).toMatch(/already used/); // replay
     expect((await err(openReviewLink(store, "not-a-real-token-but-long-enough"))).message).toMatch(/not valid/);
@@ -94,9 +101,10 @@ describe("Step 1 — email capture and scoped review links", () => {
   it("expired links, superseded quotations and changed emails are refused", async () => {
     const { store, order, email } = await emailOrder();
     const first = lastReviewToken(store, email);
-    // a revised quote invalidates the earlier link and emails a new one
-    await reviseSpecs(store, actors.staff, order.id, { ...validOrderInput(), furniture_price: "21000" }, 1);
+    // a revised quote invalidates the earlier link; staff send a fresh one
+    await reviseSpecs(store, actors.staff, order.id, { ...validOrderInput(), furniture_price: "21000" }, 2);
     expect((await err(openReviewLink(store, first))).message).toMatch(/newer quotation/);
+    await issueReviewLink(store, order.id);
     const second = lastReviewToken(store, email);
     store.t.quote_review_tokens.find((t) => t.token_hash === sha256(second))!.expires_at = new Date(Date.now() - 1000).toISOString();
     expect((await err(openReviewLink(store, second))).message).toMatch(/expired/);
@@ -112,7 +120,9 @@ describe("Step 1 — email capture and scoped review links", () => {
     const after = (await store.getOrder(order.id))!;
     expect(after.email_verified_at).toBeNull();
     expect(after.customer_user_id).toBeNull();
-    expect(mailbox(store, "other.inbox@example.com")).toHaveLength(1); // the new inbox gets its own link
+    expect(mailbox(store, "other.inbox@example.com")).toHaveLength(0); // nothing is sent automatically to an edited email
+    await issueReviewLink(store, order.id);
+    expect(mailbox(store, "other.inbox@example.com")).toHaveLength(1); // the new inbox gets its own link on request
   });
 });
 
@@ -150,7 +160,7 @@ describe("Step 2 — acceptance first, then recoverable provisioning", () => {
     const { store, order, email } = await emailOrder();
     const scope = await openReviewLink(store, lastReviewToken(store, email));
     // staff revise the quote after the customer opened the link: the scoped revision is now stale
-    await reviseSpecs(store, actors.staff, order.id, { ...validOrderInput(), furniture_price: "25000" }, 1);
+    await reviseSpecs(store, actors.staff, order.id, { ...validOrderInput(), furniture_price: "25000" }, 2);
     const view = await reviewView(store, scope);
     expect(view.scope_current).toBe(false);
     expect((await err(acceptFromReview(store, demoCustomerAuth(store), scope, acceptInput(25000)))).code).toBe("STALE_REVISION");
@@ -163,6 +173,8 @@ describe("Step 2 — acceptance first, then recoverable provisioning", () => {
     const maria = store.t.customer_accounts.find((a) => a.email === DEMO_CUSTOMER_LOGIN.email)!;
     const before = maria.password_hash;
     const { order } = await createOrder(store, actors.staff, validOrderInput({ customer_email: DEMO_CUSTOMER_LOGIN.email, furniture_price: "15000" }));
+    await readyForAcceptance(store, order.id);
+    await issueReviewLink(store, order.id);
     const scope = await openReviewLink(store, lastReviewToken(store, DEMO_CUSTOMER_LOGIN.email));
     const { provisioning } = await acceptFromReview(store, demoCustomerAuth(store), scope, acceptInput(15000));
     expect(provisioning).toMatchObject({ status: "linked", new_account: false });

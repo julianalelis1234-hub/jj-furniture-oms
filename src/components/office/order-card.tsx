@@ -4,7 +4,7 @@ import { StatusBadge } from "@/components/status";
 import type { ClientOrder } from "@/lib/client-order";
 import { cn } from "@/lib/utils";
 
-/** Compact task row used across the office queues. */
+/** A flat task row (hairline between rows, a coloured edge for the kind of task). Use inside <ul className="divide-y ..."> */
 export function TaskCard({
   order,
   tone = "default",
@@ -21,10 +21,10 @@ export function TaskCard({
   return (
     <li
       className={cn(
-        "min-w-0 rounded-2xl border bg-card p-3 sm:p-4",
-        tone === "warning" && "border-l-4 border-l-warning",
-        tone === "danger" && "border-l-4 border-l-destructive",
-        tone === "info" && "border-l-4 border-l-info",
+        "min-w-0 border-l-4 border-l-transparent py-3.5 pl-3 sm:pl-4",
+        tone === "warning" && "border-l-warning",
+        tone === "danger" && "border-l-destructive",
+        tone === "info" && "border-l-info",
       )}
     >
       <div className="flex flex-wrap items-start gap-x-3 gap-y-1">
@@ -32,7 +32,7 @@ export function TaskCard({
           <Link href={`/staff/orders/${order.id}`} className="font-bold underline-offset-4 hover:underline">
             {order.order_code}
           </Link>
-          <span className="ml-2 text-xs text-muted-foreground">{order.paper_slip_number ? `Slip #${order.paper_slip_number}` : "Portal request · no slip yet"}</span>
+          <span className="ml-2 text-xs text-muted-foreground">{order.paper_slip_number ? `Slip ${order.paper_slip_number}` : "No slip yet"}</span>
           <p className="truncate text-sm">
             {order.customer_name} · {order.item_name}
           </p>

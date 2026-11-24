@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import type { ClientOrder } from "@/lib/client-order";
 import { formatPeso } from "@/lib/domain/finance";
-import { isConfiguratorFinish, type FurnitureSpec } from "@/lib/domain/furniture";
+import type { FurnitureSpec } from "@/lib/domain/furniture";
 import type { OrderException } from "@/lib/domain/types";
 
 function orderSpec(o: ClientOrder): FurnitureSpec {
@@ -23,7 +23,7 @@ function orderSpec(o: ClientOrder): FurnitureSpec {
 function startConfig(spec: FurnitureSpec): ConfigValue {
   const c = configFromSpec(spec);
   if (!c.furniture_category) return { ...emptyConfig(), wood_type: c.wood_type, quantity: c.quantity };
-  if (!isConfiguratorFinish(c.color_finish)) c.color_finish = "Natural Varnish";
+  if (!c.color_finish?.trim()) c.color_finish = "Natural Varnish"; // an existing custom finish is kept as ordered
   return c;
 }
 
@@ -89,28 +89,34 @@ function QuoteEditor({
 }
 
 /**
- * Staff/owner: issue a quotation as a new immutable revision. For an Option 2
- * request (Quote Requested) this is the official quotation; otherwise a revised
- * quote that voids any previous acceptance.
+ * Staff/owner: save a shop revision (migration 009 meanings):
+ *  - Confirmed, no quotation yet -> the official quotation (customer is emailed to accept + pay)
+ *  - Confirmed, quotation issued -> a re-issued quotation (voids an earlier acceptance)
+ *  - Waiting for Confirmation    -> a draft quote before the order is confirmed (no email)
+ *  - legacy Quote Requested      -> the first quotation of an old request
  */
 export function ReviseSpecsDialog({ order, validityDays = 7, label }: { order: ClientOrder; validityDays?: number; label?: string }) {
   const [open, setOpen] = useState(false);
-  const first = order.status === "Quote Requested";
+  const issuing = (order.status === "Confirmed" && !order.quotation_issued_at) || order.status === "Quote Requested";
+  const reissue = order.status === "Confirmed" && !!order.quotation_issued_at;
+  const n = order.current_revision + 1;
+  const copy = issuing
+    ? { title: `Official quotation · ${order.order_code}`, submit: "Issue quotation",
+        description: `Check size, wood and finish, adjust if needed, then set the price and delivery fee. Saved as revision ${n}. The customer is emailed to accept it and choose 30% down payment, installment or full payment.` }
+    : reissue
+      ? { title: `Re-issue quotation · ${order.order_code}`, submit: "Re-issue quotation",
+          description: `Saved as revision ${n}. It replaces the current quotation and voids any acceptance; the customer is emailed to accept the new one.` }
+      : { title: `Draft quote · ${order.order_code}`, submit: "Save draft quote",
+          description: `Saved as revision ${n}. Nothing is emailed yet: confirm the order, then issue the official quotation.` };
   return (
     <>
-      <Button variant={first ? "default" : "outline"} size="touch" onClick={() => setOpen(true)}>
-        {first ? <FileSignature aria-hidden /> : <PencilRuler aria-hidden />} {label ?? (first ? "Issue quotation" : "Revise specs / quote")}
+      <Button variant={issuing ? "default" : "outline"} size="touch" onClick={() => setOpen(true)}>
+        {issuing ? <FileSignature aria-hidden /> : <PencilRuler aria-hidden />} {label ?? (issuing ? "Issue quotation" : reissue ? "Re-issue quotation" : "Edit draft quote")}
       </Button>
       {open && (
         <QuoteEditor
           open={open} onOpenChange={setOpen} order={order} spec={orderSpec(order)} validityDays={validityDays}
-          title={first ? `Official quotation · ${order.order_code}` : `Revised quote · ${order.order_code}`}
-          description={
-            first
-              ? `The customer designed this in the portal. Check feasibility (size, wood, finish), adjust if needed, set the price and delivery fee. Saved as revision ${order.current_revision + 1}; the order moves to Waiting for Confirmation.`
-              : `Saved as revision ${order.current_revision + 1}. Any change voids the customer's acceptance; they must accept the new revision before production.`
-          }
-          submitLabel={first ? "Send quotation" : "Save revised quote"}
+          title={copy.title} description={copy.description} submitLabel={copy.submit}
           onSubmit={(fd) => reviseSpecsAction(order.id, order.current_revision, fd)}
         />
       )}
@@ -140,7 +146,7 @@ export function ReviewProposalControls({ ex, order, proposal }: { ex: OrderExcep
           open={open} onOpenChange={setOpen} order={order} spec={proposal}
           validityDays={7}
           title={`Customer proposal · ${order.order_code}`}
-          description={`Pre-filled with the customer's proposal. Adjust anything that is not feasible, set the new price (current ${formatPeso(order.furniture_price)}), then send. The customer must confirm this revised quote before production.`}
+          description={`Pre-filled with the customer's proposal. Adjust anything that is not feasible, set the new price (current ${formatPeso(order.furniture_price)}), then send. The customer must accept this revised quotation before production.`}
           submitLabel="Send revised quote"
           onSubmit={(fd) => reviewProposalAction(ex.id, "quote", fd)}
           extra={

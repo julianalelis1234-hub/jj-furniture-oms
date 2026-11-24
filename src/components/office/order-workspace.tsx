@@ -1,10 +1,11 @@
-import { ExternalLink, PackageCheck, Printer, ShieldCheck, ShieldX, Truck } from "lucide-react";
+import { ExternalLink, Lock, PackageCheck, Printer, ShieldCheck, ShieldX, Truck } from "lucide-react";
 import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
 import { DesignNote } from "@/components/design-note";
 import { LinkButton } from "@/components/link-button";
 import {
   AnswerQuestionDialog,
+  ConfirmOrderButton,
   ConfirmSpecsDialog,
   DecideExceptionControls,
   EditDetailsDialog,
@@ -19,6 +20,7 @@ import {
   ScheduleDeliveryDialog,
   StartProductionDialog,
   VerifyHandoverButton,
+  VerifyPaymentControls,
 } from "@/components/office/actions";
 import { ReviewProposalControls } from "@/components/office/spec-dialogs";
 import { TransitionButton } from "@/components/office/transition-button";
@@ -31,7 +33,8 @@ import { formatDate, formatDateTime } from "@/lib/domain/dates";
 import { feePaidFrom, formatPeso, furniturePaidFrom, money } from "@/lib/domain/finance";
 import { describeDiff, formatDims, type FurnitureSpec, type SpecDiff } from "@/lib/domain/furniture";
 import { blockingItems, isQuoteExpired, quoteValidityDays } from "@/lib/domain/gate";
-import { CONFIRMATION_METHOD_LABEL, type Actor, type Order, type SpecRevision } from "@/lib/domain/types";
+import { isProductionLocked, quoteStep } from "@/lib/domain/status";
+import { CONFIRMATION_METHOD_LABEL, PAYMENT_PLAN_LABEL, type Actor, type Order, type SpecRevision } from "@/lib/domain/types";
 import { getStore } from "@/lib/server/context";
 import { nameOf } from "@/lib/server/office-data";
 import { isCustomerProposal } from "@/lib/services/exceptions";
@@ -47,10 +50,10 @@ const REVISION_LABEL: Record<SpecRevision["revision_type"], string> = {
 };
 export const PROVISIONING_LABEL: Record<Order["provisioning_status"], string> = {
   not_applicable: "Not applicable",
-  pending: "Waiting for the customer to open the review link and accept",
+  pending: "Waiting for the shop to confirm, or for the customer to sign in",
   account_created: "Account created",
   setup_email_pending: "Password set-up email not sent yet — retry",
-  setup_email_sent: "Password set-up email sent",
+  setup_email_sent: "Create-password email sent; linked when they sign in",
   linked: "Linked to the customer's account",
   failed: "Account set-up failed — retry",
 };
@@ -93,8 +96,10 @@ export async function OrderWorkspace({ orderId, actor, variant, initialTab }: { 
   // money: VERIFIED furniture payments are the only ones that count (30% gate, balances)
   const verifiedPaid = furniturePaidFrom(payments);
   const verified = payments.filter((p) => p.verified_by_owner_or_staff);
-  const unverified = payments.filter((p) => !p.verified_by_owner_or_staff);
+  const unverified = payments.filter((p) => !p.verified_by_owner_or_staff && !p.rejected_at);
+  const rejected = payments.filter((p) => !!p.rejected_at);
   const unverifiedSum = money(unverified.reduce((s, p) => s + Number(p.amount), 0));
+  const step = quoteStep(o);
   const down = o.standard_down_payment_due;
   const exceptionOk = o.payment_exception_type !== "Standard 30/70" && o.payment_exception_approved;
   const gateMet = o.furniture_price != null && (verifiedPaid >= down || exceptionOk);
@@ -116,25 +121,42 @@ export async function OrderWorkspace({ orderId, actor, variant, initialTab }: { 
         {o.status === "Waiting for Confirmation" && (() => {
           const latest = revisions.at(-1);
           const proposal = exceptions.find((e) => e.status === "Pending" && isCustomerProposal(e));
-          const blockingOther = blockingItems(o.id, exceptions).some((e) => !isCustomerProposal(e));
-          if (proposal) return <><p className="w-full text-sm font-semibold text-warning">The customer proposed changes (revision {latest?.revision_number}). Review them and send a revised quote.</p><ReviewProposalControls ex={proposal} order={o} proposal={latest?.revision_type === "customer_proposal" ? specOf(latest) : null} /></>;
-          if (o.is_legacy_incomplete) return <><p className="w-full text-sm font-semibold text-warning">Legacy order: issue a revised quote with exact W × H × D before the customer can accept.</p><ReviseSpecsDialog order={o} validityDays={validityDays} /></>;
-          if (latest && isQuoteExpired(latest)) return <><p className="w-full text-sm font-semibold text-warning">Quotation (revision {latest.revision_number}) expired on {formatDateTime(latest.expires_at!)}. Issue a fresh quotation before the customer can accept.</p><ReviseSpecsDialog order={o} validityDays={validityDays} label="Issue fresh quotation" /></>;
-          if (blockingOther) return <><p className="w-full text-sm font-semibold text-warning">Resolve the open production-blocking item(s) before recording the acceptance.</p><ReviseSpecsDialog order={o} validityDays={validityDays} /></>;
+          if (proposal) return <><p className="w-full text-sm font-semibold text-warning">The customer proposed changes (revision {latest?.revision_number}). Review them first.</p><ReviewProposalControls ex={proposal} order={o} proposal={latest?.revision_type === "customer_proposal" ? specOf(latest) : null} /></>;
+          if (blockingItems(o.id, exceptions).length > 0) return <p className="w-full text-sm font-semibold text-warning">Resolve the open production-blocking item(s) before confirming this order.</p>;
           return <>
-            {latest?.expires_at && <p className="w-full text-sm">Quotation valid until <b>{formatDateTime(latest.expires_at)}</b>. Waiting for the customer to accept the specification and the quotation.</p>}
-            <ConfirmSpecsDialog order={o} /><ReviseSpecsDialog order={o} validityDays={validityDays} />
+            <p className="w-full text-sm">
+              <b>{o.order_origin === "customer_self_service" ? "New online order." : "New order."}</b> Check the design, size, wood and finish, then confirm it.
+              {o.customer_email ? " The customer is emailed a link to create their password; the quotation comes next." : " Walk-in: no email is sent."}
+            </p>
+            <ConfirmOrderButton order={o} />
+            <EditDetailsDialog order={o} />
           </>;
         })()}
-        {o.status === "Confirmed" && (<>
-          <p className="w-full text-sm">
-            Purchase confirmed — <b>not yet authorized to cut wood.</b> Release to the workshop after the 30% down payment
-            ({formatPeso(down)}) is verified: {formatPeso(verifiedPaid)} verified so far{unverifiedSum > 0 && <> (+ {formatPeso(unverifiedSum)} unverified, not counted)</>}.
-          </p>
-          <StartProductionDialog order={o} verifiedPaid={verifiedPaid} blocking={blockingItems(o.id, exceptions).length} craftsmen={craftsmen} />
-          <LogPaymentDialog order={o} defaultAmount={Math.max(0, down - verifiedPaid) || undefined} />
-          <ReviseSpecsDialog order={o} validityDays={validityDays} />
-        </>)}
+        {o.status === "Confirmed" && (() => {
+          const latest = revisions.at(-1);
+          const proposal = exceptions.find((e) => e.status === "Pending" && isCustomerProposal(e));
+          if (proposal) return <><p className="w-full text-sm font-semibold text-warning">The customer proposed changes (revision {latest?.revision_number}). Review them and re-issue the quotation.</p><ReviewProposalControls ex={proposal} order={o} proposal={latest?.revision_type === "customer_proposal" ? specOf(latest) : null} /></>;
+          if (step === "awaiting_quotation") return <>
+            <p className="w-full text-sm"><b>Confirmed — issue the official quotation.</b> Set the final price, delivery fee and completion date. The customer is emailed to accept it and choose how to pay.</p>
+            <ReviseSpecsDialog order={o} validityDays={validityDays} label="Issue quotation" />
+          </>;
+          if (step === "awaiting_acceptance") {
+            if (latest && isQuoteExpired(latest)) return <><p className="w-full text-sm font-semibold text-warning">The quotation (revision {latest.revision_number}) expired on {formatDateTime(latest.expires_at!)}. Issue a fresh one.</p><ReviseSpecsDialog order={o} validityDays={validityDays} label="Issue fresh quotation" /></>;
+            return <>
+              <p className="w-full text-sm">Quotation issued{latest?.expires_at && <>, valid until <b>{formatDateTime(latest.expires_at)}</b></>}. Waiting for the customer to accept it and choose 30% down payment, installment or full payment.</p>
+              <ConfirmSpecsDialog order={o} />
+              <ReviseSpecsDialog order={o} validityDays={validityDays} label="Re-issue quotation" />
+            </>;
+          }
+          return <>
+            <p className="w-full text-sm">
+              Quotation accepted{o.payment_plan && <> · <b>{PAYMENT_PLAN_LABEL[o.payment_plan]}</b>{o.preferred_payment_method && `, ${o.preferred_payment_method}`}</>}. <b>Not yet authorized to cut wood:</b> release to the workshop
+              after the 30% down payment ({formatPeso(down)}) is verified. {formatPeso(verifiedPaid)} verified so far{unverifiedSum > 0 && <> (+ {formatPeso(unverifiedSum)} waiting for verification)</>}.
+            </p>
+            <StartProductionDialog order={o} verifiedPaid={verifiedPaid} blocking={blockingItems(o.id, exceptions).length} craftsmen={craftsmen} />
+            <LogPaymentDialog order={o} defaultAmount={Math.max(0, down - verifiedPaid) || undefined} />
+          </>;
+        })()}
         {o.status === "In Production" && (
           <TransitionButton orderId={o.id} to="Completed / For Inspection" version={o.version}><PackageCheck aria-hidden /> Mark ready for inspection</TransitionButton>
         )}
@@ -182,8 +204,8 @@ export async function OrderWorkspace({ orderId, actor, variant, initialTab }: { 
             </dl>
             <p className="mt-3 text-sm">
               {o.specs_confirmed
-                ? <>✅ Revision {o.approved_revision_number} confirmed by customer{confirmations.at(-1) && <> · {CONFIRMATION_METHOD_LABEL[confirmations.at(-1)!.confirmation_method]} · {formatDateTime(confirmations.at(-1)!.confirmed_at)}</>}</>
-                : <span className="font-semibold text-warning">⚠ Not yet confirmed — production is blocked.</span>}
+                ? <>✅ Quotation (revision {o.approved_revision_number}) accepted by the customer{confirmations.at(-1) && <> · {CONFIRMATION_METHOD_LABEL[confirmations.at(-1)!.confirmation_method]} · {formatDateTime(confirmations.at(-1)!.confirmed_at)}</>}</>
+                : <span className="font-semibold text-warning">⚠ Quotation not accepted yet — production is blocked.</span>}
             </p>
             <p className="mt-1 text-xs text-muted-foreground">Turning or zooming the preview never changes the specification; changes go through a new revision.</p>
           </div>
@@ -269,16 +291,19 @@ export async function OrderWorkspace({ orderId, actor, variant, initialTab }: { 
         <CardHeader className="border-b bg-secondary py-3"><CardTitle>Quotation</CardTitle></CardHeader>
         <CardContent className="grid gap-3 bg-background py-4">
           <dl className="grid gap-1 text-sm">
+            <Row label="Quotation">{o.quotation_issued_at ? `Issued ${formatDateTime(o.quotation_issued_at)}` : o.status === "Confirmed" ? "Not issued yet" : "After confirmation"}</Row>
+            <Row label="Payment terms">{o.payment_plan ? `${PAYMENT_PLAN_LABEL[o.payment_plan]}${o.preferred_payment_method ? ` · ${o.preferred_payment_method}` : ""}` : "Chosen when the customer accepts"}</Row>
             <Row label="Furniture price">{o.furniture_price == null ? "Pending quotation" : formatPeso(o.furniture_price)}</Row>
             <Row label={`Delivery fee (separate)${o.municipality === "Valencia City" ? " · Valencia City" : ""}`}>{o.delivery_fee === 0 ? "FREE" : formatPeso(o.delivery_fee)}</Row>
             <Row label="30% down payment">{o.furniture_price == null ? "—" : formatPeso(down)}</Row>
           </dl>
           <div className="flex flex-wrap gap-2">
+            {o.status === "Waiting for Confirmation" && <ConfirmOrderButton order={o} />}
             {(o.status === "Quote Requested" || o.status === "Waiting for Confirmation" || o.status === "Confirmed") &&
-              <ReviseSpecsDialog order={o} validityDays={validityDays} label={o.status === "Quote Requested" ? "Send / Issue Quotation Email" : undefined} />}
-            {o.status === "Waiting for Confirmation" && !o.is_legacy_incomplete && <ConfirmSpecsDialog order={o} />}
-            {o.customer_email && o.status === "Waiting for Confirmation" && <ResendReviewLinkButton orderId={o.id} />}
-            {o.customer_email && o.status !== "Waiting for Confirmation" && o.status !== "Quote Requested" && ["pending", "failed", "setup_email_pending", "account_created"].includes(o.provisioning_status) && o.email_verified_at && <RetryProvisioningButton orderId={o.id} />}
+              <ReviseSpecsDialog order={o} validityDays={validityDays} label={step === "awaiting_quotation" ? "Issue quotation" : o.status === "Confirmed" ? "Re-issue quotation" : "Edit draft quote"} />}
+            {step === "awaiting_acceptance" && !o.is_legacy_incomplete && <ConfirmSpecsDialog order={o} />}
+            {o.customer_email && step === "awaiting_acceptance" && <ResendReviewLinkButton orderId={o.id} />}
+            {o.customer_email && o.status !== "Waiting for Confirmation" && o.status !== "Quote Requested" && ["pending", "failed", "setup_email_pending", "account_created"].includes(o.provisioning_status) && <RetryProvisioningButton orderId={o.id} />}
           </div>
           {!o.customer_email && <p className="text-xs text-muted-foreground">Walk-in / no email: quotations are confirmed on the paper slip or by Messenger.</p>}
         </CardContent>
@@ -357,16 +382,37 @@ export async function OrderWorkspace({ orderId, actor, variant, initialTab }: { 
           {unverified.length === 0 ? <p className="text-sm text-muted-foreground">Nothing waiting for verification.</p> : (
             <ul className="grid gap-1.5 text-sm">
               {unverified.map((p) => (
-                <li key={p.id} className="flex flex-wrap items-center gap-2 rounded-lg border border-warning/50 p-2">
-                  <span className="flex-1"><b className="tabular-nums">{formatPeso(p.amount)}</b> · {p.payment_type} · {p.payment_method}
-                    <span className="block text-xs text-muted-foreground">{formatDateTime(p.paid_at)} · {nameOf(profiles, p.collected_by_id)}{p.notes ? ` · ${p.notes}` : ""}</span></span>
-                  <VerifyHandoverButton paymentId={p.id} amount={p.amount} driver={nameOf(profiles, p.collected_by_id)} />
+                <li key={p.id} className="flex flex-wrap items-center gap-2 rounded-lg border border-warning/50 p-2" data-testid="unverified-payment">
+                  <span className="min-w-0 flex-1"><b className="tabular-nums">{formatPeso(p.amount)}</b> · {p.payment_type} · {p.payment_method}
+                    <span className="block text-xs text-muted-foreground">
+                      {formatDateTime(p.paid_at)} · {p.submitted_by ? <>submitted by the customer · ref. <b className="text-foreground">{p.reference_number}</b></> : nameOf(profiles, p.collected_by_id)}{p.notes ? ` · ${p.notes}` : ""}
+                    </span>
+                    {p.proof_path && <a href={`/api/payments/${p.id}/proof`} target="_blank" rel="noreferrer noopener" className="text-xs font-semibold text-primary underline">Open receipt</a>}
+                  </span>
+                  {p.submitted_by
+                    ? <VerifyPaymentControls paymentId={p.id} amount={p.amount} reference={p.reference_number ?? null} />
+                    : <VerifyHandoverButton paymentId={p.id} amount={p.amount} driver={nameOf(profiles, p.collected_by_id)} />}
                 </li>
               ))}
             </ul>
           )}
         </CardContent>
       </Card>
+      {rejected.length > 0 && (
+        <Card>
+          <CardHeader><CardTitle>Rejected submissions ({rejected.length})</CardTitle></CardHeader>
+          <CardContent>
+            <ul className="grid gap-1.5 text-sm">
+              {rejected.map((p) => (
+                <li key={p.id} className="rounded-lg border p-2">
+                  <b className="tabular-nums">{formatPeso(p.amount)}</b> · {p.payment_method} · ref. {p.reference_number ?? "-"}
+                  <span className="block text-xs text-muted-foreground">Rejected {formatDateTime(p.rejected_at!)} by {nameOf(profiles, p.rejected_by_id ?? null)}: {p.rejection_reason}</span>
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
       <Card>
         <CardHeader><CardTitle>Verified payments ({verified.length})</CardTitle></CardHeader>
         <CardContent className="grid gap-3">
@@ -393,11 +439,16 @@ export async function OrderWorkspace({ orderId, actor, variant, initialTab }: { 
       {variant === "page" ? <h1 className="text-2xl font-bold sm:text-3xl">{o.order_code}</h1> : <h2 id="drawer-title" className="text-2xl font-bold">{o.order_code}</h2>}
       <StatusBadge status={o.status} />
       <PriorityBadge label={o.priority_label} rank={o.priority_rank} />
+      {isProductionLocked(o.status) && (
+        <span className="inline-flex items-center gap-1 rounded-full bg-foreground px-2.5 py-0.5 text-xs font-bold text-background" data-testid="spec-locked">
+          <Lock className="size-3" aria-hidden /> Spec locked
+        </span>
+      )}
       <span className="w-full text-sm text-muted-foreground">
-        {o.customer_name} · {o.paper_slip_number ? <>Paper slip #{o.paper_slip_number} · encoded by {nameOf(profiles, o.encoded_by_id)}</> : <>Customer portal request (Option 2) · no paper slip until the quotation</>}
+        {o.customer_name} · {o.order_origin === "customer_self_service" ? <>Online order · order slip {o.paper_slip_number ?? o.order_code}</> : o.paper_slip_number ? <>Paper slip #{o.paper_slip_number} · encoded by {nameOf(profiles, o.encoded_by_id)}</> : <>No paper slip yet</>}
       </span>
       <div className="flex w-full flex-wrap gap-2">
-        {o.paper_slip_number && <LinkButton href={`/staff/orders/${o.id}/slip`} size="sm"><Printer aria-hidden /> Print slip</LinkButton>}
+        {o.paper_slip_number && o.furniture_price != null && <LinkButton href={`/staff/orders/${o.id}/slip`} size="sm"><Printer aria-hidden /> Print slip</LinkButton>}
         {variant === "drawer" && <LinkButton href={`/staff/orders/${o.id}`} size="sm" variant="ghost"><ExternalLink aria-hidden /> Full page</LinkButton>}
       </div>
     </div>

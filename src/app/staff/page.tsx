@@ -19,10 +19,11 @@ export default async function StaffPage({ searchParams }: { searchParams: Promis
   const code = (id: string) => data.orders.find((o) => o.id === id)?.order_code ?? "";
   // one line per pending job; each opens that order's drawer on the right tab
   const inbox: { id: string; order: string; label: string; tab: string }[] = [
-    ...t.quoteRequests.map((o) => ({ id: o.id, order: o.order_code, label: "Issue the quotation (Option 2 request)", tab: "quotation" })),
+    ...t.toConfirm.map((o) => ({ id: o.id, order: o.order_code, label: o.order_origin === "customer_self_service" ? "Check and confirm the online order" : "Confirm the order", tab: "quotation" })),
     ...t.specProposals.map((e) => ({ id: e.order_id, order: code(e.order_id), label: "Review the customer's proposed changes", tab: "overview" })),
-    ...t.needsConfirmation.map((o) => ({ id: o.id, order: o.order_code, label: "Record the customer's acceptance", tab: "quotation" })),
-    ...t.needsDownPayment.map(({ order, shortfall }) => ({ id: order.id, order: order.order_code, label: `Log the 30% down payment (${formatPeso(shortfall)} short)`, tab: "payments" })),
+    ...t.toQuote.map((o) => ({ id: o.id, order: o.order_code, label: "Issue the quotation", tab: "quotation" })),
+    ...t.paymentsToVerify.map(({ payment, order }) => ({ id: order.id, order: order.order_code, label: `Verify a ${payment.payment_method} payment (${formatPeso(payment.amount)}, ref. ${payment.reference_number ?? "-"})`, tab: "payments" })),
+    ...t.needsDownPayment.map(({ order, shortfall }) => ({ id: order.id, order: order.order_code, label: `Waiting for the 30% down payment (${formatPeso(shortfall)} short)`, tab: "payments" })),
     ...t.readyForProduction.map((o) => ({ id: o.id, order: o.order_code, label: "Release to the workshop (30% verified)", tab: "payments" })),
     ...t.cashHandovers.map(({ payment, order }) => ({ id: order.id, order: order.order_code, label: `Verify cash handover (${formatPeso(payment.amount)})`, tab: "payments" })),
     ...t.specQuestions.map((e) => ({ id: e.order_id, order: code(e.order_id), label: "Answer a craftsman's question", tab: "overview" })),
@@ -37,16 +38,16 @@ export default async function StaffPage({ searchParams }: { searchParams: Promis
     <AppShell portal={actor.role === "owner" ? "owner" : "staff"} actor={actor} live={<LiveSync />}>
       <OfficeWorkspace actor={actor} data={data} basePath="/staff" openId={openId} tab={typeof sp.tab === "string" ? sp.tab : undefined}
         title="Operations & Order Queue" description="One shared, live order record for the counter, the workshop, the drivers and the customers." />
-      <details className="mt-6 rounded-2xl border bg-card p-4" data-testid="task-inbox">
+      <details id="task-inbox" className="mt-8 border-t border-border pt-4" data-testid="task-inbox">
         <summary className="flex cursor-pointer items-center gap-2 text-lg font-semibold">
           <Inbox className="size-5 text-primary" aria-hidden /> Task inbox
           <span className="rounded-full bg-primary px-2 py-0.5 text-xs font-bold text-primary-foreground tabular-nums">{inbox.length}</span>
         </summary>
         {inbox.length === 0 ? <p className="mt-3 text-sm text-muted-foreground">Nothing waiting. 🎉</p> : (
-          <ul className="mt-3 grid gap-1.5">
+          <ul className="mt-3 divide-y divide-border border-y border-border">
             {inbox.map((x, i) => (
               <li key={`${x.id}-${i}`}>
-                <Link href={`/staff?order=${x.id}&tab=${x.tab}`} scroll={false} className="flex min-h-11 items-center gap-3 rounded-xl border px-3 py-2 text-sm hover:bg-accent-soft">
+                <Link href={`/staff?order=${x.id}&tab=${x.tab}`} scroll={false} className="flex min-h-12 items-center gap-3 px-1 py-2.5 text-sm hover:bg-accent-soft/60">
                   <b className="shrink-0 tabular-nums">{x.order}</b><span className="min-w-0">{x.label}</span>
                 </Link>
               </li>

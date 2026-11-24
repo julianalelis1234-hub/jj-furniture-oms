@@ -67,11 +67,26 @@ export const PAYMENT_TYPES = [
   "Delivery Balance Collection",
   "Installment / Partial",
   "Delivery Fee",
+  "Full Payment",
 ] as const;
 export type PaymentType = (typeof PAYMENT_TYPES)[number];
 
-export const PAYMENT_METHODS = ["Cash", "GCash / Bank Transfer"] as const;
+/** "GCash / Bank Transfer" is the legacy channel (staff-logged, before migration 009). */
+export const PAYMENT_METHODS = ["Cash", "GCash / Bank Transfer", "Online Payment (GCash / Maya)", "Bank Transfer"] as const;
 export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
+/** Channels a customer can choose for new payments (migration 009). */
+export const CUSTOMER_PAYMENT_METHODS = ["Cash", "Online Payment (GCash / Maya)", "Bank Transfer"] as const satisfies readonly PaymentMethod[];
+/** Channels that need a transaction reference number and proof of payment. */
+export const REFERENCE_PAYMENT_METHODS: readonly PaymentMethod[] = ["Online Payment (GCash / Maya)", "Bank Transfer"];
+
+/** The customer's payment terms, chosen when accepting the quotation (migration 009). */
+export const PAYMENT_PLANS = ["down_30", "installment", "full"] as const;
+export type PaymentPlan = (typeof PAYMENT_PLANS)[number];
+export const PAYMENT_PLAN_LABEL: Record<PaymentPlan, string> = {
+  down_30: "30% down payment",
+  installment: "Installment",
+  full: "Full payment",
+};
 
 export const VEHICLE_TYPES = ["Multicab", "Elf Truck"] as const;
 export type VehicleType = (typeof VEHICLE_TYPES)[number];
@@ -178,6 +193,13 @@ export interface Order extends StructuredSpecColumns {
   provisioning_status: ProvisioningStatus;
   /** historical row created before emails were collected (set once by migration 005) */
   legacy_contact_unknown: boolean;
+  /** the shop confirmed the submitted order (migration 009) */
+  confirmed_at: string | null;
+  /** the shop issued the quotation for the confirmed order; cleared never, re-set on re-issue */
+  quotation_issued_at: string | null;
+  /** chosen by the customer when accepting the quotation; null until then */
+  payment_plan: PaymentPlan | null;
+  preferred_payment_method: PaymentMethod | null;
   /** idempotency key of a customer self-service submission */
   client_request_key: string | null;
   created_at: string;
@@ -276,6 +298,13 @@ export interface Payment {
   verified_by_owner_or_staff: boolean;
   notes: string | null;
   paid_at: string;
+  /** customer-submitted payments (migration 009): online / bank reference and private proof file */
+  reference_number?: string | null;
+  proof_path?: string | null;
+  submitted_by?: string | null;
+  rejected_at?: string | null;
+  rejected_by_id?: string | null;
+  rejection_reason?: string | null;
 }
 
 export interface StatusHistory {
@@ -365,7 +394,7 @@ export type ConsumeReviewResult =
 // --------------------------------------------------- email outbox (008) ----
 export const OUTBOX_STATUSES = ["pending", "processing", "sent", "failed"] as const;
 export type OutboxStatus = (typeof OUTBOX_STATUSES)[number];
-export type OutboxKindName = "quote_review_ready" | "order_confirmed_new_customer" | "order_confirmed_returning_customer" | "account_setup_link";
+export type OutboxKindName = "quote_review_ready" | "order_confirmed_new_customer" | "order_confirmed_returning_customer" | "account_setup_link" | "quotation_payment_request";
 
 /** One queued transactional email. `encrypted_payload` is an AES-256-GCM envelope or null — never plaintext. */
 export interface OutboxRow {
@@ -393,3 +422,34 @@ export interface OutboxRow {
   sent_at: string | null;
 }
 export type NewOutboxRow = Pick<OutboxRow, "kind" | "order_id" | "recipient_email" | "customer_user_id" | "review_token_id" | "template_data" | "idempotency_key" | "encrypted_payload" | "requested_by_user_id"> & { max_attempts?: number };
+
+// ------------------------------------------------------------ lumber (migration 010)
+export const LUMBER_MOVEMENT_KINDS = ["receive", "use", "adjust"] as const;
+export type LumberMovementKind = (typeof LUMBER_MOVEMENT_KINDS)[number];
+
+export interface LumberItem {
+  id: string;
+  wood_name: string;
+  wood_type: WoodType;
+  /** e.g. 2" × 4" × 10 ft */
+  size_note: string | null;
+  reorder_level_bf: number;
+  /** maintained only by movements (row-locked in Postgres); never below zero */
+  on_hand_bf: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface LumberMovement {
+  id: string;
+  item_id: string;
+  kind: LumberMovementKind;
+  /** receive / use: positive; adjust: signed */
+  board_feet: number;
+  order_id: string | null;
+  note: string | null;
+  recorded_by: string | null;
+  client_transaction_id: string | null;
+  created_at: string;
+}

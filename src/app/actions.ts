@@ -6,22 +6,25 @@ import { redirect } from "next/navigation";
 import { ZodError } from "zod";
 import { isDemoMode } from "@/lib/config";
 import type { ActionResult } from "@/lib/action-result";
-import { DEMO_PERSONA, SEED_PROFILES } from "@/lib/data/seed";
+import { DEMO_ACCOUNT_PASSWORD, DEMO_PERSONA, demoAccounts, demoCustomerLogin } from "@/lib/data/seed";
 import { DomainError } from "@/lib/domain/errors";
 import type { Actor, ConfirmationMethod, OrderStatus, PaymentExceptionType, PriorityLabel, Role } from "@/lib/domain/types";
 import { ROLES } from "@/lib/domain/types";
 import { firstErrors } from "@/lib/domain/validation";
-import { authorize, DEMO_COOKIE, getPublicStore, getStore, PORTAL_FOR, setDemoSession } from "@/lib/server/context";
+import { authorize, DEMO_COOKIE, demoSwitcherAllowed, getPublicStore, getStore, PORTAL_FOR, setDemoSession } from "@/lib/server/context";
 import { resetMemoryStore } from "@/lib/server/memory";
 import { withActorRole } from "@/lib/realtime/actor-context";
 import { createUserClient } from "@/lib/server/supabase";
 import { resendForOrder } from "@/lib/email/requests";
-import { getCustomerAuth } from "@/lib/server/customer-auth";
+import { customerSignIn, customerSignOut, getCustomer, getCustomerAuth } from "@/lib/server/customer-auth";
 import { createCustomerRequest } from "@/lib/services/customer";
 import { scheduleDelivery } from "@/lib/services/deliveries";
 import { decideException, requestException, reviewCustomerProposal } from "@/lib/services/exceptions";
 import { retryNotification, SMS_SIMULATED_NOTE, smsMode } from "@/lib/services/notify";
+import { addLumberItem, recordLumberMovement, setReorderLevel } from "@/lib/services/inventory";
 import {
+  assignCraftsman,
+  confirmOrder,
   createOrder,
   editOrderDetails,
   failInspection,
@@ -35,7 +38,7 @@ import {
   transitionOrder,
   type AcceptanceInput,
 } from "@/lib/services/orders";
-import { logPayment, verifyCashHandover } from "@/lib/services/payments";
+import { logPayment, rejectPayment, verifyCashHandover, verifyPayment } from "@/lib/services/payments";
 
 
 /** Uniform wrapper: server-side authorization, domain errors -> friendly results, UI refresh. */
@@ -58,19 +61,21 @@ async function run<T>(roles: Role[] | null, fn: (actor: Actor) => Promise<T>, me
 const str = (fd: FormData, k: string) => String(fd.get(k) ?? "");
 
 // --------------------------------------------------------------- session --
+/** Role-switcher bar (Demo account only): jump to another staff portal as its demo persona. */
 export async function switchDemoRole(role: Role) {
   if (!isDemoMode()) throw new Error("Role switching is disabled in production mode.");
+  if (!(await demoSwitcherAllowed())) throw new Error("Only the Demo account can switch roles. Sign in with that account first.");
   if (!ROLES.includes(role)) throw new Error("Unknown role");
-  await setDemoSession(DEMO_PERSONA[role]);
+  await setDemoSession(DEMO_PERSONA[role], true);
   redirect(PORTAL_FOR[role]);
 }
 
-export async function switchDemoPersona(profileId: string) {
-  if (!isDemoMode()) throw new Error("Role switching is disabled in production mode.");
-  const p = SEED_PROFILES.find((x) => x.id === profileId);
-  if (!p) throw new Error("Unknown persona");
-  await setDemoSession(p.id);
-  redirect(PORTAL_FOR[p.role]);
+/** Role-switcher bar (Demo account only): open the customer portal as the demo customer. */
+export async function switchDemoToCustomer() {
+  if (!isDemoMode() || !(await demoSwitcherAllowed())) throw new Error("Only the Demo account can switch roles.");
+  // keep a customer who is already signed in (e.g. one who just created a password); else the demo customer
+  if (!(await getCustomer())) await customerSignIn(demoCustomerLogin().email, DEMO_ACCOUNT_PASSWORD);
+  redirect("/customer/orders");
 }
 
 export async function resetDemoData(): Promise<ActionResult> {
@@ -84,10 +89,30 @@ export async function resetDemoData(): Promise<ActionResult> {
   return { ok: true, message: "Demo data restored to the Valencia City sample set." };
 }
 
+/**
+ * One sign-in for every account.
+ *  - Demo Mode: the six fixed demo accounts (shared demo password). The Demo account gets the
+ *    role-switcher bar; fixed role accounts only see their own portal; the customer opens /customer/orders.
+ *  - Live: Supabase Auth. Staff go to their portal; a customer account goes to its orders.
+ */
 export async function signIn(_: unknown, fd: FormData): Promise<ActionResult> {
-  if (isDemoMode()) return { ok: false, message: "Demo mode uses the role switcher." };
+  const email = str(fd, "email").trim().toLowerCase();
+  const password = str(fd, "password");
+  if (isDemoMode()) {
+    const acct = demoAccounts().find((a) => a.email === email);
+    if (!acct || password !== DEMO_ACCOUNT_PASSWORD) return { ok: false, message: "Wrong email or password." };
+    (await cookies()).delete(DEMO_COOKIE);
+    await customerSignOut();
+    if (acct.key === "customer") {
+      await customerSignIn(acct.email, password);
+      redirect("/customer/orders");
+    }
+    await setDemoSession(acct.profileId!, !!acct.all);
+    const role = (await (await getStore()).listProfiles()).find((p) => p.id === acct.profileId)!.role;
+    redirect(PORTAL_FOR[role]);
+  }
   const supabase = await createUserClient();
-  const { error } = await supabase.auth.signInWithPassword({ email: str(fd, "email").trim(), password: str(fd, "password") });
+  const { error } = await supabase.auth.signInWithPassword({ email, password });
   if (error) {
     // Only real credential errors say "wrong password"; outages must not look like a typo.
     if (error.status === 400 || /invalid login credentials/i.test(error.message)) return { ok: false, message: "Wrong email or password." };
@@ -96,6 +121,7 @@ export async function signIn(_: unknown, fd: FormData): Promise<ActionResult> {
   }
   const { data } = await supabase.auth.getUser();
   const { data: profile } = await supabase.from("profiles").select("role, is_active").eq("id", data.user!.id).maybeSingle();
+  if (profile?.role === "customer" && profile.is_active) redirect("/customer/orders");
   if (!profile?.is_active) {
     await supabase.auth.signOut();
     return { ok: false, message: "This account has no active staff profile. Ask the owner to activate it." };
@@ -104,9 +130,11 @@ export async function signIn(_: unknown, fd: FormData): Promise<ActionResult> {
 }
 
 export async function signOut() {
-  if (isDemoMode()) (await cookies()).delete(DEMO_COOKIE);
-  else await (await createUserClient()).auth.signOut();
-  redirect(isDemoMode() ? "/" : "/login");
+  if (isDemoMode()) {
+    (await cookies()).delete(DEMO_COOKIE);
+    await customerSignOut(); // the Demo account may also hold the demo customer's session
+  } else await (await createUserClient()).auth.signOut();
+  redirect("/");
 }
 
 // ---------------------------------------------------------------- orders --
@@ -136,15 +164,38 @@ export async function retryProvisioningAction(orderId: string) {
 }
 
 /** Staff record an in-store / Messenger acceptance of the exact revision + quotation shown. */
+/** Staff record the customer's acceptance of the issued quotation (e.g. signed at the shop) with the chosen terms. */
 export async function recordConfirmationAction(input: AcceptanceInput & { confirmation_method: ConfirmationMethod }) {
   return run(["owner", "staff"], async (a) => { await recordConfirmation(await getStore(), a, input); },
-    `Specification + quotation of revision ${input.revision_number} accepted. Production starts once the 30% down payment is verified.`);
+    `Quotation (revision ${input.revision_number}) accepted. Production starts once the down payment is verified.`);
 }
 
-/** Issues a quotation (first quote for a customer request, or a revised quote). */
+/** Waiting for Confirmation -> Confirmed, then the customer's "create your password" / "log in" email. */
+export async function confirmOrderAction(orderId: string, expectedVersion?: number) {
+  return run(["owner", "staff"], async (a) => (await confirmOrder(await getStore(), a, await getCustomerAuth(), orderId, expectedVersion)).provisioning,
+    (p) => p.status === "not_applicable"
+      ? "Order confirmed. Walk-in order: tell the customer the quotation at the shop."
+      : p.status === "failed"
+        ? `Order confirmed, but the customer email was not sent: ${p.detail ?? "check the email address"}.`
+        : p.new_account ? "Order confirmed. The customer was emailed a link to create their password." : "Order confirmed. The customer was emailed to log in.");
+}
+
+/** Saves a shop revision. For a Confirmed order this IS the issued quotation (payment email follows). */
 export async function reviseSpecsAction(orderId: string, expectedRevision: number | null, fd: FormData) {
-  return run(["owner", "staff"], async (a) => { await reviseSpecs(await getStore(), a, orderId, Object.fromEntries(fd), expectedRevision); },
-    "Quotation saved as a new revision. The customer must accept it before it expires.");
+  let issued = false;
+  return run(["owner", "staff"], async (a) => { issued = (await reviseSpecs(await getStore(), a, orderId, Object.fromEntries(fd), expectedRevision)).status === "Confirmed"; },
+    () => issued
+      ? "Quotation issued. The customer was emailed to accept it and choose how to pay."
+      : "Draft quote saved. Confirm the order, then issue the quotation.");
+}
+
+/** Verify a customer-submitted (or driver cash) payment: only verified payments count toward the 30% gate. */
+export async function verifyPaymentAction(paymentId: string) {
+  return run(["owner", "staff"], async (a) => { await verifyPayment(await getStore(), a, paymentId); }, "Payment verified.");
+}
+
+export async function rejectPaymentAction(paymentId: string, reason: string) {
+  return run(["owner", "staff"], async (a) => { await rejectPayment(await getStore(), a, paymentId, reason); }, "Payment rejected. The customer was told why.");
 }
 
 /** Confirmed -> In Production after the server-side 30% / approval / drift / blocking checks. */
@@ -235,9 +286,39 @@ export async function retrySmsAction(id: string, phone?: string) {
  * No session: the email is unverified until the customer opens the review
  * link that comes with the official quotation.
  */
-export async function customerRequestAction(_: unknown, fd: FormData): Promise<ActionResult<{ order_code: string; email: string }>> {
+/** The order slip shown (and printable) right after an online submission: no prices, no secrets. */
+export type OrderSlip = {
+  order_code: string; email: string; customer_name: string; customer_phone: string; delivery_address: string; municipality: string;
+  item: string; size: string; wood: string; finish: string; quantity: number; notes: string | null; submitted_at: string;
+};
+
+export async function customerRequestAction(_: unknown, fd: FormData): Promise<ActionResult<OrderSlip>> {
   return run(null, async () => {
-    const { order } = await createCustomerRequest(await getPublicStore(), Object.fromEntries(fd));
-    return { order_code: order.order_code, email: order.customer_email ?? "" };
-  }, "Request sent. Your quotation will be emailed to you.");
+    const { order: o } = await createCustomerRequest(await getPublicStore(), Object.fromEntries(fd));
+    return {
+      order_code: o.order_code, email: o.customer_email ?? "", customer_name: o.customer_name, customer_phone: o.customer_phone,
+      delivery_address: o.delivery_address, municipality: o.municipality, item: o.item_name, size: o.dimensions,
+      wood: o.wood_type === "Other" && o.custom_wood_note ? o.custom_wood_note : o.wood_type, finish: o.color_finish, quantity: o.quantity,
+      notes: o.special_instructions, submitted_at: o.created_at,
+    };
+  }, "Order sent. Keep your order slip.");
+}
+
+// ------------------------------------------------------- owner: craftsmen + inventory
+export async function assignCraftsmanAction(orderId: string, craftsmanId: string | null) {
+  return run(["owner", "staff"], async (a) => { await assignCraftsman(await getStore(), a, orderId, craftsmanId || null); },
+    craftsmanId ? "Craftsman assigned." : "Craftsman unassigned.");
+}
+
+export async function addLumberItemAction(_: unknown, fd: FormData) {
+  return run(["owner"], async (a) => { await addLumberItem(await getStore(), a, Object.fromEntries(fd)); }, "Lumber item added. Record its opening stock as a receive.");
+}
+
+export async function setReorderLevelAction(itemId: string, level: number) {
+  return run(["owner"], async (a) => { await setReorderLevel(await getStore(), a, itemId, level); }, "Reorder level saved.");
+}
+
+export async function recordLumberAction(_: unknown, fd: FormData) {
+  return run(["owner", "staff"], async (a) => (await recordLumberMovement(await getStore(), a, Object.fromEntries(fd))).movement,
+    (m) => `${m.kind === "receive" ? "Received" : m.kind === "use" ? "Used" : "Adjusted"} ${Math.abs(m.board_feet).toLocaleString("en-PH")} board feet.`);
 }

@@ -61,7 +61,7 @@ export const getPublicStore = cache(async (): Promise<DataStore> => {
 export const getActor = cache(async (): Promise<Actor | null> => {
   if (isDemoMode()) {
     const token = (await cookies()).get(DEMO_COOKIE)?.value;
-    const data = verifyToken<{ uid: string }>(token);
+    const data = verifyToken<{ uid: string; all?: boolean }>(token);
     if (!data) return null;
     const store = await getStore();
     const profile = (await store.listProfiles()).find((p) => p.id === data.uid && p.is_active);
@@ -85,7 +85,7 @@ export const getActor = cache(async (): Promise<Actor | null> => {
 
 export async function requireActor(allowed: Role[]): Promise<Actor> {
   const actor = await getActor();
-  if (!actor) redirect(isDemoMode() ? "/" : "/login");
+  if (!actor) redirect("/login");
   if (!allowed.includes(actor.role)) redirect(PORTAL_FOR[actor.role]);
   return actor;
 }
@@ -98,8 +98,16 @@ export async function authorize(allowed: Role[]): Promise<Actor> {
   return actor;
 }
 
-export async function setDemoSession(profileId: string) {
-  (await cookies()).set(DEMO_COOKIE, signToken({ uid: profileId }, 60 * 60 * 24 * 30), {
+/** Demo Mode: is the signed-in session the all-roles Demo account (role-switcher bar allowed)? */
+export async function demoSwitcherAllowed(): Promise<boolean> {
+  if (!isDemoMode()) return false;
+  const data = verifyToken<{ uid: string; all?: boolean }>((await cookies()).get(DEMO_COOKIE)?.value);
+  return !!data?.all;
+}
+
+/** `all` marks the Demo account: it may switch portals; fixed role accounts may not. */
+export async function setDemoSession(profileId: string, all = false) {
+  (await cookies()).set(DEMO_COOKIE, signToken({ uid: profileId, all }, 60 * 60 * 24 * 30), {
     httpOnly: true,
     sameSite: "lax",
     secure: await isHttpsRequest(),

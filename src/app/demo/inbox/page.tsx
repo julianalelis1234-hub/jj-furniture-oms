@@ -12,10 +12,11 @@ import { SendNowButton } from "./send-now-button";
 
 const PROVIDER_LABEL = { resend: "Resend (real email)", gmail: "Gmail SMTP (real email)", demo: "Demo Inbox only (no real email is sent)", none: "None" } as const;
 const KIND_LABEL: Record<string, string> = {
-  quote_review_ready: "Quotation ready (Email 1)",
-  order_confirmed_new_customer: "Order confirmed + set password (Email 2)",
-  order_confirmed_returning_customer: "Order confirmed — returning customer",
+  order_confirmed_new_customer: "Order confirmed + create password",
+  order_confirmed_returning_customer: "Order confirmed (returning customer)",
+  quotation_payment_request: "Quotation + choose how to pay",
   account_setup_link: "Password set-up link",
+  quote_review_ready: "Quotation review link (resent by staff)",
 };
 
 export const metadata = { title: "Demo inbox" };
