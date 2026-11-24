@@ -193,7 +193,7 @@ await step("staff: new order form validates (email or walk-in) then saves with i
 await step("owner: sidebar dashboard KPIs, approve installment, pass inspection, sections, assign + reprioritise, lumber", async () => {
   const { page, ctx } = await asPersona("Mr. Vincris Lelis", desktop);
   expect(page.url().endsWith("/owner"), "owner portal");
-  await page.getByRole("heading", { name: "Dashboard", exact: true }).waitFor();
+  await page.getByRole("heading", { level: 1, name: /^Good (morning|afternoon|evening), Vincris$/ }).waitFor();
   for (const label of ["Dashboard", "Orders & Quotations", "Staff", "Craftsmen", "Deliveries", "Lumber & Inventory", "Reports", "Roles & Access"])
     expect(await page.getByTestId("owner-nav").getByRole("link", { name: new RegExp(`^${label.replace("&", "&")}`) }).isVisible(), `sidebar ${label}`);
   for (const id of ["kpi-to-confirm", "kpi-quote-payment", "kpi-workshop", "kpi-delivery", "kpi-deposits", "kpi-balances", "kpi-late", "kpi-low-stock"]) expect(await page.getByTestId(id).isVisible(), `metric ${id}`);

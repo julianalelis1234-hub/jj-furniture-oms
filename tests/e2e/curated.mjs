@@ -161,7 +161,7 @@ await step("six demo accounts: wrong password refused; fixed role accounts get n
 await step("all six demo accounts on desktop (1440) and phone (390): right portal, own content, no sideways scroll, phone nav, no access elsewhere", async () => {
   const ACCOUNTS = [
     { label: "Demo (all roles)", home: /^\/owner$/, anchor: (p) => p.getByRole("navigation", { name: "Switch demo role" }), nav: true },
-    { label: "Owner", home: /^\/owner$/, anchor: (p) => p.getByRole("heading", { level: 1, name: "Dashboard" }), nav: true, denied: ["/craftsman", "/driver"] },
+    { label: "Owner", home: /^\/owner$/, anchor: (p) => p.getByRole("heading", { level: 1, name: /^Good (morning|afternoon|evening), / }), nav: true, denied: ["/craftsman", "/driver"] },
     { label: "Staff", home: /^\/staff$/, anchor: (p) => p.getByRole("heading", { name: "Operations & Order Queue" }), nav: true, denied: ["/owner", "/owner/inventory", "/craftsman"] },
     { label: "Craftsman", home: /^\/craftsman$/, anchor: (p) => p.getByRole("tablist", { name: "Job status" }), nav: false, denied: ["/owner", "/staff", "/driver"] },
     { label: "Delivery Rider", home: /^\/driver$/, anchor: (p) => p.getByText("Online • Synced"), nav: false, denied: ["/owner", "/staff", "/craftsman"] },
