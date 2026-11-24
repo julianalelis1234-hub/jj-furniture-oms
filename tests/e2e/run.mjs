@@ -770,12 +770,18 @@ await step("security: craftsman cannot open office or driver pages", async () =>
   await ctx.close();
 });
 
-await step("theme: dark mode renders with prototype palette", async () => {
+await step("theme: dark and premium black render with their palettes", async () => {
   const { page, ctx } = await asPersona("Mr. Vincris Lelis");
   await page.getByRole("button", { name: "Switch to Dark mode" }).click();
   const bg = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
   expect(bg === "rgb(43, 29, 23)", `dark background expected Espresso #2B1D17, got ${bg}`);
   await page.screenshot({ path: `${SHOTS}/owner-dark-mobile.png`, fullPage: false });
+  // Premium black: true black canvas with champagne-gold actions
+  await page.getByRole("button", { name: "Switch to Premium black mode" }).click();
+  const bgP = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+  expect(bgP === "rgb(11, 11, 12)", `premium background expected #0B0B0C, got ${bgP}`);
+  expect(await page.evaluate(() => document.documentElement.classList.contains("premium") && localStorage.getItem("theme") === "premium"), "premium theme applied and remembered");
+  await page.screenshot({ path: `${SHOTS}/owner-premium-mobile.png`, fullPage: false });
   await ctx.close();
 });
 

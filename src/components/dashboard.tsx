@@ -50,9 +50,9 @@ export function KpiRow({ children, testid, cols = 4 }: { children: ReactNode; te
 /** The espresso highlight card (right column): a glow, a title row with a chip, then its content. */
 export function DarkCard({ id, title, chip = "Live", children, className }: { id: string; title: string; chip?: string; children: ReactNode; className?: string }) {
   return (
-    <section aria-labelledby={id} className={cn("dark relative flex flex-col gap-3 overflow-hidden rounded-2xl border border-white/10 sm:gap-4 bg-[#1e130e] bg-[radial-gradient(22rem_18rem_at_100%_0%,rgb(196_138_90/0.38),transparent_70%)] p-3.5 sm:p-5 text-[#faf6f0] shadow-[0_12px_32px_-12px_rgb(30_19_14/0.55)]", className)}>
+    <section aria-labelledby={id} className={cn("dark relative flex flex-col gap-3 overflow-hidden rounded-2xl border border-white/10 sm:gap-4 bg-[#1e130e] bg-[radial-gradient(22rem_18rem_at_100%_0%,rgb(196_138_90/0.38),transparent_70%)] premium:border-[#d4af6a]/25 premium:bg-[#121212] premium:bg-[radial-gradient(22rem_18rem_at_100%_0%,rgb(212_175_106/0.28),transparent_70%)] p-3.5 sm:p-5 text-[#faf6f0] shadow-[0_12px_32px_-12px_rgb(30_19_14/0.55)]", className)}>
       <div className="relative flex items-center gap-2">
-        <Sparkles className="size-4 text-[#f0b27a]" aria-hidden />
+        <Sparkles className="size-4 text-[#f0b27a] premium:text-[#e9cf98]" aria-hidden />
         <h2 id={id} className="flex-1 text-sm font-bold">{title}</h2>
         {chip && <span className="rounded-full border border-white/15 bg-white/10 px-2 py-0.5 text-[11px] font-semibold text-white/80">{chip}</span>}
       </div>
@@ -85,7 +85,7 @@ export function DarkStats({ items }: { items: { label: string; value: ReactNode;
   );
 }
 
-export const darkPrimary = "inline-flex h-10 sm:h-11 flex-1 items-center justify-center gap-2 rounded-full bg-gradient-to-r from-[#a86a3e] to-[#c48a5a] px-3 text-[13px] font-bold sm:px-4 sm:text-sm text-white hover:brightness-110";
+export const darkPrimary = "inline-flex h-10 sm:h-11 flex-1 items-center justify-center gap-2 rounded-full bg-gradient-to-r from-[#a86a3e] to-[#c48a5a] premium:from-[#b8924f] premium:to-[#e2c283] premium:text-[#111] px-3 text-[13px] font-bold sm:px-4 sm:text-sm text-white hover:brightness-110";
 export const darkSecondary = "inline-flex h-10 sm:h-11 items-center justify-center rounded-full bg-white/10 px-3 text-[13px] font-semibold sm:px-4 sm:text-sm hover:bg-white/15";
 export const headerPrimary = "inline-flex h-10 sm:h-11 items-center gap-2 rounded-xl bg-primary px-3 text-[13px] font-bold sm:px-4 sm:text-sm text-primary-foreground hover:bg-primary/90";
 export const headerSecondary = "inline-flex h-10 sm:h-11 items-center gap-2 rounded-xl border border-border bg-card px-3 text-[13px] font-semibold sm:px-4 sm:text-sm hover:bg-muted";

@@ -364,7 +364,7 @@ export default function Furniture3DPreview({ spec, className, footer, warning, c
   const labelEls = useRef<Record<string, HTMLSpanElement | null>>({});
   // muted scale figure: Mocha on the Latte stage (light), Latte on the Mocha stage (dark)
   const { resolvedTheme } = useTheme();
-  const humanColor = resolvedTheme === "dark" ? LATTE : MOCHA;
+  const humanColor = resolvedTheme === "dark" || resolvedTheme === "premium" ? LATTE : MOCHA;
   useEffect(() => () => { if (resume.current) clearTimeout(resume.current); }, []);
 
   const W = spec.width_cm / 100, H = spec.height_cm / 100, D = spec.depth_cm / 100;
