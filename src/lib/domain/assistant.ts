@@ -35,7 +35,7 @@ export interface AssistantResult {
 /** The shop's own photo library. Only real photos and labelled 3D renders, never stock images. */
 export const PHOTO_LIBRARY: (ReferencePhoto & { category: FurnitureCategory; variants?: string[] })[] = [
   { category: "Panel Door", src: "/samples/carved-door.jpg", alt: "Solid wood door with a hand-carved S-curve panel and a high-gloss dark stain", caption: "Carved panel door made by JJ Enterprises" },
-  { category: "Dining Table", src: "/samples/dining-set-3d.jpg", alt: "3D preview of a Mahogany dining set in walnut stain", caption: "Dining set · 3D preview (shop photo coming soon)" },
+  { category: "Dining Table", src: "/samples/dining-set-10-seater.jpg", alt: "Solid wood slab dining table with ten high-back slatted chairs, natural finish", caption: "10-seater dining set made by JJ Enterprises" },
   { category: "Living Room Set", src: "/samples/sala-set-3d.jpg", alt: "3D preview of a Mahogany sala set in walnut stain", caption: "Sala set · 3D preview (shop photo coming soon)" },
 ];
 

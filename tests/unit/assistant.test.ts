@@ -6,7 +6,7 @@ describe("customization assistant (rule-based, local)", () => {
     const r = parseRequest("I want a 6 seater narra dining table, 2 meters long, dark finish");
     expect(r.patch).toMatchObject({ furniture_category: "Dining Table", design_variant: "6-Seater Classic", width_cm: "200", wood_type: "Other", custom_wood_note: "Narra", color_finish: "Dark Espresso" });
     expect(r.understood.join(" | ")).toMatch(/Narra .*shop confirms availability/);
-    expect(r.photo?.src).toBe("/samples/dining-set-3d.jpg");
+    expect(r.photo?.src).toBe("/samples/dining-set-10-seater.jpg");
   });
   it("W × H × D with units, feet and inches", () => {
     expect(parseRequest("door 90 x 210 x 4.5 cm mahogany").patch).toMatchObject({ furniture_category: "Panel Door", width_cm: "90", height_cm: "210", depth_cm: "4.5", wood_type: "Mahogany" });
