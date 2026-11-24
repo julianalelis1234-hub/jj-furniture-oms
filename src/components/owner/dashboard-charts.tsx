@@ -57,7 +57,7 @@ export function ActivityChart({ orderDays, paymentDays, today }: { orderDays: Da
     if (!el) return;
     const ro = new ResizeObserver(([e]) => {
       setWidth(Math.max(280, Math.round(e.contentRect.width)));
-      setH(Math.max(220, Math.round(e.contentRect.height)));
+      setH(Math.max(160, Math.round(e.contentRect.height)));
     });
     ro.observe(el);
     return () => ro.disconnect();
@@ -101,8 +101,8 @@ export function ActivityChart({ orderDays, paymentDays, today }: { orderDays: Da
 
   return (
     <div className="flex h-full flex-col">
-      <div className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-2">
-        <h2 className="mr-auto text-lg font-bold">Shop activity</h2>
+      <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-2 sm:mb-4">
+        <h2 className="mr-auto text-base font-bold sm:text-lg">Shop activity</h2>
         <ul className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground" aria-label="Legend">
           {SERIES.map((s) => (
             <li key={s.key} className="flex items-center gap-1.5"><span className="size-2.5 rounded-full" style={{ background: s.color }} aria-hidden />{s.label}</li>
@@ -115,7 +115,7 @@ export function ActivityChart({ orderDays, paymentDays, today }: { orderDays: Da
         </select>
       </div>
 
-      <div ref={box} className="relative min-h-[220px] flex-1 rounded-lg outline-none focus-visible:ring-3 focus-visible:ring-ring/40" onPointerMove={(e) => pick(e.clientX)} onPointerLeave={() => setHover(null)}
+      <div ref={box} className="relative min-h-[170px] flex-1 sm:min-h-[220px] rounded-lg outline-none focus-visible:ring-3 focus-visible:ring-ring/40" onPointerMove={(e) => pick(e.clientX)} onPointerLeave={() => setHover(null)}
         tabIndex={0} role="img" aria-label={`Orders received and payments verified per week, ${RANGES.find((r) => r.weeks === weeks)?.label.toLowerCase()}`}
         onKeyDown={(e) => {
           if (e.key === "ArrowRight") setHover((v) => Math.min(buckets.length - 1, (v ?? -1) + 1));
@@ -180,7 +180,7 @@ export function DueBars({ days }: { days: { day: Day; label: string; count: numb
   const peak = days.reduce((a, d, i) => (d.count > days[a].count ? i : a), 0);
   return (
     <div>
-      <ul className="flex h-28 items-end gap-1.5" aria-label="Jobs due per day">
+      <ul className="flex h-20 items-end gap-1 sm:h-28 sm:gap-1.5" aria-label="Jobs due per day">
         {days.map((d, i) => (
           <li key={d.day} className="group relative flex h-full flex-1 items-end" title={`${d.label}: ${d.count} due`}>
             <span className="sr-only">{d.label}: {d.count} due</span>

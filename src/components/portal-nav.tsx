@@ -62,7 +62,7 @@ export function PortalNav({ portal, badges = {}, variant = "pills" }: { portal: 
   const label = portal === "owner" ? "Owner sections" : "Sections";
   return (
     <nav aria-label={label} data-testid={sidebar ? `${portal}-nav` : `${portal}-nav-pills`}
-      className={sidebar ? "px-3" : "no-print -mx-4 mb-5 overflow-x-auto px-4 lg:hidden"}>
+      className={sidebar ? "px-3" : "no-print -mx-3 mb-3 overflow-x-auto px-3 sm:-mx-4 sm:mb-5 sm:px-4 lg:hidden"}>
       <ul className={sidebar ? "grid gap-0.5" : "flex gap-2"}>
         {sections.map((s) => {
           const on = active(s);
@@ -75,7 +75,7 @@ export function PortalNav({ portal, badges = {}, variant = "pills" }: { portal: 
                   "flex items-center gap-3 text-sm font-semibold whitespace-nowrap transition-colors focus-visible:ring-3 focus-visible:ring-ring/40 focus-visible:outline-none",
                   sidebar
                     ? cn("min-h-10 rounded-xl px-3", on ? "bg-accent-soft text-primary" : "text-muted-foreground hover:bg-muted hover:text-foreground")
-                    : cn("min-h-11 rounded-full border px-4", on ? "border-primary bg-primary text-primary-foreground" : "border-border text-muted-foreground hover:bg-accent-soft/60 hover:text-foreground"),
+                    : cn("min-h-10 rounded-full border px-3.5 text-[13px] sm:min-h-11 sm:px-4 sm:text-sm", on ? "border-primary bg-primary text-primary-foreground" : "border-border text-muted-foreground hover:bg-accent-soft/60 hover:text-foreground"),
                 )}>
                 <Icon className="size-4 shrink-0" aria-hidden />
                 <span className={sidebar ? "flex-1" : undefined}>{s.label}</span>

@@ -72,11 +72,11 @@ export default async function StaffPage({ searchParams }: { searchParams: Promis
           sub="verified payments · active orders" tone="good" />
       </KpiRow>
 
-      <div className="mb-5 grid gap-5 xl:grid-cols-[minmax(0,1fr)_22rem]">
-        <section aria-labelledby="tasks-title" className={cn(dashCard, "min-w-0 p-5")}>
+      <div className="mb-3 sm:mb-5 grid gap-3 sm:gap-5 xl:grid-cols-[minmax(0,1fr)_22rem]">
+        <section aria-labelledby="tasks-title" className={cn(dashCard, "min-w-0 p-3.5 sm:p-5")}>
           <div className="mb-3 flex items-center gap-2">
             <Inbox className="size-5 text-primary" aria-hidden />
-            <h2 id="tasks-title" className="text-lg font-bold">Today&apos;s tasks</h2>
+            <h2 id="tasks-title" className="text-base font-bold sm:text-lg">Today&apos;s tasks</h2>
             <span className="rounded-full bg-primary px-2 py-0.5 text-xs font-bold text-primary-foreground tabular-nums">{inbox.length}</span>
           </div>
           {inbox.length === 0 ? <p className="py-2 text-sm text-muted-foreground">Nothing waiting. 🎉</p> : (

@@ -64,25 +64,25 @@ export default async function CraftsmanPage() {
         <KpiCard label="Done" value={done.length} icon={<PackageCheck />} sub="finished, with the owner or delivery" />
       </KpiRow>
 
-      <div className="mb-5 grid gap-5 xl:grid-cols-[minmax(0,1fr)_22rem]">
-        <section id="next-up" aria-labelledby="next-up-title" className={cn(dashCard, "min-w-0 scroll-mt-6 p-5")}>
-          <h2 id="next-up-title" className="mb-4 text-lg font-bold">Next up for you</h2>
+      <div className="mb-3 sm:mb-5 grid gap-3 sm:gap-5 xl:grid-cols-[minmax(0,1fr)_22rem]">
+        <section id="next-up" aria-labelledby="next-up-title" className={cn(dashCard, "min-w-0 scroll-mt-6 p-3.5 sm:p-5")}>
+          <h2 id="next-up-title" className="mb-3 sm:mb-4 text-base font-bold sm:text-lg">Next up for you</h2>
           {!next ? <p className="text-sm text-muted-foreground">Nothing assigned to you right now.</p> : (
             <div className="grid gap-4">
               <div className="flex flex-wrap items-center gap-2">
-                <b className="text-xl">{next.quantity} × {next.item_name}</b>
+                <b className="text-lg sm:text-xl">{next.quantity} × {next.item_name}</b>
                 <PriorityBadge label={next.priority_label} rank={next.priority_rank} />
               </div>
-              <dl className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              <dl className="grid grid-cols-2 gap-2 sm:gap-3 xl:grid-cols-4">
                 {[
                   ["Order", next.order_code],
                   ["Size (W × H × D)", formatDims(next) ?? next.dimensions],
                   ["Wood & finish", `${next.wood_type === "Other" && next.custom_wood_note ? next.custom_wood_note : next.wood_type} · ${next.color_finish}`],
                   ["Due", formatDate(next.estimated_completion_date)],
                 ].map(([k, v]) => (
-                  <div key={k} className="rounded-xl bg-muted/50 p-3">
+                  <div key={k} className="rounded-lg bg-muted/50 p-2.5 sm:rounded-xl sm:p-3">
                     <dt className="text-xs font-semibold text-muted-foreground">{k}</dt>
-                    <dd className="mt-0.5 font-bold">{v}</dd>
+                    <dd className="mt-0.5 text-sm font-bold sm:text-base">{v}</dd>
                   </div>
                 ))}
               </dl>
@@ -109,7 +109,7 @@ export default async function CraftsmanPage() {
       </div>
 
       <CardSection id="jobs" title="Workshop jobs" chip="Sorted by the owner's priority">
-        <DesignNote className="mb-4">
+        <DesignNote className="mb-3 sm:mb-4">
           Large cards and three verbs only (Start, Ready, Ask). Prices and customer contact details are never sent to this screen; the database view itself has no money columns.
         </DesignNote>
         <WorkshopBoard jobs={jobs} names={names} me={actor.id} questions={openQuestions} />
