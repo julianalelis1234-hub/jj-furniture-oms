@@ -84,8 +84,8 @@ export default async function OwnerDashboard() {
           tone={k.unpaidAfterDelivery.count ? "warning" : "muted"} />
       </KpiRow>
 
-      <div className="mb-5 grid gap-5 xl:grid-cols-[minmax(0,1fr)_22rem]">
-        <section className={cn(card, "flex min-h-[22rem] min-w-0 flex-col p-5")} aria-label="Shop activity">
+      <div className="mb-3 sm:mb-5 grid gap-3 sm:gap-5 xl:grid-cols-[minmax(0,1fr)_22rem]">
+        <section className={cn(card, "flex min-h-[15rem] min-w-0 flex-col p-3.5 sm:min-h-[22rem] sm:p-5")} aria-label="Shop activity">
           <ActivityChart orderDays={orderDays} paymentDays={paymentDays} today={today} />
         </section>
 
@@ -106,19 +106,19 @@ export default async function OwnerDashboard() {
         </DarkCard>
       </div>
 
-      <section aria-labelledby="recent-title" className={cn(card, "mb-5 p-5")}>
-        <div className="mb-4 flex flex-wrap items-center gap-3">
-          <h2 id="recent-title" className="text-lg font-bold">Recent orders</h2>
+      <section aria-labelledby="recent-title" className={cn(card, "mb-3 sm:mb-5 p-3.5 sm:p-5")}>
+        <div className="mb-3 sm:mb-4 flex flex-wrap items-center gap-3">
+          <h2 id="recent-title" className="text-base font-bold sm:text-lg">Recent orders</h2>
           <span className="inline-flex items-center gap-1.5 rounded-full bg-accent-soft px-2.5 py-1 text-xs font-semibold text-primary">
             <Sparkles className="size-3.5" aria-hidden /> {newThisWeek} new this week · {m.toConfirm} waiting for confirmation
           </span>
           <Link href="/owner/orders" className="ml-auto text-sm font-semibold text-primary underline-offset-4 hover:underline">View all</Link>
         </div>
         {recent.length === 0 ? <p className="text-sm text-muted-foreground">No orders yet.</p> : (
-          <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <ul className="grid gap-2 sm:grid-cols-2 sm:gap-3 xl:grid-cols-4">
             {recent.map((o) => (
               <li key={o.id}>
-                <Link href={`/owner/orders?order=${o.id}`} scroll={false} className="flex h-full flex-col gap-2 rounded-xl border border-border bg-muted/40 p-3.5 transition-colors hover:bg-accent-soft/60">
+                <Link href={`/owner/orders?order=${o.id}`} scroll={false} className="flex h-full flex-col gap-1.5 rounded-xl border border-border bg-muted/40 p-3 transition-colors sm:gap-2 sm:p-3.5 hover:bg-accent-soft/60">
                   <span className="flex items-center gap-2.5">
                     <span className="grid size-8 shrink-0 place-items-center rounded-full bg-secondary text-xs font-bold text-secondary-foreground" aria-hidden>{initials(o.customer_name)}</span>
                     <b className="min-w-0 flex-1 truncate text-sm">{o.customer_name}</b>
@@ -133,8 +133,8 @@ export default async function OwnerDashboard() {
         )}
       </section>
 
-      <section aria-labelledby="decide-title" className={cn(card, "mb-5 scroll-mt-6 p-5")}>
-        <h2 id="decide-title" className="mb-2 flex items-center gap-2 text-lg font-bold">
+      <section aria-labelledby="decide-title" className={cn(card, "mb-3 sm:mb-5 scroll-mt-6 p-3.5 sm:p-5")}>
+        <h2 id="decide-title" className="mb-2 flex items-center gap-2 text-base font-bold sm:text-lg">
           Awaiting your decision <span className="rounded-full bg-primary px-2.5 py-0.5 text-xs font-bold text-primary-foreground tabular-nums">{decisions}</span>
         </h2>
         {decisions === 0 ? <p className="py-2 text-sm text-muted-foreground">Nothing needs your approval right now.</p> : (
@@ -155,9 +155,9 @@ export default async function OwnerDashboard() {
         )}
       </section>
 
-      <div className="grid gap-5 xl:grid-cols-2">
-        <section aria-labelledby="late-title" className={cn(card, "p-5")}>
-          <h2 id="late-title" className="mb-2 text-lg font-bold">Delayed or at risk</h2>
+      <div className="grid gap-3 sm:gap-5 xl:grid-cols-2">
+        <section aria-labelledby="late-title" className={cn(card, "p-3.5 sm:p-5")}>
+          <h2 id="late-title" className="mb-2 text-base font-bold sm:text-lg">Delayed or at risk</h2>
           {late.length === 0 ? <p className="py-2 text-sm text-muted-foreground">Every job is on schedule.</p> : (
             <RowList data-testid="late-orders">
               {late.map((o) => {
@@ -177,8 +177,8 @@ export default async function OwnerDashboard() {
             </RowList>
           )}
         </section>
-        <section aria-labelledby="stock-title" className={cn(card, "p-5")}>
-          <h2 id="stock-title" className="mb-2 text-lg font-bold">Lumber to reorder</h2>
+        <section aria-labelledby="stock-title" className={cn(card, "p-3.5 sm:p-5")}>
+          <h2 id="stock-title" className="mb-2 text-base font-bold sm:text-lg">Lumber to reorder</h2>
           {inv.lowStock.length === 0 ? <p className="py-2 text-sm text-muted-foreground">All lumber is above its reorder level.</p> : (
             <RowList data-testid="low-stock">
               {inv.lowStock.map((i) => (

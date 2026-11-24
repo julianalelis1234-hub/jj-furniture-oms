@@ -7,15 +7,5 @@ export function OwnerShell({ actor, badges, children }: { actor: Actor; badges?:
   return <PortalShell portal="owner" actor={actor} badges={badges}>{children}</PortalShell>;
 }
 
-/** Page heading used by the owner sections. */
-export function OwnerHeading({ title, description, actions }: { title: string; description?: ReactNode; actions?: ReactNode }) {
-  return (
-    <div className="mb-6 flex flex-wrap items-end gap-3">
-      <div className="min-w-0 flex-1 basis-72">
-        <h1 className="text-3xl sm:text-4xl">{title}</h1>
-        {description && <p className="mt-1 text-muted-foreground">{description}</p>}
-      </div>
-      {actions}
-    </div>
-  );
-}
+/** Page heading used by the owner sections (the shared section heading). */
+export { PageHeading as OwnerHeading } from "@/components/dashboard";

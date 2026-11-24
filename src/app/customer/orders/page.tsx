@@ -48,7 +48,7 @@ export default async function CustomerOrdersPage({ searchParams }: { searchParam
       <DashboardHeader name={customer.full_name} now={now}
         summary={`signed in as ${customer.email}`}
         actions={<Link href="/customer/customize" className={headerPrimary}><PencilRuler className="size-4" aria-hidden /> New custom order</Link>} />
-      {welcome && <p className="mb-5 rounded-xl bg-success-soft p-3 text-sm" data-testid="welcome">Your password is saved. Welcome, {customer.full_name}!</p>}
+      {welcome && <p className="mb-3 sm:mb-5 rounded-xl bg-success-soft p-3 text-sm" data-testid="welcome">Your password is saved. Welcome, {customer.full_name}!</p>}
 
       <KpiRow>
         <KpiCard label="Active orders" value={active.length} icon={<ListOrdered />} sub={`${views.length - active.length} delivered`} />
@@ -57,17 +57,18 @@ export default async function CustomerOrdersPage({ searchParams }: { searchParam
         <KpiCard label="To pay on delivery" value={formatPeso(onDelivery)} icon={<Truck />} sub="balance + delivery fee" />
       </KpiRow>
 
-      <div className="mb-5 grid gap-5 xl:grid-cols-[minmax(0,1fr)_22rem]">
-        <section aria-labelledby="latest-title" className={cn(dashCard, "min-w-0 p-5")}>
-          <h2 id="latest-title" className="mb-4 text-lg font-bold">Latest order</h2>
+      <div className="mb-3 sm:mb-5 grid gap-3 sm:gap-5 xl:grid-cols-[minmax(0,1fr)_22rem]">
+        <section aria-labelledby="latest-title" className={cn(dashCard, "min-w-0 p-3.5 sm:p-5")}>
+          <h2 id="latest-title" className="mb-3 sm:mb-4 text-base font-bold sm:text-lg">Latest order</h2>
           {!latest ? <p className="text-sm text-muted-foreground">No orders linked to this account yet.</p> : (
             <div className="grid gap-4">
               <div className="flex flex-wrap items-center gap-2">
                 <Link href={orderHref(latest.order_code)} className="font-mono font-bold underline-offset-4 hover:underline">{latest.order_code}</Link>
                 <StatusBadge status={latest.status} />
               </div>
-              <p className="text-xl font-bold">{latest.quantity} × {latest.item_name}</p>
-              <StageTracker status={latest.status} />
+              <p className="text-lg sm:text-xl font-bold">{latest.quantity} × {latest.item_name}</p>
+              <div className="sm:hidden"><StageTracker status={latest.status} compact /></div>
+              <div className="hidden sm:block"><StageTracker status={latest.status} /></div>
               <p className="text-sm text-muted-foreground">{STATUS_CUSTOMER_COPY[latest.status]}</p>
               <Link href={orderHref(latest.order_code)} className="inline-flex items-center gap-1 text-sm font-bold text-primary underline-offset-4 hover:underline">
                 Open order <ChevronRight className="size-4" aria-hidden />
@@ -109,7 +110,7 @@ export default async function CustomerOrdersPage({ searchParams }: { searchParam
                     <span className="font-semibold">{v.quantity} × {v.item_name}</span>
                     <span className="text-sm text-muted-foreground">{STATUS_CUSTOMER_COPY[v.status]}</span>
                   </span>
-                  <span className="text-sm tabular-nums text-muted-foreground sm:text-right">
+                  <span className="basis-full text-xs tabular-nums text-muted-foreground sm:basis-auto sm:text-right sm:text-sm">
                     Est. completion {formatDate(v.estimated_completion_date)}
                     {v.payment.furniture_price != null && <span className="block">To pay on delivery <b className="text-foreground">{formatPeso(v.payment.collectible_on_delivery)}</b></span>}
                   </span>

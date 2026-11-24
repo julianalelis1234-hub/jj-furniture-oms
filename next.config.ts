@@ -5,6 +5,8 @@ const nextConfig: NextConfig = {
   // classic dynamic-rendering model instead of Cache Components.
   cacheComponents: false,
   poweredByHeader: false,
+  // development only: keep the Next.js indicator off the sidebar's account card (bottom-left)
+  devIndicators: { position: "bottom-right" },
   turbopack: {
     rules: {
       "*.css": {

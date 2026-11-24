@@ -44,27 +44,27 @@ export default async function DriverPage() {
         <KpiCard label="To collect today" value={formatPeso(toCollect)} icon={<Wallet />} sub="cash on delivery, today's stops" />
       </KpiRow>
 
-      <div className="mb-5 grid gap-5 xl:grid-cols-[minmax(0,1fr)_22rem]">
-        <section aria-labelledby="next-stop-title" className={cn(dashCard, "min-w-0 p-5")}>
-          <h2 id="next-stop-title" className="mb-4 text-lg font-bold">Next stop</h2>
+      <div className="mb-3 sm:mb-5 grid gap-3 sm:gap-5 xl:grid-cols-[minmax(0,1fr)_22rem]">
+        <section aria-labelledby="next-stop-title" className={cn(dashCard, "min-w-0 p-3.5 sm:p-5")}>
+          <h2 id="next-stop-title" className="mb-3 sm:mb-4 text-base font-bold sm:text-lg">Next stop</h2>
           {!next ? <p className="text-sm text-muted-foreground">No deliveries assigned to you.</p> : (
             <div className="grid gap-4">
               <div className="flex flex-wrap items-center gap-2">
-                <b className="text-xl">{next.order.customer_name}</b>
+                <b className="text-lg sm:text-xl">{next.order.customer_name}</b>
                 <span className="rounded-full bg-accent-soft px-2.5 py-0.5 text-xs font-bold text-primary">
                   {next.delivery.dispatch_status === "Out for Delivery" ? "In transit" : "On process"}
                 </span>
               </div>
-              <dl className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              <dl className="grid grid-cols-2 gap-2 sm:gap-3 xl:grid-cols-4">
                 {[
                   ["Address", `${next.order.delivery_address}, ${next.order.municipality}`],
                   ["When", `${formatDate(next.delivery.scheduled_date)}${next.delivery.time_window ? ` · ${next.delivery.time_window}` : ""}`],
                   ["Item", `${next.order.quantity} × ${next.order.item_name}`],
                   ["Collect", formatPeso(next.delivery.expected_collectible_amount)],
                 ].map(([k, v]) => (
-                  <div key={k} className="rounded-xl bg-muted/50 p-3">
+                  <div key={k} className="rounded-lg bg-muted/50 p-2.5 sm:rounded-xl sm:p-3">
                     <dt className="text-xs font-semibold text-muted-foreground">{k}</dt>
-                    <dd className="mt-0.5 font-bold break-words">{v}</dd>
+                    <dd className="mt-0.5 text-sm font-bold break-words sm:text-base">{v}</dd>
                   </div>
                 ))}
               </dl>

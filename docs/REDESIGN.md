@@ -34,7 +34,7 @@ Branch `feature/jj-enterprises-redesign`, from the *JJ Enterprises: HCI System R
 
 * **Migrations 009 and 010 are not applied to the live Supabase project.** They are tested locally (`npm run test:db`, including twice on a copy of the live data). Applying them needs the owner's explicit go-ahead.
 * For the live site, set `SHOP_GCASH_DETAILS` and `SHOP_BANK_DETAILS` (shown to customers on the payment form). Without them customers are told to ask the shop for the account details.
-* The oval dining set and sala set photos are still to come; the landing page and the assistant show labelled 3D previews in their place.
+* Shop photos are in `public/samples/` (dining sets, carved, panel and coffered doors). The sala set photo is still to come; the landing page shows a labelled 3D preview in its place.
 * Roles & Access is read-only: accounts are created and disabled in Supabase Auth.
 * Staff are allowed (by the database and services) to record lumber movements, but the inventory screen is in the owner portal only.
 

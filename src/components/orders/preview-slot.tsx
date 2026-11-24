@@ -98,6 +98,7 @@ export function FurniturePreviewSlot({ spec, legacyDimensions, footer, compact =
           depth_cm: spec.depth_cm!,
           wood_type: spec.wood_type,
           color_finish: spec.color_finish,
+          wood_label: spec.wood_label,
         }}
         warning={<FeasibilityWarning spec={spec} />}
         footer={footer}

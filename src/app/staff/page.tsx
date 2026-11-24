@@ -4,12 +4,13 @@ import {
   CardSection, DarkCard, DarkFigure, DarkStats, DashboardHeader, darkPrimary, darkSecondary, dashCard, headerPrimary, KpiCard, KpiRow,
 } from "@/components/dashboard";
 import { OfficeWorkspace } from "@/components/office/office-workspace";
-import { PortalShell } from "@/components/portal-shell";
 import { addDays, todayISO } from "@/lib/domain/dates";
 import { formatPeso } from "@/lib/domain/finance";
 import { getStore, requireActor } from "@/lib/server/context";
 import { loadOfficeData } from "@/lib/server/office-data";
-import { staffTasks, workspaceMetrics } from "@/lib/services/insights";
+import { workspaceMetrics } from "@/lib/services/insights";
+import { staffInbox } from "@/lib/server/staff-inbox";
+import { StaffShell } from "@/components/staff-shell";
 import { cn } from "@/lib/utils";
 
 export const metadata = { title: "Operations & Order Queue" };
@@ -22,31 +23,13 @@ export default async function StaffPage({ searchParams }: { searchParams: Promis
   const now = new Date();
   const today = todayISO(now);
   const m = workspaceMetrics(data.orders, data.payments);
-  const t = staffTasks(data.orders, data.payments, data.deliveries, data.exceptions, data.notifications);
-  const code = (id: string) => data.orders.find((o) => o.id === id)?.order_code ?? "";
-  // one line per pending job; each opens that order's drawer on the right tab
-  const inbox: { id: string; order: string; label: string; tab: string }[] = [
-    ...t.toConfirm.map((o) => ({ id: o.id, order: o.order_code, label: o.order_origin === "customer_self_service" ? "Check and confirm the online order" : "Confirm the order", tab: "quotation" })),
-    ...t.specProposals.map((e) => ({ id: e.order_id, order: code(e.order_id), label: "Review the customer's proposed changes", tab: "overview" })),
-    ...t.toQuote.map((o) => ({ id: o.id, order: o.order_code, label: "Issue the quotation", tab: "quotation" })),
-    ...t.paymentsToVerify.map(({ payment, order }) => ({ id: order.id, order: order.order_code, label: `Verify a ${payment.payment_method} payment (${formatPeso(payment.amount)}, ref. ${payment.reference_number ?? "-"})`, tab: "payments" })),
-    ...t.needsDownPayment.map(({ order, shortfall }) => ({ id: order.id, order: order.order_code, label: `Waiting for the 30% down payment (${formatPeso(shortfall)} short)`, tab: "payments" })),
-    ...t.readyForProduction.map((o) => ({ id: o.id, order: o.order_code, label: "Release to the workshop (30% verified)", tab: "payments" })),
-    ...t.cashHandovers.map(({ payment, order }) => ({ id: order.id, order: order.order_code, label: `Verify cash handover (${formatPeso(payment.amount)})`, tab: "payments" })),
-    ...t.specQuestions.map((e) => ({ id: e.order_id, order: code(e.order_id), label: "Answer a craftsman's question", tab: "overview" })),
-    ...t.failedDeliveries.map(({ order }) => ({ id: order.id, order: order.order_code, label: "Reschedule a failed delivery", tab: "overview" })),
-    ...t.toSchedule.filter((o) => !t.failedDeliveries.some((f) => f.order.id === o.id)).map((o) => ({ id: o.id, order: o.order_code, label: "Schedule driver & vehicle", tab: "overview" })),
-    ...t.touchUps.map((e) => ({ id: e.order_id, order: code(e.order_id), label: "Touch-up / repair work order", tab: "overview" })),
-    ...t.missingFields.map(({ order, missing }) => ({ id: order.id, order: order.order_code, label: `Complete missing fields: ${missing.join(", ")}`, tab: "overview" })),
-    ...t.failedSms.map((n) => ({ id: n.order_id, order: code(n.order_id), label: "Retry a failed customer SMS", tab: "quotation" })),
-  ];
+  const { t, items: inbox } = staffInbox(data);
   const openId = typeof sp.order === "string" ? sp.order : null;
   const newThisWeek = data.orders.filter((o) => todayISO(new Date(o.created_at)) >= addDays(today, -6)).length;
   const toVerify = t.paymentsToVerify.length + t.cashHandovers.length;
   const tip = inbox.length
     ? `Start with ${inbox[0].order}: ${inbox[0].label.charAt(0).toLowerCase()}${inbox[0].label.slice(1)}.`
     : "The counter is clear. New online orders will appear here as they arrive.";
-  const portal = actor.role === "owner" ? "owner" : "staff";
 
   const taskLink = (x: (typeof inbox)[number], i: number) => (
     <li key={`${x.id}-${i}`}>
@@ -57,7 +40,7 @@ export default async function StaffPage({ searchParams }: { searchParams: Promis
   );
 
   return (
-    <PortalShell portal={portal} actor={actor} badges={portal === "staff" ? { "/staff#task-inbox": inbox.length } : undefined}>
+    <StaffShell actor={actor} data={data}>
       <DashboardHeader name={actor.full_name} now={now}
         summary={inbox.length ? `${inbox.length} ${inbox.length === 1 ? "task" : "tasks"} waiting at the counter` : "nothing waiting at the counter"}
         actions={<Link href="/staff/new" className={headerPrimary}><Plus className="size-4" aria-hidden /> New walk-in order</Link>} />
@@ -72,11 +55,11 @@ export default async function StaffPage({ searchParams }: { searchParams: Promis
           sub="verified payments · active orders" tone="good" />
       </KpiRow>
 
-      <div className="mb-5 grid gap-5 xl:grid-cols-[minmax(0,1fr)_22rem]">
-        <section aria-labelledby="tasks-title" className={cn(dashCard, "min-w-0 p-5")}>
+      <div className="mb-3 sm:mb-5 grid gap-3 sm:gap-5 xl:grid-cols-[minmax(0,1fr)_22rem]">
+        <section aria-labelledby="tasks-title" className={cn(dashCard, "min-w-0 p-3.5 sm:p-5")}>
           <div className="mb-3 flex items-center gap-2">
             <Inbox className="size-5 text-primary" aria-hidden />
-            <h2 id="tasks-title" className="text-lg font-bold">Today&apos;s tasks</h2>
+            <h2 id="tasks-title" className="text-base font-bold sm:text-lg">Today&apos;s tasks</h2>
             <span className="rounded-full bg-primary px-2 py-0.5 text-xs font-bold text-primary-foreground tabular-nums">{inbox.length}</span>
           </div>
           {inbox.length === 0 ? <p className="py-2 text-sm text-muted-foreground">Nothing waiting. 🎉</p> : (
@@ -103,7 +86,7 @@ export default async function StaffPage({ searchParams }: { searchParams: Promis
             {inbox[0]
               ? <Link href={`/staff?order=${inbox[0].id}&tab=${inbox[0].tab}`} scroll={false} className={darkPrimary}>Open next task</Link>
               : <Link href="/staff/new" className={darkPrimary}>New walk-in order</Link>}
-            <a href="#queue" className={darkSecondary}>Queue</a>
+            <Link href="/staff/tasks" className={darkSecondary}>All tasks</Link>
           </div>
         </DarkCard>
       </div>
@@ -112,6 +95,6 @@ export default async function StaffPage({ searchParams }: { searchParams: Promis
         <OfficeWorkspace actor={actor} data={data} basePath="/staff" openId={openId} tab={typeof sp.tab === "string" ? sp.tab : undefined} intro={false}
           title="Operations & Order Queue" description="" />
       </CardSection>
-    </PortalShell>
+    </StaffShell>
   );
 }

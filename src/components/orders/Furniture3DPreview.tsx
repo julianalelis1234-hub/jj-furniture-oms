@@ -32,6 +32,8 @@ export interface Furniture3DSpec {
   depth_cm: number;
   wood_type: WoodType;
   color_finish: string;
+  /** shown instead of "Other" when the customer named the wood */
+  wood_label?: string | null;
 }
 
 // ---------------------------------------------------------- procedural maps ----
@@ -420,7 +422,7 @@ export default function Furniture3DPreview({ spec, className, footer, warning, c
           ))}
         </div>
         <span className="pointer-events-none absolute top-2 left-2 rounded-full border border-live bg-background/90 px-2.5 py-0.5 text-[0.7rem] font-bold">
-          {spec.wood_type} <span className="font-normal text-muted-foreground">· {spec.color_finish}</span>
+          {spec.wood_label || spec.wood_type} <span className="font-normal text-muted-foreground">· {spec.color_finish}</span>
         </span>
       </div>
       </div>

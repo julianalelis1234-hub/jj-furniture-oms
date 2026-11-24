@@ -58,7 +58,7 @@ export async function AppShell({
   const p = PORTAL_LABEL[portal];
   const header = (
       <header className={cn("dark no-print sticky top-0 z-30 border-b border-border bg-background/95 text-foreground backdrop-blur", sidebar && "lg:hidden")}>
-        <div className={cn("mx-auto flex items-center gap-3 px-4 py-2.5", wide ? "max-w-[90rem]" : "max-w-6xl")}>
+        <div className={cn("mx-auto flex items-center gap-2 px-3 py-1.5 sm:gap-3 sm:px-4 sm:py-2.5 max-sm:[&_img]:size-8 max-sm:[&_button]:min-h-10 max-sm:[&_button]:min-w-10", wide ? "max-w-[90rem]" : "max-w-6xl")}>
           <Logo />
           <div className="ml-1 hidden border-l pl-3 sm:block">
             <p className="text-sm font-semibold">{p.title}</p>
@@ -78,8 +78,8 @@ export async function AppShell({
             )}
           </div>
         </div>
-        <div className="mx-auto max-w-6xl px-4 pb-2 sm:hidden">
-          <p className="text-sm font-semibold">
+        <div className="mx-auto max-w-6xl px-3 pb-1.5 sm:hidden">
+          <p className="text-xs font-semibold">
             {p.title} {actor && <span className="font-normal text-muted-foreground">· {actor.full_name}</span>}
           </p>
         </div>
@@ -93,7 +93,7 @@ export async function AppShell({
           <aside className="no-print sticky top-0 hidden h-dvh flex-col border-r border-border bg-card lg:flex" aria-label="Sidebar">{sidebar}</aside>
           <div className="flex min-h-dvh min-w-0 flex-col">
             {header}
-            <main className="mx-auto w-full max-w-[84rem] flex-1 px-4 pt-4 pb-28 sm:pt-6 md:pb-6 lg:px-8 lg:pt-8">{children}</main>
+            <main className="mx-auto w-full max-w-[84rem] flex-1 px-3 pt-3 pb-28 sm:px-4 sm:pt-6 md:pb-6 lg:px-8 lg:pt-8">{children}</main>
             <MobileNav portal={portal} />
           </div>
         </div>

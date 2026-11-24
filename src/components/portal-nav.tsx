@@ -1,8 +1,8 @@
 "use client";
 
 import {
-  BarChart3, ClipboardList, Hammer, House, Inbox, Layers, LayoutDashboard, ListOrdered, Wrench,
-  PencilRuler, Plus, ShieldCheck, Truck, Users,
+  BarChart3, ClipboardList, Hammer, House, Inbox, Layers, LayoutDashboard, ListOrdered, MessageCircleQuestion,
+  PencilRuler, Plus, ShieldCheck, Truck, Users, Wallet,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -27,14 +27,16 @@ export const PORTAL_SECTIONS: Record<Portal, Section[]> = {
   ],
   staff: [
     { href: "/staff", label: "Dashboard", icon: LayoutDashboard, exact: true },
-    { href: "/staff#queue", label: "Order queue", icon: ClipboardList },
-    { href: "/staff#task-inbox", label: "Task inbox", icon: Inbox },
+    { href: "/staff/orders", label: "Order queue", icon: ClipboardList },
+    { href: "/staff/tasks", label: "Task inbox", icon: Inbox },
+    { href: "/staff/payments", label: "Payments to verify", icon: Wallet },
+    { href: "/staff/deliveries", label: "Deliveries", icon: Truck },
     { href: "/staff/new", label: "New walk-in order", icon: Plus },
   ],
   craftsman: [
     { href: "/craftsman", label: "Dashboard", icon: LayoutDashboard, exact: true },
-    { href: "/craftsman#next-up", label: "Next up for me", icon: Wrench },
-    { href: "/craftsman#jobs", label: "Workshop jobs", icon: Hammer },
+    { href: "/craftsman/jobs", label: "Workshop jobs", icon: Hammer },
+    { href: "/craftsman/questions", label: "My questions", icon: MessageCircleQuestion },
   ],
   driver: [
     { href: "/driver", label: "Dashboard", icon: LayoutDashboard, exact: true },
@@ -42,6 +44,7 @@ export const PORTAL_SECTIONS: Record<Portal, Section[]> = {
   ],
   customer: [
     { href: "/customer/orders", label: "My orders", icon: ListOrdered },
+    { href: "/customer/payments", label: "Payments", icon: Wallet },
     { href: "/customer/customize", label: "New custom order", icon: PencilRuler },
     { href: "/", label: "JJ Enterprises home", icon: House, exact: true },
   ],
@@ -62,7 +65,7 @@ export function PortalNav({ portal, badges = {}, variant = "pills" }: { portal: 
   const label = portal === "owner" ? "Owner sections" : "Sections";
   return (
     <nav aria-label={label} data-testid={sidebar ? `${portal}-nav` : `${portal}-nav-pills`}
-      className={sidebar ? "px-3" : "no-print -mx-4 mb-5 overflow-x-auto px-4 lg:hidden"}>
+      className={sidebar ? "px-3" : "no-print -mx-3 mb-3 overflow-x-auto px-3 sm:-mx-4 sm:mb-5 sm:px-4 lg:hidden"}>
       <ul className={sidebar ? "grid gap-0.5" : "flex gap-2"}>
         {sections.map((s) => {
           const on = active(s);
@@ -75,7 +78,7 @@ export function PortalNav({ portal, badges = {}, variant = "pills" }: { portal: 
                   "flex items-center gap-3 text-sm font-semibold whitespace-nowrap transition-colors focus-visible:ring-3 focus-visible:ring-ring/40 focus-visible:outline-none",
                   sidebar
                     ? cn("min-h-10 rounded-xl px-3", on ? "bg-accent-soft text-primary" : "text-muted-foreground hover:bg-muted hover:text-foreground")
-                    : cn("min-h-11 rounded-full border px-4", on ? "border-primary bg-primary text-primary-foreground" : "border-border text-muted-foreground hover:bg-accent-soft/60 hover:text-foreground"),
+                    : cn("min-h-10 rounded-full border px-3.5 text-[13px] sm:min-h-11 sm:px-4 sm:text-sm", on ? "border-primary bg-primary text-primary-foreground" : "border-border text-muted-foreground hover:bg-accent-soft/60 hover:text-foreground"),
                 )}>
                 <Icon className="size-4 shrink-0" aria-hidden />
                 <span className={sidebar ? "flex-1" : undefined}>{s.label}</span>
