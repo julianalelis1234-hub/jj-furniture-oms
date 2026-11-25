@@ -50,25 +50,34 @@ export function furnitureForAr(source: THREE.Object3D): THREE.Group {
 }
 
 // ------------------------------------------------------------------ iPhone ----
-export async function openQuickLook(model: THREE.Object3D, name: string) {
-  const exporter = new USDZExporter();
+/**
+ * Builds the USDZ file in advance (when the full-screen view opens). Safari only
+ * opens AR Quick Look from a tap it still counts as "the customer's tap", and a
+ * slow export inside the tap handler can lose that, so the tap itself only
+ * clicks a ready link (see launchQuickLook).
+ */
+export async function prepareQuickLook(model: THREE.Object3D): Promise<string> {
   const scene = new THREE.Scene();
   scene.add(model);
-  const usdz = await exporter.parseAsync(scene, {
+  const usdz = await new USDZExporter().parseAsync(scene, {
     quickLookCompatible: true,
+    maxTextureSize: 512,
     ar: { anchoring: { type: "plane" }, planeAnchoring: { alignment: "horizontal" } },
   });
-  const url = URL.createObjectURL(new Blob([usdz as BlobPart], { type: "model/vnd.usdz+zip" }));
+  return URL.createObjectURL(new Blob([usdz as BlobPart], { type: "model/vnd.usdz+zip" }));
+}
+
+/** Synchronous, inside the tap handler. */
+export function launchQuickLook(url: string, name: string) {
   const a = document.createElement("a");
-  a.rel = "ar";
-  a.download = `${name.replace(/[^A-Za-z0-9-]+/g, "-")}.usdz`;
+  a.setAttribute("rel", "ar");
+  a.setAttribute("download", `${name.replace(/[^A-Za-z0-9-]+/g, "-")}.usdz`);
   // true size: the customer cannot pinch it bigger or smaller by accident
-  a.href = `${url}#allowsContentScaling=0`;
+  a.setAttribute("href", `${url}#allowsContentScaling=0`);
   a.appendChild(document.createElement("img")); // Quick Look needs an <img> child
   document.body.appendChild(a);
   a.click();
   a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 
 // ----------------------------------------------------------------- Android ----
@@ -80,6 +89,8 @@ interface XRSessionLike extends EventTarget {
 
 export interface WebXrHandle {
   rotate(deg: number): void;
+  /** slide the placed piece along the floor, relative to where the phone points (metres) */
+  move(right: number, forward: number): void;
   end(): void;
 }
 
@@ -131,6 +142,8 @@ export async function startWebXr(model: THREE.Object3D, overlay: HTMLElement, on
 
   let wasTracking = false;
   const camPos = new THREE.Vector3();
+  const fwd = new THREE.Vector3();
+  const side = new THREE.Vector3();
   session.addEventListener("select", () => {
     if (!reticle.visible) return;
     model.position.setFromMatrixPosition(reticle.matrix);
@@ -169,6 +182,16 @@ export async function startWebXr(model: THREE.Object3D, overlay: HTMLElement, on
 
   return {
     rotate(deg) { model.rotation.y += (deg * Math.PI) / 180; },
+    move(right, forward) {
+      if (!model.visible) return;
+      const cam = renderer.xr.getCamera();
+      cam.getWorldDirection(fwd);
+      fwd.y = 0;
+      if (fwd.lengthSq() < 1e-6) return;
+      fwd.normalize();
+      side.set(-fwd.z, 0, fwd.x); // fwd turned 90° clockwise seen from above = the phone's right
+      model.position.addScaledVector(side, right).addScaledVector(fwd, forward);
+    },
     end() { session.end().catch(cleanup); },
   };
 }

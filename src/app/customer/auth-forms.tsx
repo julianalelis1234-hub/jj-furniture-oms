@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 import Link from "next/link";
 import { useActionState, useState, useTransition } from "react";
 import { customerForgotAction, customerLoginAction, customerSetPasswordAction, demoCustomerLoginAction } from "@/app/customer/actions";
-import { Field, TextInput } from "@/components/form";
+import { Field, PasswordInput, TextInput } from "@/components/form";
 import { Button } from "@/components/ui/button";
 import type { ActionResult } from "@/lib/action-result";
 
@@ -26,7 +26,7 @@ export function LoginForm({ demoName }: { demoName?: string }) {
         <TextInput id="email" name="email" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} />
       </Field>
       <Field label="Password" htmlFor="password" required>
-        <TextInput id="password" name="password" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} />
+        <PasswordInput id="password" name="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} />
       </Field>
       {shown && !shown.ok && <p role="alert" className="text-sm font-medium text-destructive" data-testid="login-error">{shown.message}</p>}
       <Button type="submit" size="xl" className="w-full rounded-full" disabled={pending || demoPending}>{pending ? <Loader2 className="animate-spin" aria-hidden /> : <LogIn aria-hidden />} Log In to Track My Orders</Button>

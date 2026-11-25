@@ -3,7 +3,7 @@
 import { ArrowRight, Loader2, LogIn } from "lucide-react";
 import { useActionState, useRef } from "react";
 import { signIn } from "@/app/actions";
-import { Field, TextInput } from "@/components/form";
+import { Field, PasswordInput, TextInput } from "@/components/form";
 import { Button } from "@/components/ui/button";
 
 export type DemoAccountRow = { key: string; email: string; label: string; person: string };
@@ -29,7 +29,7 @@ export function LoginForm({ demo }: { demo?: { accounts: DemoAccountRow[]; passw
           <TextInput id="email" name="email" type="email" autoComplete="username" required />
         </Field>
         <Field label="Password" htmlFor="password" required>
-          <TextInput id="password" name="password" type="password" autoComplete="current-password" required />
+          <PasswordInput id="password" name="password" autoComplete="current-password" required />
         </Field>
         {state && !state.ok && <p role="alert" className="text-sm font-semibold text-destructive">{state.message}</p>}
         <Button type="submit" size="xl" disabled={pending} className="rounded-full">

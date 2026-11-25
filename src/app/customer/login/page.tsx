@@ -1,4 +1,4 @@
-import { KeyRound, PencilRuler } from "lucide-react";
+import { PencilRuler } from "lucide-react";
 import { redirect } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { Eyebrow } from "@/components/eyebrow";
@@ -28,9 +28,8 @@ export default async function CustomerLoginPage() {
         </div>
         <div className="grid items-start gap-4 md:grid-cols-2">
           <section aria-labelledby="opt1" className="jj-surface grid min-w-0 gap-3 rounded-2xl border border-live/70 bg-background p-5 sm:p-6" data-testid="option-1">
-            <Eyebrow icon={<KeyRound className="size-3.5" />} className="w-fit">Option 1</Eyebrow>
             <h2 id="opt1" className="text-xl font-bold">
-              <span className="sr-only">Option 1 · </span>Log In to Track My Orders
+              Log In to Track My Orders
             </h2>
             <p className="text-sm text-muted-foreground">See every order on your account: status, approved specification, quotation and payments.</p>
             <LoginForm demoName={demo} />
@@ -39,9 +38,8 @@ export default async function CustomerLoginPage() {
             </p>
           </section>
           <section aria-labelledby="opt2" className="grid min-w-0 gap-3 rounded-2xl border bg-secondary/55 p-5 sm:p-6">
-            <Eyebrow icon={<PencilRuler className="size-3.5" />} className="w-fit">Option 2</Eyebrow>
             <h2 id="opt2" className="text-xl font-bold">
-              <span className="sr-only">Option 2 · </span>Customize &amp; Request a Quote
+              Customize &amp; Request a Quote
             </h2>
             <p className="text-sm">Choose the furniture type, design, exact size, wood and finish. The live preview shows it at its exact size.</p>
             <ol className="grid gap-1 text-sm text-muted-foreground">
