@@ -12,6 +12,7 @@ import type { WorkshopOrder } from "@/lib/domain/types";
 import { cn } from "@/lib/utils";
 import { FurniturePreview } from "@/components/orders/FurniturePreview";
 import { formatDims } from "@/lib/domain/furniture";
+import { PartsList } from "@/components/orders/parts-list";
 
 type Tab = "todo" | "progress" | "revision" | "done";
 type Question = { id: string; order_id: string; description: string; status: string; requested_by: string | null };
@@ -84,6 +85,8 @@ export function WorkshopBoard({ jobs, names, me, questions }: { jobs: WorkshopOr
                   {j.special_instructions && <p className="mt-1 rounded-lg bg-accent-soft p-2 text-sm whitespace-pre-line text-foreground">{j.special_instructions}</p>}
                   {j.reference_photo_url && <a href={j.reference_photo_url} target="_blank" rel="noreferrer noopener" className="text-sm text-primary underline">Open reference photo</a>}
                 </dl>
+                <PartsList className="mt-2" quantity={j.quantity} woodLabel={j.wood_type === "Other" && j.custom_wood_note ? j.custom_wood_note : j.wood_type}
+                  spec={{ furniture_category: j.furniture_category, design_variant: j.design_variant, width_cm: j.width_cm, height_cm: j.height_cm, depth_cm: j.depth_cm }} />
                 <p className={cn("mt-2 text-sm", due < 0 ? "font-bold text-destructive" : due <= 2 ? "font-semibold text-warning" : "text-muted-foreground")}>
                   {due < 0 ? `${-due} day(s) late · ` : due === 0 ? "Due today · " : ""}Target {formatDate(j.estimated_completion_date)}
                   {j.assigned_craftsman_id && <> · {j.assigned_craftsman_id === me ? "Assigned to you" : names[j.assigned_craftsman_id]}</>}

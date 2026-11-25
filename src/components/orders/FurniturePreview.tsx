@@ -2,6 +2,9 @@
 
 import { useId, type ReactNode } from "react";
 import type { FurnitureCategory } from "@/lib/domain/furniture";
+import { buildFurnitureParts, type Part } from "@/lib/domain/furniture3d";
+
+const FITTED_2D: ReadonlySet<FurnitureCategory> = new Set(["Chair", "Bench", "TV Stand / Console", "Altar Table", "Study Desk", "Headboard", "Drawer Cabinet"]);
 import type { WoodType } from "@/lib/domain/types";
 import { cn } from "@/lib/utils";
 
@@ -50,8 +53,29 @@ type Shape = { kind: "rect"; x: number; y: number; w: number; h: number; r?: num
   | { kind: "path"; d: string; glass?: boolean; detail?: boolean }
   | { kind: "ellipse"; cx: number; cy: number; rx: number; ry: number; detail?: boolean };
 
+/**
+ * Front view projected from the 3D parts (new furniture types, and any design
+ * with details such as a drawer count): back parts first, so fronts cover them.
+ */
+function projectedParts(cat: FurnitureCategory, variant: string, w: number, h: number, d: number): Shape[] {
+  const front = (p: Part) => (p.shape === "box" ? p.max[2] : p.shape === "cyl" ? p.base[2] : p.center[2] + p.len / 2);
+  return buildFurnitureParts(cat, variant, { w, h, d })
+    .sort((a, b) => front(a) - front(b))
+    .map((p): Shape => {
+      const detail = p.mat === "woodDeep" || p.mat === "brass";
+      if (p.shape === "box") return { kind: "rect", x: p.min[0] + w / 2, y: h - p.max[1], w: p.max[0] - p.min[0], h: p.max[1] - p.min[1], glass: p.mat === "glass", detail };
+      if (p.shape === "cyl") {
+        const r = Math.max(p.rTop, p.rBottom) * (p.sx ?? 1);
+        return { kind: "rect", x: p.base[0] - r + w / 2, y: h - p.base[1] - p.h, w: 2 * r, h: p.h, r: Math.min(r, 1), detail };
+      }
+      return { kind: "ellipse", cx: p.center[0] + w / 2, cy: h - p.center[1], rx: p.r, ry: p.r, detail };
+    });
+}
+
 /** Front-elevation parts in a w×h box (cm units, y grows downward from the top). */
-function parts(cat: FurnitureCategory, variant: string, w: number, h: number): Shape[] {
+function parts(cat: FurnitureCategory, fullVariant: string, w: number, h: number, d: number): Shape[] {
+  if (FITTED_2D.has(cat) || fullVariant.includes(" · ")) return projectedParts(cat, fullVariant, w, h, d);
+  const variant = fullVariant;
   const s: Shape[] = [];
   const R = (x: number, y: number, ww: number, hh: number, extra: Partial<Extract<Shape, { kind: "rect" }>> = {}) =>
     s.push({ kind: "rect", x, y, w: ww, h: hh, ...extra });
@@ -219,7 +243,7 @@ export function FurniturePreview({
     const fx = pad + Math.max(0, (VW - 2 * pad - 50 - sceneWcm * sc) / 2); // furniture left, centred
     const box: Box = { x: fx, y: groundY - h * sc, w: w * sc, h: h * sc };
     const odx = depthDx * sc, ody = depthDy * sc;
-    const shapes = parts(cat!, variant!, w, h);
+    const shapes = parts(cat!, variant!, w, h, d);
     // the visible side face: open frames (tables, sofas, beds) only show their top/arm/rail thickness
     const [sideFrom, sideTo] = sideFace(cat!, variant!, h);
     const toPx = (x: number, y: number) => [box.x + x * sc, box.y + y * sc] as const;

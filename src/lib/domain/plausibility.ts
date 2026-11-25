@@ -31,6 +31,29 @@ const RANGES: Record<FurnitureCategory, { default: SizeRange; variants?: Record<
       "Glass-Front Display Hutch": { w: [50, 220], h: [75, 230], d: [25, 65] },
     },
   },
+  Chair: {
+    default: { w: [38, 80], h: [70, 115], d: [40, 70] },
+    variants: { "Rocking Chair": { w: [50, 80], h: [85, 120], d: [70, 110] }, Armchair: { w: [55, 95], h: [70, 110], d: [55, 90] } },
+  },
+  Bench: {
+    default: { w: [60, 260], h: [38, 55], d: [25, 50] },
+    variants: { "Backrest Bench": { h: [70, 100], d: [45, 70] } },
+  },
+  "TV Stand / Console": {
+    default: { w: [80, 260], h: [35, 70], d: [30, 55] },
+    variants: { "Console Table": { w: [60, 180], h: [70, 90], d: [25, 45] } },
+  },
+  "Altar Table": { default: { w: [60, 200], h: [75, 130], d: [30, 60] } },
+  "Study Desk": { default: { w: [70, 200], h: [70, 80], d: [45, 80] } },
+  Headboard: { default: { w: [90, 220], h: [60, 160], d: [3, 15] } },
+  "Drawer Cabinet": {
+    default: { w: [40, 200], h: [45, 150], d: [30, 60] },
+    variants: {
+      "Chest of Drawers": { w: [50, 120], h: [75, 150] },
+      "Bedside Table": { w: [35, 70], h: [45, 75], d: [30, 50] },
+      Dresser: { w: [80, 200], h: [70, 100] },
+    },
+  },
   "Custom Piece": {
     default: { w: [30, 300], h: [30, 260], d: [20, 240] },
     variants: {
@@ -43,7 +66,8 @@ const RANGES: Record<FurnitureCategory, { default: SizeRange; variants?: Record<
 
 export function sizeRangeFor(category: FurnitureCategory, variant: string | null): SizeRange {
   const c = RANGES[category];
-  return { ...c.default, ...(variant ? c.variants?.[variant] : undefined) };
+  const base = variant?.split(" · ")[0];
+  return { ...c.default, ...(base ? c.variants?.[base] : undefined) };
 }
 
 export interface PlausibilityResult {

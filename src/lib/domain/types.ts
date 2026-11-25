@@ -120,6 +120,13 @@ export type FurnitureCategoryName =
   | "Dining Table"
   | "Living Room Set"
   | "Kitchen / Wall Cabinet"
+  | "Chair"
+  | "Bench"
+  | "TV Stand / Console"
+  | "Altar Table"
+  | "Study Desk"
+  | "Headboard"
+  | "Drawer Cabinet"
   | "Custom Piece";
 
 /** Authoritative structured specification columns (migration 003). */
