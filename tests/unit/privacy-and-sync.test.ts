@@ -158,4 +158,19 @@ describe("5. offline synchronization", () => {
     const ex = (await store.listExceptions(entry.order.id)).find((e) => e.category === "On-Site Scratch Touch-Up / Repair");
     expect(ex?.description).toContain("armrest");
   });
+
+  it("a rider can start the trip when the shop verified the payment (riders cannot read others' payments)", async () => {
+    const { db, store } = await setup("t-rls-payments");
+    const entry = (await getManifest(db)).find((e) => e.order.order_code === "JJ-2026-0138")!;
+    expect(entry.order.down_payment_ok).toBe(true);
+    expect(entry.order).toHaveProperty("payment_plan");
+    // the rider's own connection only sees payments the rider collected (RLS), like Supabase
+    const riderView = Object.create(store) as typeof store;
+    riderView.listPayments = async (id?: string) =>
+      (await store.listPayments(id)).filter((p) => p.collected_by_id === actors.driver.id);
+    riderView.elevated = () => store;
+    const r = await applyDriverAction(riderView, actors.driver, action(entry, "start_trip"));
+    expect(r.status).toBe("applied");
+    expect((await store.getOrder(entry.order.id))!.status).toBe("Out for Delivery");
+  });
 });
