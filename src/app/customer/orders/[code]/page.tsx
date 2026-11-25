@@ -116,7 +116,7 @@ export default async function CustomerOrderDetail({ params }: { params: Promise<
             {v.payment_plan && <p>Your terms: <b>{PAYMENT_PLAN_LABEL[v.payment_plan]}</b>{v.preferred_payment_method && <> · {v.preferred_payment_method}</>}.</p>}
             {v.payment_plan === "installment" && (v.installments ? (
               <div className="grid gap-2" data-testid="customer-installments">
-                <p className="text-sm font-semibold">Your payment schedule: the 30% down payment, then one payment every 15 days.</p>
+                <p className="text-sm font-semibold">Your payment schedule: one payment every 15 days, no down payment.</p>
                 <InstallmentTable rows={v.installments} />
               </div>
             ) : <p className="text-sm text-muted-foreground">The shop is preparing your installment schedule. You will see the amounts and due dates here.</p>)}
@@ -162,11 +162,13 @@ export default async function CustomerOrderDetail({ params }: { params: Promise<
             {p.furniture_price == null ? <p className="text-sm text-muted-foreground">No price yet. Your quotation will appear here after the shop confirms your order.</p> : (
               <dl className="grid gap-1 text-sm">
                 <div className="flex justify-between"><dt>Furniture price</dt><dd className="font-semibold tabular-nums">{formatPeso(p.furniture_price)}</dd></div>
-                <div className="flex justify-between"><dt>30% down payment</dt><dd className="tabular-nums">{formatPeso(p.standard_down_payment_due)}</dd></div>
+                {v.payment_plan !== "installment" && <div className="flex justify-between"><dt>{v.payment_plan === "full" ? "Full payment before production" : "30% down payment"}</dt><dd className="tabular-nums">{formatPeso(v.payment_plan === "full" ? p.furniture_price : p.standard_down_payment_due)}</dd></div>}
                 <div className="flex justify-between"><dt>Paid so far (verified)</dt><dd className="tabular-nums text-success">− {formatPeso(p.furniture_paid)}</dd></div>
                 <div className="flex justify-between"><dt>Remaining furniture balance</dt><dd className="tabular-nums">{formatPeso(p.remaining_furniture_balance)}</dd></div>
                 <div className="flex justify-between"><dt>Delivery fee</dt><dd className="tabular-nums">{p.delivery_fee === 0 ? "FREE (Valencia City)" : formatPeso(p.delivery_fee)}</dd></div>
-                <div className="mt-1 flex justify-between border-t pt-1.5 text-base"><dt className="font-bold">To pay on delivery</dt><dd className="font-black tabular-nums">{formatPeso(p.collectible_on_delivery)}</dd></div>
+                {v.payment_plan === "installment"
+                  ? <p className="mt-1 border-t pt-1.5 text-sm text-muted-foreground">The balance is paid by your schedule, not all on delivery.</p>
+                  : <div className="mt-1 flex justify-between border-t pt-1.5 text-base"><dt className="font-bold">To pay on delivery</dt><dd className="font-black tabular-nums">{formatPeso(p.collectible_on_delivery)}</dd></div>}
               </dl>
             )}
           </CardContent>

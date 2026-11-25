@@ -12,8 +12,8 @@ import { cn } from "@/lib/utils";
 
 const PLAN_HINT: Record<PaymentPlan, string> = {
   down_30: "Pay 30% now; production starts once it is verified. The rest is paid on delivery.",
-  installment: "Pay in parts. The owner reviews installment terms before production starts.",
-  full: "Pay the whole amount now. Nothing to pay on delivery except any delivery fee.",
+  installment: "No down payment: the price is split into 2 to 6 payments, one every 15 days. Production starts once the owner approves your installment plan.",
+  full: "Pay the whole amount before production starts. Nothing to pay on delivery except any delivery fee.",
 };
 const CHANNELS: { value: PaymentMethod; label: string; icon: typeof Banknote }[] = [
   { value: "Cash", label: "Cash at the shop", icon: Banknote },

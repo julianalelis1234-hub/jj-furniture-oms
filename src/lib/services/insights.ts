@@ -1,5 +1,6 @@
 import { addDays, daysBetween, todayISO } from "@/lib/domain/dates";
 import { paymentDue, type PaymentDue } from "@/lib/domain/payment-due";
+import { paymentGateProblem } from "@/lib/domain/payment-terms";
 import { downPaymentShortfall, furniturePaidFrom, money } from "@/lib/domain/finance";
 import { stageIndex } from "@/lib/domain/status";
 import type {
@@ -69,7 +70,7 @@ export interface StaffTasks {
   toQuote: Order[];
   /** quotation issued; the customer has not accepted it yet */
   awaitingAcceptance: Order[];
-  /** accepted + 30% verified (or owner exception) + no blocking items: ready to release to the workshop */
+  /** accepted + paid as the terms need (30%, full, or approved installment) + no blocking items: ready to release to the workshop */
   readyForProduction: Order[];
   /** customer-submitted online / bank payments to check and verify or reject */
   paymentsToVerify: { payment: Payment; order: Order }[];
@@ -117,7 +118,7 @@ export function staffTasks(
         o.status === "Confirmed" &&
         o.specs_confirmed &&
         !blocked(o.id) &&
-        (o.payment_exception_approved || downPaymentShortfall(o, payments) === 0),
+        paymentGateProblem(o, furniturePaidFrom(payments.filter((p) => p.order_id === o.id)), "production") === null,
     ),
     paymentsToVerify: payments
       .filter((p) => !p.verified_by_owner_or_staff && !p.rejected_at && !!p.submitted_by)

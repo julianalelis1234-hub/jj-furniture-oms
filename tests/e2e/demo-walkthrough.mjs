@@ -178,16 +178,12 @@ try {
   await page.goto("/staff");
   await page.waitForLoadState("networkidle");
   let drawer = await openDrawer(newCode);
-  await caption("Step 1 · The shop confirms the order — the customer is emailed a link to create a password");
+  await caption("Step 1 · The shop confirms the order and sets the price: the quotation is issued in the same step");
   await pause(2500);
   await drawer.getByTestId("next-step").getByRole("button", { name: "Confirm order" }).click();
-  await toast("Order confirmed.");
   await pause(1500);
-  await caption("Step 2 · Issue the official quotation — the customer is emailed to accept it and choose how to pay");
-  await drawer.getByTestId("next-step").getByRole("button", { name: "Issue quotation" }).click();
-  await pause(1500);
-  await page.getByRole("dialog").filter({ has: page.locator("#q-price") }).getByRole("button", { name: "Issue quotation" }).click();
-  await toast("Quotation issued.");
+  await page.getByRole("dialog").filter({ has: page.locator("#q-price") }).getByRole("button", { name: "Confirm & issue quotation" }).click();
+  await toast("Order confirmed and quotation issued.");
   await pause(1500);
 
   // --------------------------------------------------- 3. Customer portal

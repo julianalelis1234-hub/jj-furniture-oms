@@ -25,6 +25,7 @@ import { retryNotification, SMS_SIMULATED_NOTE, smsMode } from "@/lib/services/n
 import { addLumberItem, recordLumberMovement, setReorderLevel } from "@/lib/services/inventory";
 import {
   assignCraftsman,
+  confirmAndQuote,
   confirmOrder,
   createOrder,
   editOrderDetails,
@@ -179,6 +180,16 @@ export async function confirmOrderAction(orderId: string, expectedVersion?: numb
       : p.status === "failed"
         ? `Order confirmed, but the customer email was not sent: ${p.detail ?? "check the email address"}.`
         : p.new_account ? "Order confirmed. The customer was emailed a link to create their password." : "Order confirmed. The customer was emailed to log in.");
+}
+
+/** Confirm the order and issue the quotation together: the price is set while confirming. */
+export async function confirmAndQuoteAction(orderId: string, expectedVersion: number, expectedRevision: number | null, fd: FormData) {
+  return run(["owner", "staff"], async (a) => (await confirmAndQuote(await getStore(), a, await getCustomerAuth(), orderId, expectedVersion, Object.fromEntries(fd), expectedRevision)).provisioning,
+    (p) => p.status === "not_applicable"
+      ? "Order confirmed and quotation issued. Walk-in order: tell the customer the price at the shop."
+      : p.status === "failed"
+        ? `Order confirmed and quotation issued, but the customer email was not sent: ${p.detail ?? "check the email address"}.`
+        : p.new_account ? "Order confirmed and quotation issued. The customer was emailed a link to create their password and accept the quotation." : "Order confirmed and quotation issued. The customer was emailed to log in and accept it.");
 }
 
 /** Saves a shop revision. For a Confirmed order this IS the issued quotation (payment email follows). */

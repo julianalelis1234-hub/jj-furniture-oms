@@ -116,7 +116,7 @@ await step("staff: Today's Work lists task queues", async () => {
   await ctx.close();
 });
 
-await step("staff: new order form validates (email or walk-in) then saves with its permanent JJ code; slip shows the email, no PIN; confirm → issue quotation → acceptance → 30% gate", async () => {
+await step("staff: new order form validates (email or walk-in) then saves with its permanent JJ code; slip shows the email, no PIN; confirm + quotation in one step → acceptance → 30% gate", async () => {
   const { page, ctx } = await asPersona("Gilbert Decena");
   await page.goto("/staff/new");
   await page.getByRole("button", { name: "Save order" }).click();
@@ -156,14 +156,11 @@ await step("staff: new order form validates (email or walk-in) then saves with i
   await noHorizontalScroll(page, "staff-slip-mobile");
   await page.screenshot({ path: `${SHOTS}/staff-slip-mobile.png`, fullPage: true });
 
-  // the shop confirms (the customer is emailed to create a password), then issues the quotation
+  // confirming the order issues the quotation in the same step (the customer is emailed to create a password)
   await page.getByRole("link", { name: "Back to order" }).click();
-  page.once("dialog", (d) => d.accept());
   await page.getByTestId("next-step").getByRole("button", { name: "Confirm order" }).click();
-  await page.getByText("Order confirmed. The customer was emailed a link to create their password.").first().waitFor();
-  await page.getByTestId("next-step").getByRole("button", { name: "Issue quotation" }).click();
-  await page.getByRole("dialog").getByRole("button", { name: "Issue quotation" }).click();
-  await page.getByText("Quotation issued.").first().waitFor();
+  await page.getByRole("dialog").getByRole("button", { name: "Confirm & issue quotation" }).click();
+  await page.getByText("Order confirmed and quotation issued. The customer was emailed a link to create their password and accept the quotation.").first().waitFor();
   // the customer accepts at the counter: staff record it with the chosen payment terms
   await page.getByTestId("next-step").getByRole("button", { name: "Record acceptance" }).click();
   await page.getByRole("dialog").locator("#payment_plan").selectOption("down_30");
@@ -560,14 +557,11 @@ await step("online order: design → order slip → staff confirm → create pas
   expect(roomRes.status() === 200 && roomRes.headers()["content-type"] === "image/jpeg" && (await roomRes.body()).length > 1000, `staff can open the room photo (${roomRes.status()} ${roomRes.headers()["content-type"]})`);
   const anonRes = await (await browser.newContext({ baseURL: BASE })).request.get(roomHref);
   expect(anonRes.status() === 404, "the room photo is never public");
-  staff.page.once("dialog", (d) => d.accept());
   await reqDrawer.getByTestId("next-step").getByRole("button", { name: "Confirm order" }).click();
-  await staff.page.getByText("Order confirmed. The customer was emailed a link to create their password.").first().waitFor();
-  await reqDrawer.getByTestId("next-step").getByRole("button", { name: "Issue quotation" }).click();
   await staff.page.fill("#q-price", "26000");
   await staff.page.fill("#q-fee", "800");
-  await staff.page.getByRole("dialog").filter({ has: staff.page.locator("#q-price") }).getByRole("button", { name: "Issue quotation" }).click();
-  await staff.page.getByText("Quotation issued.").first().waitFor();
+  await staff.page.getByRole("dialog").filter({ has: staff.page.locator("#q-price") }).getByRole("button", { name: "Confirm & issue quotation" }).click();
+  await staff.page.getByText(/^Order confirmed and quotation issued\./).first().waitFor();
 
   // the customer creates a password from the confirmation email, then sees the quotation in their account
   await page.goto(await inboxLink(page, "teodora.bacus@example.com", "/customer/set-password"));

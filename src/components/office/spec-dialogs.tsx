@@ -1,9 +1,9 @@
 "use client";
 
-import { FileSignature, Loader2, PencilRuler, Undo2 } from "lucide-react";
+import { CheckCircle2, FileSignature, Loader2, PencilRuler, Undo2 } from "lucide-react";
 import { addDays, todayISO } from "@/lib/domain/dates";
 import { useState } from "react";
-import { reviewProposalAction, reviseSpecsAction } from "@/app/actions";
+import { confirmAndQuoteAction, reviewProposalAction, reviseSpecsAction } from "@/app/actions";
 import { ActionButton } from "@/components/action-dialog";
 import { Field, TextInput, useServerAction } from "@/components/form";
 import { configFromSpec, emptyConfig, FurnitureConfigurator, type ConfigValue } from "@/components/orders/FurnitureConfigurator";
@@ -127,6 +127,32 @@ export function ReviseSpecsDialog({ order, validityDays = 7, label }: { order: C
           open={open} onOpenChange={setOpen} order={order} spec={orderSpec(order)} validityDays={validityDays} locked={locked}
           title={copy.title} description={copy.description} submitLabel={copy.submit}
           onSubmit={(fd) => reviseSpecsAction(order.id, order.current_revision, fd)}
+        />
+      )}
+    </>
+  );
+}
+
+/**
+ * Confirm a new order and issue its quotation in the same step: the shop sets the price
+ * (and delivery fee) while confirming. The customer is emailed to accept and choose how to pay.
+ */
+export function ConfirmAndQuoteDialog({ order, validityDays = 7 }: { order: ClientOrder; validityDays?: number }) {
+  const [open, setOpen] = useState(false);
+  const locked = order.order_origin === "customer_self_service" && !!order.furniture_category;
+  return (
+    <>
+      <Button variant="success" size="touch" onClick={() => setOpen(true)}><CheckCircle2 aria-hidden /> Confirm order</Button>
+      {open && (
+        <QuoteEditor
+          open={open} onOpenChange={setOpen} order={order} spec={orderSpec(order)} validityDays={validityDays} locked={locked}
+          title={`Confirm & quote · ${order.order_code}`}
+          description={`${locked ? "This is the customer's design. Set the price and delivery fee" : "Check size, wood and finish, adjust if needed, then set the price and delivery fee"}. Confirming issues the official quotation at the same time: ${order.customer_email ? "the customer is emailed to accept it and choose 30% down payment, installment or full payment." : "walk-in order, tell the customer the price at the shop."}`}
+          submitLabel="Confirm & issue quotation"
+          onSubmit={async (fd) => {
+            const r = await confirmAndQuoteAction(order.id, order.version, order.current_revision, fd);
+            return r.ok ? { ok: true, message: r.message } : r;
+          }}
         />
       )}
     </>

@@ -7,6 +7,7 @@ import { formatPeso, furniturePaidFrom } from "@/lib/domain/finance";
 import type { OrderStatus } from "@/lib/domain/types";
 import { getStore, requireActor } from "@/lib/server/context";
 import { loadOwnerContext } from "@/lib/server/office-data";
+import { paymentGateProblem } from "@/lib/domain/payment-terms";
 import { workspaceMetrics } from "@/lib/services/insights";
 import { cn } from "@/lib/utils";
 
@@ -37,7 +38,7 @@ export default async function OwnerOrders({ searchParams }: { searchParams: Prom
   const toIssue = confirmed.filter((o) => !o.quotation_issued_at);
   const withCustomer = confirmed.filter((o) => o.quotation_issued_at && !o.specs_confirmed);
   const accepted = confirmed.filter((o) => o.specs_confirmed);
-  const short = accepted.filter((o) => paid(o.id) < o.standard_down_payment_due && !o.payment_exception_approved);
+  const short = accepted.filter((o) => paymentGateProblem(o, paid(o.id), "production") !== null);
   const ready = accepted.length - short.length;
   const quotedValue = withCustomer.reduce((s, o) => s + (o.furniture_price ?? 0), 0);
   const counts = STAGES.map((s) => data.orders.filter((o) => s.statuses.includes(o.status)).length);

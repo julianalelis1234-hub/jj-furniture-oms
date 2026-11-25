@@ -215,8 +215,8 @@ export async function recordConfirmation(store: DataStore, actor: Actor | null, 
     confirmed,
     `JJ Enterprises: quotation for ${confirmed.order_code} accepted (${PAYMENT_PLAN_LABEL[plan]}). ${
       plan === "installment"
-        ? "The owner will review your installment terms."
-        : `Production starts after your ${plan === "full" ? "payment" : `30% down payment of ${formatPeso(confirmed.standard_down_payment_due)}`} is verified.`
+        ? "The owner will review your installment terms; production starts once they are approved."
+        : `Production starts after your ${plan === "full" ? `full payment of ${formatPeso(confirmed.furniture_price ?? 0)}` : `30% down payment of ${formatPeso(confirmed.standard_down_payment_due)}`} is verified.`
     } ${confirmed.customer_email ? "Submit your payment in your JJ Enterprises account." : `Questions? Call the shop with your Order ID ${confirmed.order_code}.`}`,
   );
   return confirmed;
@@ -229,6 +229,22 @@ export async function recordConfirmation(store: DataStore, actor: Actor | null, 
  * and moves it to Waiting for Confirmation — all in one transaction. Any change
  * voids a previous acceptance.
  */
+/**
+ * Confirm the order and issue its quotation in one step (the price is set while confirming).
+ * The quotation form is checked first, so a bad price never leaves a confirmed order without a quote.
+ */
+export async function confirmAndQuote(
+  store: DataStore, actor: Actor, auth: CustomerAuthProvider, orderId: string, expectedVersion: number | undefined,
+  raw: unknown, expectedRevision: number | null,
+) {
+  ensureRole(actor, ["owner", "staff"], "confirm orders");
+  const parsed = specRevisionSchema.safeParse(raw);
+  if (!parsed.success) throw new DomainError("VALIDATION", "Please fix the highlighted fields.", parsed.error);
+  const { provisioning } = await confirmOrder(store, actor, auth, orderId, expectedVersion);
+  const order = await reviseSpecs(store, actor, orderId, raw, expectedRevision);
+  return { provisioning, order };
+}
+
 export async function reviseSpecs(store: DataStore, actor: Actor, orderId: string, raw: unknown, expectedRevision: number | null) {
   ensureRole(actor, ["owner", "staff"], "revise specifications");
   const parsed = specRevisionSchema.safeParse(raw);

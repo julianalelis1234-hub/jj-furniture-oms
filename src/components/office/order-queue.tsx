@@ -26,6 +26,9 @@ export interface QueueRow {
   verifiedPaid: number;
   remaining: number;
   down: number;
+  gateMet: boolean;
+  need: string;
+  thirtyTick: boolean;
   deliveryFee: number;
   pct: number;
   /** "Installment · 3 × ₱6,067 every 15 days · next Dec 10: ₱6,067" or the plan name */
@@ -53,11 +56,11 @@ const initials = (name: string) => name.split(/\s+/).filter(Boolean).slice(0, 2)
 function PayBar({ r }: { r: QueueRow }) {
   if (r.price == null) return null;
   const pct = Math.max(0, Math.min(100, r.pct));
-  const met = r.verifiedPaid >= r.down;
+  const met = r.gateMet;
   return (
-    <span className="relative mt-1.5 block h-1.5 w-full max-w-44 rounded-full bg-secondary" aria-hidden title={`${pct}% verified · 30% down payment ${met ? "met" : "not met"}`}>
+    <span className="relative mt-1.5 block h-1.5 w-full max-w-44 rounded-full bg-secondary" aria-hidden title={`${pct}% verified · payment before production ${met ? "met" : "not met"}`}>
       <span className={cn("absolute inset-y-0 left-0 rounded-full", met ? "bg-success" : "bg-warning")} style={{ width: `${Math.max(pct, 2)}%` }} />
-      <span className="absolute -top-0.5 -bottom-0.5 left-[30%] w-px bg-foreground/60" />
+      {r.thirtyTick && <span className="absolute -top-0.5 -bottom-0.5 left-[30%] w-px bg-foreground/60" />}
     </span>
   );
 }
@@ -68,7 +71,7 @@ function Money({ r }: { r: QueueRow }) {
     <>
       <b className="text-base text-foreground tabular-nums">{formatPeso(r.price)}</b>
       <span className="block text-xs tabular-nums text-muted-foreground">
-        Verified {formatPeso(r.verifiedPaid)}{r.verifiedPaid > 0 ? ` (${r.pct}%)` : ` · 30% due ${formatPeso(r.down)}`} · balance {formatPeso(r.remaining)}
+        Verified {formatPeso(r.verifiedPaid)}{r.verifiedPaid > 0 ? ` (${r.pct}%)` : ` · ${r.need}${r.down > 0 ? ` ${formatPeso(r.down)}` : ""}`} · balance {formatPeso(r.remaining)}
       </span>
       <PayBar r={r} />
       {r.plan && <span className="mt-1 block text-xs font-semibold text-foreground" data-testid="queue-plan">{r.plan}</span>}

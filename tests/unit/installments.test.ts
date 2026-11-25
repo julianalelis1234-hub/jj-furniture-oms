@@ -5,18 +5,17 @@ import { actors, seededStore } from "./helpers";
 
 describe("installment schedule (30% down, then equal payments every 15 days)", () => {
   const o = { furniture_price: 20000, standard_down_payment_due: 6000, installment_count: 3, installment_first_due: "2026-12-10" };
-  it("splits the balance exactly and applies verified payments in order", () => {
+  it("splits the whole price exactly (no down payment) and applies verified payments in order", () => {
     const rows = installmentSchedule(o, 0, "2026-11-25")!;
     expect(rows.map((r) => [r.label, r.due, r.amount])).toEqual([
-      ["30% down payment", null, 6000],
-      ["Payment 1 of 3", "2026-12-10", 4666.66],
-      ["Payment 2 of 3", "2026-12-25", 4666.66],
-      ["Payment 3 of 3", "2027-01-09", 4666.68],
+      ["Payment 1 of 3", "2026-12-10", 6666.66],
+      ["Payment 2 of 3", "2026-12-25", 6666.66],
+      ["Payment 3 of 3", "2027-01-09", 6666.68],
     ]);
     expect(rows.reduce((s, r) => s + r.amount, 0)).toBeCloseTo(20000, 2);
     const later = installmentSchedule(o, 8000, "2026-12-27")!;
-    expect(later.map((r) => r.state)).toEqual(["paid", "partial", "overdue", "upcoming"]);
-    expect(later[1].paid).toBe(2000);
+    expect(later.map((r) => r.state)).toEqual(["paid", "partial", "upcoming"]);
+    expect(later[1].paid).toBe(1333.34);
     expect(installmentSchedule({ ...o, installment_count: null }, 0, "2026-11-25")).toBeNull();
   });
 });

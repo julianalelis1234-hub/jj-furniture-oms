@@ -46,6 +46,7 @@ import { Field, NativeSelect, TextArea, TextInput, useServerAction } from "@/com
 import type { ClientOrder } from "@/lib/client-order";
 import { addDays, todayISO } from "@/lib/domain/dates";
 import { formatPeso } from "@/lib/domain/finance";
+import { paymentGateProblem, requiredBeforeStart } from "@/lib/domain/payment-terms";
 import {
   CONFIRMATION_METHODS,
   CUSTOMER_PAYMENT_METHODS,
@@ -125,17 +126,6 @@ export function ConfirmSpecsDialog({ order }: { order: ClientOrder }) {
 }
 
 /** Waiting for Confirmation -> Confirmed. The customer is then emailed to create a password (or to log in). */
-export function ConfirmOrderButton({ order }: { order: ClientOrder }) {
-  return (
-    <ActionButton variant="success" action={() => confirmOrderAction(order.id, order.version)}
-      confirmText={order.customer_email
-        ? `Confirm ${order.order_code}? ${order.customer_name} will be emailed a link to create their password; the quotation follows.`
-        : `Confirm ${order.order_code}? This is a walk-in order: tell the customer the quotation at the shop.`}>
-      <CheckCircle2 aria-hidden /> Confirm order
-    </ActionButton>
-  );
-}
-
 /** A customer's online / bank payment: open the receipt, then verify it or reject it with a reason. */
 export function VerifyPaymentControls({ paymentId, amount, reference }: { paymentId: string; amount: number; reference: string | null }) {
   return (
@@ -162,7 +152,7 @@ export function LogPaymentDialog({ order, defaultType = "Down Payment (30%)", de
       trigger="Log payment"
       icon={<HandCoins aria-hidden />}
       title={`Payment for ${order.order_code}`}
-      description={`Down payment due: ${formatPeso(order.standard_down_payment_due)} · Remaining balance: ${formatPeso(order.remaining_furniture_balance)}`}
+      description={`${order.payment_plan === "installment" ? "Installment plan, no down payment" : `${order.payment_plan === "full" ? "Full payment" : "Down payment"} due before production: ${formatPeso(requiredBeforeStart(order))}`} · Remaining balance: ${formatPeso(order.remaining_furniture_balance)}`}
       submitLabel="Save payment"
       action={(fd) => {
         fd.set("order_id", order.id);
@@ -450,26 +440,28 @@ export function StartProductionDialog({
   craftsmen: Pick<Profile, "id" | "full_name">[];
   blocking: number;
 }) {
-  const due = order.standard_down_payment_due;
-  const ok = verifiedPaid >= due || order.payment_exception_approved;
+  const due = requiredBeforeStart(order);
+  const ok = paymentGateProblem(order, verifiedPaid, "production") === null;
+  const isInstallment = order.payment_plan === "installment";
+  const need = order.payment_plan === "full" ? "Full payment" : "30% down payment";
   return (
     <ActionDialog
       trigger="Release to workshop"
       icon={<Hammer aria-hidden />}
       variant={ok && blocking === 0 ? "default" : "outline"}
       title={`Start production · ${order.order_code}`}
-      description="Wood cutting starts only after a verified 30% down payment (or an owner-approved credit / installment exception). The specification then locks for the workshop."
+      description="Wood cutting starts only when the customer's payment terms are met: the verified 30% down payment, the verified full payment, or the owner's approval of an installment plan (or an owner-approved credit exception). The specification then locks for the workshop."
       submitLabel="Start production"
       submitVariant="success"
       action={(fd) => startProductionAction(order.id, s(fd, "assigned_craftsman_id") || null)}
     >
       <dl className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-1 overflow-hidden rounded-xl border bg-background p-3 pt-0 text-sm">
-        <dt className="-mx-3 mb-1 border-b bg-secondary px-3 py-1.5 text-[13px] font-bold text-foreground col-span-2">Down-payment gate · ≥ 30%</dt>
-        <dt className="text-muted-foreground">30% down payment due</dt><dd className="font-semibold tabular-nums">{formatPeso(due)}</dd>
+        <dt className="-mx-3 mb-1 border-b bg-secondary px-3 py-1.5 text-[13px] font-bold text-foreground col-span-2">Payment gate · {order.payment_plan ? PAYMENT_PLAN_LABEL[order.payment_plan] : "30% down payment"}</dt>
+        <dt className="text-muted-foreground">{isInstallment ? "Needed before production" : `${need} due`}</dt><dd className="font-semibold tabular-nums">{isInstallment ? "Owner approval" : formatPeso(due)}</dd>
         <dt className="text-muted-foreground">Verified furniture payments</dt><dd className="font-semibold tabular-nums">{formatPeso(verifiedPaid)}</dd>
         <dt className="text-muted-foreground">Gate</dt>
         <dd className={cn("font-bold", ok ? "text-success" : "text-warning")}>
-          {verifiedPaid >= due ? "30% verified ✓" : order.payment_exception_approved ? "Owner-approved exception ✓" : `Short ${formatPeso(due - verifiedPaid)}`}
+          {isInstallment ? (ok ? "Installment approved ✓" : "Waiting for owner approval") : due > 0 && verifiedPaid >= due ? (order.payment_plan === "full" ? "Full payment verified ✓" : "30% verified ✓") : ok ? "Owner-approved exception ✓" : `Short ${formatPeso(due - verifiedPaid)}`}
         </dd>
         {blocking > 0 && (<><dt className="text-muted-foreground">Blocking items</dt><dd className="font-bold text-warning">{blocking} open</dd></>)}
       </dl>

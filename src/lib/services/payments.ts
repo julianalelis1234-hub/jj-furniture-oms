@@ -209,17 +209,17 @@ export async function setInstallmentPlan(store: DataStore, actor: Actor, orderId
   });
   if (!res.ok) throw new DomainError("VERSION_CONFLICT", "The order changed. Please reload and try again.");
   const schedule = installmentSchedule(res.order, 0, todayISO());
-  const each = schedule?.[1]?.amount ?? 0;
+  const each = schedule?.[0]?.amount ?? 0;
   await store.insertHistory({
     order_id: order.id,
     from_status: order.status,
     to_status: order.status,
     changed_by_id: actor.id,
-    notes: `Installment plan set by ${actor.full_name}: 30% down payment, then ${n} payments of ${formatPeso(each)} every ${INSTALLMENT_EVERY_DAYS} days from ${firstDue}`,
+    notes: `Installment plan set by ${actor.full_name}: ${n} payments of ${formatPeso(each)} every ${INSTALLMENT_EVERY_DAYS} days from ${firstDue}`,
     client_transaction_id: null,
     changed_at: new Date().toISOString(),
   });
   await notifyCustomer(store, res.order,
-    `JJ Enterprises: your installment plan for ${order.order_code} is ready: 30% down payment of ${formatPeso(order.standard_down_payment_due)}, then ${n} payments of about ${formatPeso(each)} every ${INSTALLMENT_EVERY_DAYS} days starting ${firstDue}. See the dates in your account.`);
+    `JJ Enterprises: your installment plan for ${order.order_code} is ready: ${n} payments of about ${formatPeso(each)} every ${INSTALLMENT_EVERY_DAYS} days starting ${firstDue}. See the dates in your account.`);
   return res.order;
 }

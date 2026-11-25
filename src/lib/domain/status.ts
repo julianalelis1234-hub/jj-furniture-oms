@@ -1,3 +1,4 @@
+import { paymentGateProblem } from "./payment-terms";
 import { DomainError } from "./errors";
 import type { Order, OrderStatus, Role } from "./types";
 import { ORDER_STATUSES } from "./types";
@@ -47,7 +48,7 @@ export function rolesAllowedFor(from: OrderStatus, to: OrderStatus): Role[] {
  */
 export function assertTransition(
   order: Pick<Order, "status" | "specs_confirmed" | "standard_down_payment_due" | "payment_exception_approved" | "id"> &
-    Partial<Pick<Order, "quotation_issued_at">>,
+    Partial<Pick<Order, "quotation_issued_at" | "furniture_price" | "payment_plan">>,
   to: OrderStatus,
   payments: Payment[],
 ): void {
@@ -66,13 +67,8 @@ export function assertTransition(
   }
   assertDownPaymentGate(order, to, payments);
   if (to === "Out for Delivery") {
-    const paid = furniturePaidFrom(payments.filter((p) => p.order_id === order.id));
-    if (paid < order.standard_down_payment_due && !order.payment_exception_approved) {
-      throw new DomainError(
-        "DOWN_PAYMENT_REQUIRED",
-        "A verified 30% down payment or an owner-approved payment exception is required before dispatch.",
-      );
-    }
+    const problem = paymentGateProblem({ furniture_price: order.furniture_price ?? null, ...order }, furniturePaidFrom(payments.filter((p) => p.order_id === order.id)), "dispatch");
+    if (problem) throw new DomainError("DOWN_PAYMENT_REQUIRED", problem);
   }
 }
 
@@ -95,18 +91,17 @@ export function quoteStep(order: Pick<Order, "status" | "quotation_issued_at" | 
  * owner-approved credit / installment exception. Same check as the DB trigger.
  */
 export function assertDownPaymentGate(
-  order: Pick<Order, "status" | "standard_down_payment_due" | "payment_exception_approved" | "id">,
+  order: Pick<Order, "status" | "standard_down_payment_due" | "payment_exception_approved" | "id"> & Partial<Pick<Order, "furniture_price" | "payment_plan">>,
   to: OrderStatus,
   payments: Payment[],
 ): void {
   if (!(order.status === "Confirmed" && to === "In Production")) return;
-  const verified = furniturePaidFrom(payments.filter((p) => p.order_id === order.id));
-  if (verified < order.standard_down_payment_due && !order.payment_exception_approved) {
-    throw new DomainError(
-      "DOWN_PAYMENT_REQUIRED",
-      `A verified 30% down payment (₱${order.standard_down_payment_due.toLocaleString("en-PH")}) is required before production. Verified so far: ₱${verified.toLocaleString("en-PH")}.`,
-    );
-  }
+  const problem = paymentGateProblem(
+    { furniture_price: order.furniture_price ?? null, ...order },
+    furniturePaidFrom(payments.filter((p) => p.order_id === order.id)),
+    "production",
+  );
+  if (problem) throw new DomainError("DOWN_PAYMENT_REQUIRED", problem);
 }
 
 export const STATUS_SHORT: Record<OrderStatus, string> = {
