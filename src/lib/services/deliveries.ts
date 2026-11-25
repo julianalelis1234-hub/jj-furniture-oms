@@ -83,7 +83,8 @@ export interface DriverAction {
 export type DriverActionResult =
   | { status: "applied" | "duplicate"; client_transaction_id: string; order_version: number; order_status: Order["status"] }
   | { status: "conflict"; client_transaction_id: string; message: string; current: { version: number; status: Order["status"]; collectible_on_delivery: number } }
-  | { status: "rejected"; client_transaction_id: string; message: string };
+  /** gone: the delivery or its order no longer exists for this rider (cancelled or removed by the shop) */
+  | { status: "rejected"; client_transaction_id: string; message: string; gone?: boolean };
 
 const TARGET: Record<DriverActionType, Order["status"]> = {
   start_trip: "Out for Delivery",
@@ -116,10 +117,10 @@ export async function applyDriverAction(store: DataStore, actor: Actor, action: 
 
   const delivery = (await store.listDeliveries({ driverId: actor.id })).find((d) => d.id === action.delivery_id);
   if (!delivery || delivery.order_id !== action.order_id)
-    return { status: "rejected", client_transaction_id: txn, message: "This delivery is not assigned to you." };
+    return { status: "rejected", client_transaction_id: txn, message: "This delivery is not assigned to you.", gone: true };
 
   const order = await store.getOrder(action.order_id);
-  if (!order) return { status: "rejected", client_transaction_id: txn, message: "Order not found." };
+  if (!order) return { status: "rejected", client_transaction_id: txn, message: "Order not found.", gone: true };
 
   // A previous attempt of this same action may have stored its payment before failing;
   // that payment bumped the version, so it is our own change, not a conflict.

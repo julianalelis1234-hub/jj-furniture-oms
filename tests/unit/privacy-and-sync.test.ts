@@ -92,6 +92,18 @@ describe("5. offline synchronization", () => {
     expect(pays.map((p) => p.amount)).toEqual([5600]);
   });
 
+  it("clears saved actions for a delivery the shop removed (no endless 'not accepted' error)", async () => {
+    const { db } = await setup("t-gone");
+    const entry = (await getManifest(db)).find((e) => e.order.order_code === "JJ-2026-0138")!;
+    await enqueueAction(db, action(entry, "start_trip"));
+    await enqueueAction(db, action(entry, "delivered", { amount_collected: 5600, payment_method: "Cash" }));
+    // the order was deleted at the shop: the server answers "gone"
+    const summary = await flushQueue(db, async (a) => ({ status: "rejected", client_transaction_id: a.client_transaction_id, message: "Order not found.", gone: true }));
+    expect(summary).toMatchObject({ removed: 2, rejected: 0, remaining: 0 });
+    expect(await listQueue(db)).toHaveLength(0);
+    expect((await getManifest(db)).some((e) => e.delivery.id === entry.delivery.id)).toBe(false);
+  });
+
   it("replaying the same client_transaction_id creates no duplicates", async () => {
     const { db, send, store } = await setup("t-dupe");
     const entry = (await getManifest(db)).find((e) => e.order.order_code === "JJ-2026-0136")!;
