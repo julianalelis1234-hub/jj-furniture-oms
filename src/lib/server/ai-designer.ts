@@ -8,7 +8,7 @@ import { AI_DESIGN_SCHEMA, aiSystemPrompt, normalizeAiDesign, type AiDesignResul
  */
 export const aiDesignerEnabled = () => !!process.env.GEMINI_API_KEY;
 /** Tried in order; a model name Google retired (404) falls through to the next. */
-const MODELS = () => [...new Set([process.env.GEMINI_MODEL, "gemini-flash-latest", "gemini-2.5-flash", "gemini-2.0-flash"].filter(Boolean) as string[])];
+const MODELS = () => [...new Set([process.env.GEMINI_MODEL, "gemini-flash-latest", "gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.0-flash"].filter(Boolean) as string[])];
 
 export class AiUnavailable extends Error {
   constructor(public reason: "off" | "busy" | "failed") { super(reason); }
@@ -35,7 +35,7 @@ export async function designWithGemini(input: { text?: string; image?: { mimeTyp
           responseJsonSchema: AI_DESIGN_SCHEMA,
           temperature: 0.2,
           maxOutputTokens: 2048,
-          abortSignal: AbortSignal.timeout(25_000),
+          abortSignal: AbortSignal.timeout(15_000),
         },
       });
       const out = normalizeAiDesign(JSON.parse(res.text ?? "null"));
@@ -45,8 +45,10 @@ export async function designWithGemini(input: { text?: string; image?: { mimeTyp
       if (e instanceof AiUnavailable) throw e;
       lastStatus = (e as { status?: number }).status;
       console.warn(`[ai-designer] Gemini (${model}) request failed:`, lastStatus ?? "", e instanceof Error ? e.message.slice(0, 200) : "");
-      if (lastStatus !== 404) break; // only an unknown model name is worth another try
+      // an unknown model name (404) or an overloaded / failing model (500, 503) -> try the next model;
+      // anything else (bad key, bad request) would fail the same way on every model
+      if (![404, 500, 503].includes(lastStatus ?? 0)) break;
     }
   }
-  throw new AiUnavailable(lastStatus === 429 ? "busy" : "failed");
+  throw new AiUnavailable(lastStatus === 429 || lastStatus === 503 ? "busy" : "failed");
 }
