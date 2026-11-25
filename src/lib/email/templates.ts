@@ -48,6 +48,8 @@ function layout(p: { preheader: string; heading: string; intro: string; rows: st
   <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 20px;"><tr><td style="border-radius:999px;background:${C.mocha};">
     <a href="${esc(p.href)}" style="display:inline-block;padding:14px 26px;color:${C.cream};font:bold 15px ${SANS};text-decoration:none;border-radius:999px;">${esc(p.cta)}</a>
   </td></tr></table>
+  <p style="margin:0 0 16px;color:${C.mocha};font:12px/1.5 ${SANS};">Button not working? Copy this link into your browser:<br>
+    <a href="${esc(p.href)}" style="color:${C.mocha};text-decoration:underline;word-break:break-all;">${esc(p.href)}</a></p>
   <p style="margin:0;color:${C.mocha};font:13px/1.6 ${SANS};">${p.after}</p>
 </td></tr>
 <tr><td style="padding:16px 28px;background:${C.cream};border-top:1px solid ${C.latte};color:${C.mocha};font:12px/1.5 ${SANS};">
