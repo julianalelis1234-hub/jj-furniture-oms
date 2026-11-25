@@ -1,7 +1,7 @@
 "use client";
 
 import { Loader2, Send } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { customerRequestAction, type OrderSlip } from "@/app/actions";
 import { OrderSlipView } from "./order-slip";
 import { RoomPhotoField } from "./room-photo-field";
@@ -21,6 +21,12 @@ export function RequestForm() {
   const [notes, setNotes] = useState("");
   const [photoUrl, setPhotoUrl] = useState("");
   const [roomPhoto, setRoomPhoto] = useState<File | null>(null);
+  // a photo taken in the joystick camera view is added here
+  useEffect(() => {
+    const on = (e: Event) => { const f = (e as CustomEvent<File>).detail; if (f instanceof File) setRoomPhoto(f); };
+    window.addEventListener("jj:room-photo", on);
+    return () => window.removeEventListener("jj:room-photo", on);
+  }, []);
   const err = (k: string) => errors[k];
 
   if (done) return <OrderSlipView slip={done} />;
