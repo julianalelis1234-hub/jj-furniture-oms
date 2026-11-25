@@ -18,6 +18,7 @@ export const PORTAL_SECTIONS: Record<Portal, Section[]> = {
   owner: [
     { href: "/owner", label: "Dashboard", icon: LayoutDashboard, exact: true },
     { href: "/owner/orders", label: "Orders & Quotations", icon: ClipboardList },
+    { href: "/owner/payments", label: "Payments to verify", icon: Wallet },
     { href: "/owner/staff", label: "Staff", icon: Users },
     { href: "/owner/craftsmen", label: "Craftsmen", icon: Hammer },
     { href: "/owner/deliveries", label: "Deliveries", icon: Truck },

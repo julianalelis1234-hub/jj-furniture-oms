@@ -1,4 +1,5 @@
 import "server-only";
+import { staffInbox } from "./staff-inbox";
 import type { DataStore } from "@/lib/data/store";
 import type { FurnitureSpec } from "@/lib/domain/furniture";
 import { isCustomerProposal } from "@/lib/services/exceptions";
@@ -49,8 +50,9 @@ export async function loadOwnerContext(store: DataStore) {
   const toSchedule = data.orders.filter((o) => o.status === "Ready for Delivery" && !live(o.id)).length;
   const unassigned = data.orders.filter((o) => (o.status === "Confirmed" && o.specs_confirmed || o.status === "In Production") && !o.assigned_craftsman_id).length;
   const toConfirm = data.orders.filter((o) => o.status === "Waiting for Confirmation" || o.status === "Quote Requested").length;
+  const { t } = staffInbox(data);
   const badges: Record<string, number> = {
-    "/owner": decisions, "/owner/orders": toConfirm, "/owner/craftsmen": unassigned, "/owner/deliveries": toSchedule, "/owner/inventory": lowStock,
+    "/owner": decisions, "/owner/orders": toConfirm, "/owner/payments": t.paymentsToVerify.length + t.cashHandovers.length, "/owner/craftsmen": unassigned, "/owner/deliveries": toSchedule, "/owner/inventory": lowStock,
   };
   return { data, lumberItems, lumberMovements, badges };
 }
