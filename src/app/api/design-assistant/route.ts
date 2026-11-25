@@ -7,6 +7,8 @@ import { clientIp } from "@/lib/server/request-meta";
  * Public (the designer works without an account), so it is size- and rate-limited.
  * When Gemini is off, busy or fails, the browser falls back to the built-in rules.
  */
+export const maxDuration = 60;
+
 const body = z.object({
   text: z.string().trim().max(600).optional().default(""),
   image: z
