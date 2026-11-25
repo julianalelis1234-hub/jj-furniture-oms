@@ -72,8 +72,14 @@ export function launchQuickLook(url: string, name: string) {
   const a = document.createElement("a");
   a.setAttribute("rel", "ar");
   a.setAttribute("download", `${name.replace(/[^A-Za-z0-9-]+/g, "-")}.usdz`);
-  // true size: the customer cannot pinch it bigger or smaller by accident
-  a.setAttribute("href", `${url}#allowsContentScaling=0`);
+  // true size (no pinch-to-resize) + Apple's instruction banner along the bottom of the AR view
+  const banner = new URLSearchParams({
+    allowsContentScaling: "0",
+    checkoutTitle: "Drag with one finger to move it · twist two fingers to turn it",
+    checkoutSubtitle: "Tap the white camera button to take a photo",
+    callToAction: "Done",
+  }).toString().replace(/\+/g, "%20");
+  a.setAttribute("href", `${url}#${banner}`);
   a.appendChild(document.createElement("img")); // Quick Look needs an <img> child
   document.body.appendChild(a);
   a.click();

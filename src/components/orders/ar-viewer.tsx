@@ -1,11 +1,12 @@
 "use client";
 
-import { Camera, Check, Copy, Loader2, RotateCcw, RotateCw, Smartphone, X } from "lucide-react";
+import { Camera, Check, Copy, Gamepad2, Loader2, Smartphone, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { createPortal, flushSync } from "react-dom";
 import type * as THREE from "three";
 import { detectAr, furnitureForAr, launchQuickLook, prepareQuickLook, startWebXr, type ArMode, type WebXrHandle } from "./ar";
-import { ArJoystick } from "./ar-joystick";
+import { ArHud } from "./ar-hud";
+import { askMotionPermission, startCameraView, type CameraViewHandle } from "./camera-view";
 import Furniture3DPreview, { type Furniture3DSpec } from "./Furniture3DPreview";
 
 type XrState = "idle" | "starting" | "searching" | "aim" | "placed";
@@ -28,6 +29,12 @@ export function ArViewer({ spec, onClose }: { spec: Furniture3DSpec; onClose: ()
   const [iphone] = useState(() => typeof navigator !== "undefined" && (/iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1)));
   const [qlUrl, setQlUrl] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  // iPhone "joystick camera view"
+  const cam = useRef<CameraViewHandle | null>(null);
+  const camHost = useRef<HTMLDivElement>(null);
+  const camVideo = useRef<HTMLVideoElement>(null);
+  const [camState, setCamState] = useState<"off" | "starting" | "on">("off");
+  const [shot, setShot] = useState<"idle" | "busy" | "added">("idle");
 
   // iPhone: make the AR file as soon as the 3D model is on screen, so the tap opens it at once
   useEffect(() => {
@@ -51,13 +58,14 @@ export function ArViewer({ spec, onClose }: { spec: Furniture3DSpec; onClose: ()
     document.body.style.overflow = "hidden";
     const back = document.activeElement as HTMLElement | null;
     closeBtn.current?.focus();
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape" && !xr.current) onClose(); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape" && !xr.current && !cam.current) onClose(); };
     window.addEventListener("keydown", onKey);
     return () => {
       live = false;
       document.body.style.overflow = prev;
       window.removeEventListener("keydown", onKey);
       xr.current?.end();
+      cam.current?.end();
       back?.focus?.();
     };
   }, [onClose]);
@@ -92,6 +100,34 @@ export function ArViewer({ spec, onClose }: { spec: Furniture3DSpec; onClose: ()
       setError("The camera view could not start. Allow camera access for this site, then try again.");
     } finally {
       setBusy(false);
+    }
+  };
+
+  const startCam = () => {
+    if (!furniture.current || camState !== "off") return;
+    setError(null);
+    const motion = askMotionPermission(); // must start inside the tap
+    const model = furnitureForAr(furniture.current);
+    flushSync(() => setCamState("starting")); // the video and canvas host must exist first
+    motion
+      .then((ok) => startCameraView(model, camHost.current!, camVideo.current!, ok))
+      .then((h) => { cam.current = h; setCamState("on"); })
+      .catch((e) => {
+        console.warn("[AR] camera view could not start:", e);
+        setCamState("off");
+        setError("The camera could not start. Allow camera access for this site in Settings › Safari › Camera, then try again.");
+      });
+  };
+  const stopCam = () => { cam.current?.end(); cam.current = null; setCamState("off"); setShot("idle"); setUsedAr(true); };
+  const takePhoto = async () => {
+    if (!cam.current || shot === "busy") return;
+    setShot("busy");
+    try {
+      const file = await cam.current.photo();
+      window.dispatchEvent(new CustomEvent("jj:room-photo", { detail: file }));
+      setShot("added");
+    } catch {
+      setShot("idle");
     }
   };
 
@@ -149,9 +185,15 @@ export function ArViewer({ spec, onClose }: { spec: Furniture3DSpec; onClose: ()
               {busy || (mode === "quicklook" && !qlUrl) ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Camera className="size-4" aria-hidden />}
               {mode === "quicklook" && !qlUrl ? "Preparing AR…" : "View in your room"}
             </button>
+            {mode === "quicklook" && (
+              <button type="button" onClick={startCam} disabled={camState !== "off"} data-testid="ar-camera-view"
+                className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-full border border-primary/50 bg-background px-5 text-sm font-bold text-primary hover:bg-accent-soft disabled:opacity-70 focus-visible:ring-3 focus-visible:ring-ring/40 focus-visible:outline-none sm:w-auto sm:justify-self-start">
+                <Gamepad2 className="size-4" aria-hidden /> Joystick camera view
+              </button>
+            )}
             <p className="text-xs text-muted-foreground">
               Shown at its real size. {mode === "quicklook"
-                ? "To take a photo, tap the white camera button in the AR view."
+                ? "To take a photo, tap the white camera button in the AR view. The joystick camera view lets you move it with a joystick (size is approximate) and adds the photo to your order."
                 : "To take a photo, take a screenshot while it is in your room."}
             </p>
           </>
@@ -166,28 +208,34 @@ export function ArViewer({ spec, onClose }: { spec: Furniture3DSpec; onClose: ()
 
       {/* Android camera view: shown over the camera by Chrome (WebXR DOM overlay). The root lets taps
           through to the floor; only the buttons and the joystick catch them. */}
-      <div ref={overlay} className={inXr ? "pointer-events-none fixed inset-0 flex flex-col justify-between text-white" : "hidden"}>
-        <div className="flex justify-end p-4 pt-[max(1rem,env(safe-area-inset-top))]">
-          <button type="button" onClick={() => xr.current?.end()} data-testid="ar-done"
-            className="pointer-events-auto h-12 rounded-full bg-white px-6 text-base font-bold text-black shadow-lg">Done</button>
-        </div>
-        <div className="grid gap-4 px-4 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
-          {xrState === "placed" && (
-            <div className="flex items-center justify-center gap-5">
-              <button type="button" onClick={() => xr.current?.rotate(-30)} aria-label="Turn left"
-                className="pointer-events-auto grid size-14 place-items-center rounded-full bg-black/65 shadow-lg"><RotateCcw className="size-6" aria-hidden /></button>
-              <div className="pointer-events-auto"><ArJoystick onMove={(r, f) => xr.current?.move(r, f)} /></div>
-              <button type="button" onClick={() => xr.current?.rotate(30)} aria-label="Turn right"
-                className="pointer-events-auto grid size-14 place-items-center rounded-full bg-black/65 shadow-lg"><RotateCw className="size-6" aria-hidden /></button>
-            </div>
-          )}
-          <div className="rounded-2xl bg-black/75 px-5 py-4 text-center shadow-lg" aria-live="polite" data-testid="ar-instruction">
-            {xrState !== "starting" && <p className="text-sm font-semibold text-white/75">Step {step} of 3</p>}
-            <p className="mt-1 text-lg leading-snug font-bold">{hint}</p>
-            {xrState === "placed" && <p className="mt-2 text-sm text-white/80">Take a screenshot to save a photo of it in your room.</p>}
-          </div>
-        </div>
+      <div ref={overlay} className={inXr ? "pointer-events-none fixed inset-0" : "hidden"}>
+        {inXr && (
+          <ArHud step={xrState === "starting" ? undefined : step} total={3} hint={hint} controls={xrState === "placed"}
+            note={xrState === "placed" ? "Take a screenshot to save a photo of it in your room." : undefined}
+            onDone={() => xr.current?.end()} onRotate={(d) => xr.current?.rotate(d)} onMove={(r, f) => xr.current?.move(r, f)} />
+        )}
       </div>
+
+      {/* iPhone joystick camera view: rear camera + the furniture drawn over it */}
+      {camState !== "off" && (
+        <div className="fixed inset-0 z-[70] bg-black" data-testid="ar-camera-layer">
+          <video ref={camVideo} className="absolute inset-0 size-full object-cover" playsInline muted autoPlay aria-hidden />
+          <div ref={camHost} className="absolute inset-0" />
+          <ArHud
+            controls={camState === "on"}
+            hint={camState === "starting" ? "Starting the camera…" : "Drag the joystick to move it. Use the arrows to turn it. Tap Take photo when it looks right."}
+            note={shot === "added" ? <b className="text-[#9fd3a4]">Photo added to your order ✓</b> : "Point your phone at the spot. The size here is approximate; use View in your room for the exact size."}
+            onDone={stopCam} onRotate={(d) => cam.current?.rotate(d)} onMove={(r, f) => cam.current?.move(r, f)}
+            action={camState === "on" && (
+              <button type="button" onClick={takePhoto} disabled={shot === "busy"} data-testid="ar-take-photo"
+                className="inline-flex h-12 items-center gap-2 rounded-full bg-white px-6 text-base font-bold text-black shadow-lg disabled:opacity-70">
+                {shot === "busy" ? <Loader2 className="size-5 animate-spin" aria-hidden /> : <Camera className="size-5" aria-hidden />}
+                {shot === "added" ? "Take another photo" : "Take photo"}
+              </button>
+            )}
+          />
+        </div>
+      )}
     </div>,
     document.body,
   );
