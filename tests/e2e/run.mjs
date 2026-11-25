@@ -333,8 +333,8 @@ await step("customer: no Order ID + PIN lookup; Option 1 email login (demo butto
   expect((await page.locator("#order_code, #pin").count()) === 0, "no Order ID / PIN inputs");
   for (const label of ["Check status only", "Open with PIN"])
     expect((await page.getByRole("button", { name: label }).count()) === 0, `no [${label}] button`);
-  await page.getByRole("heading", { name: /Option 1 · Log In to Track My Orders/ }).waitFor();
-  await page.getByRole("heading", { name: /Option 2 · Customize & Request a Quote/ }).waitFor();
+  await page.getByRole("heading", { name: "Log In to Track My Orders" }).waitFor();
+  await page.getByRole("heading", { name: "Customize & Request a Quote" }).waitFor();
   await noHorizontalScroll(page, "customer-portal-mobile");
   await page.screenshot({ path: `${SHOTS}/customer-portal-mobile.png`, fullPage: true });
   // the dashboard needs a customer session
