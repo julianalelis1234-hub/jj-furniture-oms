@@ -8,7 +8,7 @@ import { AI_DESIGN_SCHEMA, aiSystemPrompt, normalizeAiDesign, type AiDesignResul
  */
 export const aiDesignerEnabled = () => !!process.env.GEMINI_API_KEY;
 /** Tried in order; a model name Google retired (404) falls through to the next. */
-const MODELS = () => [...new Set([process.env.GEMINI_MODEL, "gemini-flash-latest", "gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.0-flash"].filter(Boolean) as string[])];
+const MODELS = () => [...new Set([process.env.GEMINI_MODEL, "gemini-3.8-flash", "gemini-flash-latest", "gemini-3.5-flash-lite", "gemini-flash-lite-latest"].filter(Boolean) as string[])];
 
 export class AiUnavailable extends Error {
   constructor(public reason: "off" | "busy" | "failed") { super(reason); }
