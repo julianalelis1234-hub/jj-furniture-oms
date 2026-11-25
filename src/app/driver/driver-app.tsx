@@ -382,7 +382,7 @@ function DeliveryDetail({ entry: e, today, onBack, onStart, onDelivered, onFaile
         {d.dispatch_status === "Scheduled" && (o.down_payment_ok ? (
           <Button size="xl" onClick={onStart}><Truck aria-hidden /> Start Trip</Button>
         ) : (
-          <p className="rounded-lg border border-warning bg-warning-soft p-2 text-sm font-semibold">Hold: {o.payment_plan === "full" ? "the full payment" : "the 30% down payment"} is not verified yet and there is no owner approval. Call the shop before loading.</p>
+          <p className="rounded-lg border border-warning bg-warning-soft p-2 text-sm font-semibold">Hold: {o.payment_plan === "installment" ? "the owner has not approved the installment plan yet." : `the ${o.payment_plan === "full" ? "full payment" : "30% down payment"} is not verified yet and there is no owner approval.`} Call the shop before loading.</p>
         ))}
         {d.dispatch_status === "Out for Delivery" && (
           <>
@@ -470,6 +470,6 @@ function paymentTermsLine(o: ManifestEntry["order"]): string {
   const label = o.payment_plan ? PAYMENT_PLAN_LABEL[o.payment_plan] : "";
   if (o.remaining_furniture_balance <= 0) return `${label} · furniture paid in full`;
   if (o.payment_plan === "installment")
-    return `${label}${o.installment_count ? ` (${o.installment_count} payments every 15 days)` : ""} · collect only what the shop told you`;
+    return `${label}${o.installment_count ? ` (${o.installment_count} payments every 15 days)` : ""} · collect only the payments due (shown above)`;
   return `${label} · collect the balance`;
 }

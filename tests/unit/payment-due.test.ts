@@ -20,17 +20,17 @@ describe("payment due by the customer's payment terms", () => {
 
   it("full payment: waits for the whole price", () => {
     expect(paymentDue(order({ payment_plan: "full" }), [pay(3600)], today)).toMatchObject({ stage: "full", label: "Full payment", shortfall: 8400 });
+    expect(paymentDue(order({ payment_plan: "full", status: "Delivered" }), [pay(3600)], today)).toBeNull();
     expect(paymentDue(order({ payment_plan: "full" }), [pay(12000)], today)).toBeNull();
   });
 
-  it("installment: 30% first, then asks for the plan, then only due or overdue payments", () => {
+  it("installment: no down payment; asks for the plan, then only due or overdue payments", () => {
     const inst = (o: Partial<Order> = {}) => order({ payment_plan: "installment", ...o });
-    expect(paymentDue(inst(), [], today)).toMatchObject({ stage: "down", label: "Installment · 30% down payment", shortfall: 3600 });
-    expect(paymentDue(inst(), [pay(3600)], today)).toMatchObject({ stage: "installment_plan", shortfall: 0 });
-    // 4 payments of 2,100 from Dec 1: Dec 1 overdue, Dec 16 upcoming
+    expect(paymentDue(inst(), [], today)).toMatchObject({ stage: "installment_plan", shortfall: 0 });
+    // 4 payments of 3,000 from Dec 1: Dec 1 overdue, Dec 16 upcoming
     const planned = inst({ installment_count: 4, installment_first_due: "2026-12-01", status: "Delivered" });
-    expect(paymentDue(planned, [pay(3600)], today)).toMatchObject({ stage: "installment", label: "Installment · Payment 1 of 4", shortfall: 2100, overdue: true });
-    expect(paymentDue(planned, [pay(5700)], today)).toBeNull(); // first one paid, next not due yet
+    expect(paymentDue(planned, [], today)).toMatchObject({ stage: "installment", label: "Installment · Payment 1 of 4", shortfall: 3000, overdue: true });
+    expect(paymentDue(planned, [pay(3000)], today)).toBeNull(); // first one paid, next not due yet
   });
 
   it("orders not yet accepted, or with an owner exception for the 30%, are not chased for the 30%", () => {

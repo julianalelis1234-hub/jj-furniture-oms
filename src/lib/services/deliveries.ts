@@ -1,7 +1,8 @@
 import type { DataStore } from "@/lib/data/store";
-import { formatDate } from "@/lib/domain/dates";
+import { formatDate, todayISO } from "@/lib/domain/dates";
 import { DomainError } from "@/lib/domain/errors";
-import { downPaymentShortfall, formatPeso, money, splitDeliveryCollection } from "@/lib/domain/finance";
+import { formatPeso, furniturePaidFrom, money, splitDeliveryCollection } from "@/lib/domain/finance";
+import { collectOnDelivery, gateShortfall, paymentGateProblem, requiredLabel } from "@/lib/domain/payment-terms";
 import type { Actor, DeliveryAssignment, Order, PaymentMethod } from "@/lib/domain/types";
 import { deliveryScheduleSchema } from "@/lib/domain/validation";
 import { deriveUuid, ensureRole } from "./guard";
@@ -26,7 +27,7 @@ export async function scheduleDelivery(store: DataStore, actor: Actor, raw: unkn
     scheduled_date: v.scheduled_date,
     time_window: v.time_window,
     delivery_fee: order.delivery_fee,
-    expected_collectible_amount: order.collectible_on_delivery,
+    expected_collectible_amount: collectOnDelivery(order, v.scheduled_date),
     dispatch_status: "Scheduled",
     failure_or_damage_notes: null,
     updated_at: new Date().toISOString(),
@@ -34,17 +35,22 @@ export async function scheduleDelivery(store: DataStore, actor: Actor, raw: unkn
   const res = await store.updateOrder(order.id, { scheduled_delivery_date: v.scheduled_date });
   if (!res.ok) throw new DomainError("VERSION_CONFLICT", "Order changed. Please refresh.");
 
-  // Exception gate: dispatch with < 30% down payment needs the owner.
-  const shortfall = downPaymentShortfall(order, await store.listPayments(order.id));
-  if (shortfall > 0 && !order.payment_exception_approved) {
+  // Exception gate: dispatch before the payment the terms need (30%, full payment) needs the owner.
+  // Installment orders wait for their pending Installment Approval instead.
+  const paid = furniturePaidFrom(await store.listPayments(order.id));
+  const problem = paymentGateProblem(order, paid, "dispatch");
+  if (problem) {
     const pending = (await store.listExceptions(order.id)).some(
       (e) => e.status === "Pending" && (e.category === "Credit / Unpaid Balance" || e.category === "Installment Approval"),
     );
     if (!pending) {
+      const shortfall = gateShortfall(order, paid);
       await store.insertException({
         order_id: order.id,
-        category: "Credit / Unpaid Balance",
-        description: `Scheduled for dispatch with ${formatPeso(shortfall)} of the 30% down payment unpaid. Owner approval needed before the trip.`,
+        category: order.payment_plan === "installment" ? "Installment Approval" : "Credit / Unpaid Balance",
+        description: order.payment_plan === "installment"
+          ? `Scheduled for dispatch; the installment plan for ${order.order_code} is not approved yet. Owner approval needed before the trip.`
+          : `Scheduled for dispatch with ${formatPeso(shortfall)} of the ${requiredLabel(order)} unpaid. Owner approval needed before the trip.`,
         requested_by: actor.full_name,
         status: "Pending",
         is_production_blocking: false,
@@ -54,10 +60,11 @@ export async function scheduleDelivery(store: DataStore, actor: Actor, raw: unkn
       });
     }
   }
+  const toPrepare = collectOnDelivery(res.order, v.scheduled_date);
   await notifyCustomer(
     store,
     res.order,
-    `JJ Enterprises: ${order.order_code} is scheduled for delivery on ${formatDate(v.scheduled_date)}, ${v.time_window} (${v.vehicle_type}). Amount to prepare: ${formatPeso(order.collectible_on_delivery)}.`,
+    `JJ Enterprises: ${order.order_code} is scheduled for delivery on ${formatDate(v.scheduled_date)}, ${v.time_window} (${v.vehicle_type}). Amount to prepare: ${formatPeso(toPrepare)}${order.payment_plan === "installment" ? " (installments due by then)" : ""}.`,
   );
   return delivery;
 }
@@ -174,12 +181,12 @@ export async function applyDriverAction(store: DataStore, actor: Actor, action: 
             notes: "Delivery fee collected — awaiting handover verification", paid_at: action.queued_at || new Date().toISOString(),
           });
       }
-      const shortBy = money(order.collectible_on_delivery - amount);
+      const shortBy = money(collectOnDelivery(order, todayISO()) - amount);
       if (shortBy > 0 && !ownPartial) {
         // system-generated owner approval (drivers may only file touch-ups under RLS)
         await store.elevated().insertException({
           order_id: order.id, category: "Credit / Unpaid Balance",
-          description: `Delivered with ${formatPeso(shortBy)} not collected (collected ${formatPeso(amount)} of ${formatPeso(order.collectible_on_delivery)}). ${action.notes ?? ""}`.trim(),
+          description: `Delivered with ${formatPeso(shortBy)} not collected (collected ${formatPeso(amount)} of ${formatPeso(collectOnDelivery(order, todayISO()))}). ${action.notes ?? ""}`.trim(),
           requested_by: actor.full_name, status: "Pending", is_production_blocking: false, resolved_by_id: null, created_at: new Date().toISOString(), resolved_at: null,
         });
       }
@@ -234,11 +241,11 @@ export async function driverManifest(store: DataStore, actor: Actor) {
           id: o.id, order_code: o.order_code, version: o.version, status: o.status, customer_name: o.customer_name,
           customer_phone: o.customer_phone, delivery_address: o.delivery_address, municipality: o.municipality,
           item_name: o.item_name, quantity: o.quantity, dimensions: o.dimensions, color_finish: o.color_finish,
-          collectible_on_delivery: o.collectible_on_delivery, delivery_fee: o.delivery_fee,
+          collectible_on_delivery: collectOnDelivery(o, d.scheduled_date < todayISO() ? todayISO() : d.scheduled_date), delivery_fee: o.delivery_fee,
           remaining_furniture_balance: o.remaining_furniture_balance, payment_exception_type: o.payment_exception_type,
           payment_exception_approved: o.payment_exception_approved, special_instructions: o.special_instructions,
           payment_plan: o.payment_plan, installment_count: o.installment_count ?? null,
-          down_payment_ok: o.payment_exception_approved || (o.furniture_price ?? 0) - o.remaining_furniture_balance >= o.standard_down_payment_due,
+          down_payment_ok: paymentGateProblem(o, money((o.furniture_price ?? 0) - o.remaining_furniture_balance), "dispatch") === null,
         },
       };
     })

@@ -8,6 +8,7 @@ import { OrderWorkspace } from "@/components/office/order-workspace";
 import { formatDate, formatDateTime, todayISO } from "@/lib/domain/dates";
 import { formatPeso, furniturePaidFrom, money } from "@/lib/domain/finance";
 import { installmentSchedule } from "@/lib/domain/installments";
+import { paymentGateProblem, requiredBeforeStart } from "@/lib/domain/payment-terms";
 import { PAYMENT_PLAN_LABEL } from "@/lib/domain/types";
 import { verifierName } from "@/lib/server/office-data";
 import { formatDims } from "@/lib/domain/furniture";
@@ -44,7 +45,9 @@ export function queueRows(orders: Order[], payments: Payment[], profiles: { id: 
       item: o.item_name, quantity: o.quantity, dims: formatDims(o) ?? null,
       material: `${o.wood_type === "Other" && o.custom_wood_note ? o.custom_wood_note : o.wood_type} · ${o.color_finish}`,
       status: o.status, price: o.furniture_price, verifiedPaid: paid, remaining: o.remaining_furniture_balance,
-      down: o.standard_down_payment_due, deliveryFee: o.delivery_fee,
+      down: requiredBeforeStart(o), gateMet: paymentGateProblem(o, paid, "production") === null, deliveryFee: o.delivery_fee,
+      need: o.payment_plan === "full" ? "full payment due" : o.payment_plan === "installment" ? "installment, no down payment" : "30% due",
+      thirtyTick: o.payment_plan !== "full" && o.payment_plan !== "installment",
       pct: o.furniture_price ? Math.round((paid / o.furniture_price) * 100) : 0,
     };
   });

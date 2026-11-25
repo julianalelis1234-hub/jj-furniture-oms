@@ -1,7 +1,8 @@
 // What each accepted order is waiting for, by the customer's payment terms:
 //  - 30% down payment: the 30% (the balance is collected on delivery)
-//  - Full payment: the whole furniture price
-//  - Installment: the 30% first, then any scheduled payment that is due (within 3 days) or overdue
+//  - Full payment: the whole furniture price (before production)
+//  - Installment: no down payment; the plan must be set, then any scheduled payment that is
+//    due (within 3 days) or overdue, also after delivery
 // Only verified payments count. Used by the owner/staff "Payments to verify" page and the task inbox.
 import { formatDate } from "./dates";
 import { formatPeso, furniturePaidFrom, money } from "./finance";
@@ -30,36 +31,30 @@ export function paymentDue(o: DueOrder, payments: Payment[], today: string): Pay
   const paid = furniturePaidFrom(payments.filter((p) => p.order_id === o.id));
   if (paid >= price - 0.005) return null;
   const delivered = o.status === "Delivered";
-  const downDue = Number(o.standard_down_payment_due);
-  const downShort = o.payment_exception_approved ? 0 : money(Math.max(0, downDue - paid));
   const paidLine = `${formatPeso(paid)} of ${formatPeso(price)} paid`;
 
   if (o.payment_plan === "full") {
-    // after delivery an unpaid balance is tracked as a credit item, not here
-    if (delivered) return null;
-    return {
-      stage: "full", label: "Full payment", overdue: false, shortfall: money(price - paid),
-      detail: downShort > 0 ? `${paidLine} · ${formatPeso(downDue)} (30%) needed to start production` : paidLine,
-    };
+    // after delivery an unpaid balance is tracked as a credit item; an owner exception lifts the rule
+    if (delivered || o.payment_exception_approved) return null;
+    return { stage: "full", label: "Full payment", overdue: false, shortfall: money(price - paid), detail: `${paidLine} · needed before production` };
   }
 
-  if (downShort > 0 && !delivered) {
-    return {
-      stage: "down", label: o.payment_plan === "installment" ? "Installment · 30% down payment" : "30% down payment",
-      detail: `${formatPeso(paid)} of ${formatPeso(downDue)} paid`, shortfall: downShort, overdue: false,
-    };
+  if (o.payment_plan === "down_30") {
+    const downDue = Number(o.standard_down_payment_due);
+    const downShort = money(Math.max(0, downDue - paid));
+    if (downShort <= 0 || delivered || o.payment_exception_approved) return null; // the balance is collected on delivery
+    return { stage: "down", label: "30% down payment", detail: `${formatPeso(paid)} of ${formatPeso(downDue)} paid`, shortfall: downShort, overdue: false };
   }
-  if (o.payment_plan === "down_30") return null; // the balance is collected on delivery
 
-  // installment: payments continue after delivery
+  // installment: no down payment; payments continue after delivery
   const schedule = installmentSchedule(o, paid, today);
   if (!schedule) {
     return { stage: "installment_plan", label: "Installment · plan not set", detail: "Set the number of payments and the first due date", shortfall: 0, overdue: false };
   }
-  const dueRows = schedule.filter((r) => r.due != null && r.state !== "paid" && r.state !== "upcoming");
+  const dueRows = schedule.filter((r) => r.state !== "paid" && r.state !== "upcoming");
   if (!dueRows.length) return null;
   const first = dueRows[0];
-  const overdue = dueRows.some((r) => r.state === "overdue" || (r.state === "partial" && r.due! < today));
+  const overdue = dueRows.some((r) => r.state === "overdue" || (r.state === "partial" && r.due < today));
   return {
     stage: "installment",
     label: `Installment · ${first.label}${dueRows.length > 1 ? ` (+${dueRows.length - 1} more)` : ""}`,

@@ -6,7 +6,6 @@ import { DesignNote } from "@/components/design-note";
 import { LinkButton } from "@/components/link-button";
 import {
   AnswerQuestionDialog,
-  ConfirmOrderButton,
   ConfirmSpecsDialog,
   DecideExceptionControls,
   EditDetailsDialog,
@@ -24,7 +23,7 @@ import {
   VerifyHandoverButton,
   VerifyPaymentControls,
 } from "@/components/office/actions";
-import { ReviewProposalControls } from "@/components/office/spec-dialogs";
+import { ConfirmAndQuoteDialog, ReviewProposalControls } from "@/components/office/spec-dialogs";
 import { TransitionButton } from "@/components/office/transition-button";
 import { WorkspaceTabs } from "@/components/office/workspace-tabs";
 import { PreviewPanel } from "@/components/orders/preview-panel";
@@ -33,6 +32,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { toClientOrder } from "@/lib/client-order";
 import { addDays, formatDate, formatDateTime, todayISO } from "@/lib/domain/dates";
 import { installmentSchedule } from "@/lib/domain/installments";
+import { collectOnDelivery, paymentGateProblem, requiredBeforeStart } from "@/lib/domain/payment-terms";
 import { InstallmentTable } from "@/components/orders/installment-table";
 import { feePaidFrom, formatPeso, furniturePaidFrom, money } from "@/lib/domain/finance";
 import { describeDiff, formatDims, type FurnitureSpec, type SpecDiff } from "@/lib/domain/furniture";
@@ -104,9 +104,11 @@ export async function OrderWorkspace({ orderId, actor, variant, initialTab }: { 
   const rejected = payments.filter((p) => !!p.rejected_at);
   const unverifiedSum = money(unverified.reduce((s, p) => s + Number(p.amount), 0));
   const step = quoteStep(o);
-  const down = o.standard_down_payment_due;
-  const exceptionOk = o.payment_exception_type !== "Standard 30/70" && o.payment_exception_approved;
-  const gateMet = o.furniture_price != null && (verifiedPaid >= down || exceptionOk);
+  const down = requiredBeforeStart(o);
+  const gateProblem = paymentGateProblem(o, verifiedPaid, "production");
+  const gateMet = o.furniture_price != null && gateProblem === null;
+  const isInstallment = o.payment_plan === "installment";
+  const needName = o.payment_plan === "full" ? "full payment" : "30% down payment";
   const pct = o.furniture_price ? Math.round((verifiedPaid / o.furniture_price) * 100) : 0;
 
   // ------------------------------------------------------------ next step ----
@@ -130,9 +132,10 @@ export async function OrderWorkspace({ orderId, actor, variant, initialTab }: { 
           return <>
             <p className="w-full text-sm">
               <b>{o.order_origin === "customer_self_service" ? "New online order." : "New order."}</b> Check the design, size, wood and finish, then confirm it.
-              {o.customer_email ? " The customer is emailed a link to create their password; the quotation comes next." : " Walk-in: no email is sent."}
+              {" "}Confirming sets the price and issues the quotation in the same step.
+              {o.customer_email ? " The customer is emailed to create their password and accept it." : " Walk-in: no email is sent."}
             </p>
-            <ConfirmOrderButton order={o} />
+            <ConfirmAndQuoteDialog order={o} validityDays={validityDays} />
             <EditDetailsDialog order={o} />
           </>;
         })()}
@@ -154,8 +157,9 @@ export async function OrderWorkspace({ orderId, actor, variant, initialTab }: { 
           }
           return <>
             <p className="w-full text-sm">
-              Quotation accepted{o.payment_plan && <> · <b>{PAYMENT_PLAN_LABEL[o.payment_plan]}</b>{o.preferred_payment_method && `, ${o.preferred_payment_method}`}</>}. <b>Not yet authorized to cut wood:</b> release to the workshop
-              after the 30% down payment ({formatPeso(down)}) is verified. {formatPeso(verifiedPaid)} verified so far{unverifiedSum > 0 && <> (+ {formatPeso(unverifiedSum)} waiting for verification)</>}.
+              Quotation accepted{o.payment_plan && <> · <b>{PAYMENT_PLAN_LABEL[o.payment_plan]}</b>{o.preferred_payment_method && `, ${o.preferred_payment_method}`}</>}. <b>{gateMet ? "Ready for the workshop." : "Not yet authorized to cut wood:"}</b> {isInstallment
+                ? (o.payment_exception_approved ? "Installment approved by the owner, no down payment needed." : "release to the workshop after the owner approves the installment plan (no down payment).")
+                : <>release to the workshop after the {needName} ({formatPeso(down)}) is verified.</>} {formatPeso(verifiedPaid)} verified so far{unverifiedSum > 0 && <> (+ {formatPeso(unverifiedSum)} waiting for verification)</>}.
             </p>
             <StartProductionDialog order={o} verifiedPaid={verifiedPaid} blocking={blockingItems(o.id, exceptions).length} craftsmen={craftsmen} />
             <LogPaymentDialog order={o} defaultAmount={Math.max(0, down - verifiedPaid) || undefined} />
@@ -303,10 +307,10 @@ export async function OrderWorkspace({ orderId, actor, variant, initialTab }: { 
             <Row label="Payment terms">{o.payment_plan ? `${PAYMENT_PLAN_LABEL[o.payment_plan]}${o.preferred_payment_method ? ` · ${o.preferred_payment_method}` : ""}` : "Chosen when the customer accepts"}</Row>
             <Row label="Furniture price">{o.furniture_price == null ? "Pending quotation" : formatPeso(o.furniture_price)}</Row>
             <Row label={`Delivery fee (separate)${o.municipality === "Valencia City" ? " · Valencia City" : ""}`}>{o.delivery_fee === 0 ? "FREE" : formatPeso(o.delivery_fee)}</Row>
-            <Row label="30% down payment">{o.furniture_price == null ? "—" : formatPeso(down)}</Row>
+            <Row label={isInstallment ? "Before production" : `Before production (${needName})`}>{o.furniture_price == null ? "—" : isInstallment ? "Owner approval, no down payment" : formatPeso(down)}</Row>
           </dl>
           <div className="flex flex-wrap gap-2">
-            {o.status === "Waiting for Confirmation" && <ConfirmOrderButton order={o} />}
+            {o.status === "Waiting for Confirmation" && <ConfirmAndQuoteDialog order={o} validityDays={validityDays} />}
             {(o.status === "Quote Requested" || o.status === "Waiting for Confirmation" || o.status === "Confirmed") &&
               <ReviseSpecsDialog order={o} validityDays={validityDays} label={step === "awaiting_quotation" ? "Issue quotation" : o.status === "Confirmed" ? "Re-issue quotation" : "Edit draft quote"} />}
             {step === "awaiting_acceptance" && !o.is_legacy_incomplete && <ConfirmSpecsDialog order={o} />}
@@ -363,23 +367,24 @@ export async function OrderWorkspace({ orderId, actor, variant, initialTab }: { 
   const payment = (
     <div className="grid gap-4">
       <Card className="gap-0 py-0" data-testid="production-gate">
-        <CardHeader className="border-b bg-secondary py-3"><CardTitle>Payments & 30% production gate</CardTitle></CardHeader>
+        <CardHeader className="border-b bg-secondary py-3"><CardTitle>Payments & production gate</CardTitle></CardHeader>
         <CardContent className="grid gap-3 bg-background py-4">
           <dl className="grid gap-1 text-sm">
             <Row label="Furniture price">{o.furniture_price == null ? "Pending quotation" : formatPeso(o.furniture_price)}</Row>
-            <Row label="Required 30% down payment">{o.furniture_price == null ? "—" : formatPeso(down)}</Row>
+            <Row label={isInstallment ? "Required before production" : `Required ${needName}`}>{o.furniture_price == null ? "—" : isInstallment ? "Owner approval" : formatPeso(down)}</Row>
             <Row label={`Verified furniture payments${o.furniture_price ? ` (${pct}%)` : ""}`}>{formatPeso(verifiedPaid)}</Row>
             <Row label="Unverified submissions (not counted)">{formatPeso(unverifiedSum)}</Row>
             <Row label="Remaining furniture balance">{formatPeso(o.remaining_furniture_balance)}</Row>
             <Row label="Delivery fee (separate)">{o.delivery_fee === 0 ? "FREE" : <>{formatPeso(o.delivery_fee)}{feePaidFrom(payments) > 0 && ` · paid ${formatPeso(feePaidFrom(payments))}`}</>}</Row>
-            <div className="mt-1 border-t pt-1.5"><Row label="Collect on delivery" strong>{formatPeso(o.collectible_on_delivery)}</Row></div>
+            <div className="mt-1 border-t pt-1.5"><Row label={isInstallment ? "Collect on delivery (installments due by today)" : "Collect on delivery"} strong>{formatPeso(collectOnDelivery(o, todayISO()))}</Row></div>
           </dl>
           <p className={cn("flex items-center gap-2 rounded-xl border p-2.5 text-sm font-semibold", gateMet ? "border-success/50 bg-success-soft text-success" : "border-warning/50 bg-warning-soft text-warning")} data-testid="gate-status">
             {gateMet ? <ShieldCheck className="size-5 shrink-0" aria-hidden /> : <ShieldX className="size-5 shrink-0" aria-hidden />}
             {o.furniture_price == null ? "No quotation yet — nothing to collect."
-              : verifiedPaid >= down ? "30% down payment verified — the production gate is met."
-              : exceptionOk ? "Owner-approved payment exception — the production gate is met."
-              : `Production gate NOT met: ${formatPeso(money(down - verifiedPaid))} more verified payment needed. Unverified submissions never count.`}
+              : isInstallment ? (gateMet ? "Installment approved by the owner — the production gate is met (no down payment)." : "Production gate NOT met: the owner must approve the installment plan. No down payment is needed.")
+              : down > 0 && verifiedPaid >= down ? `${needName === "full payment" ? "Full payment" : "30% down payment"} verified — the production gate is met.`
+              : gateMet ? "Owner-approved payment exception — the production gate is met."
+              : `Production gate NOT met: ${formatPeso(money(down - verifiedPaid))} more verified payment needed (${needName}). Unverified submissions never count.`}
           </p>
           {o.status === "Confirmed" && <StartProductionDialog order={o} verifiedPaid={verifiedPaid} blocking={blockingItems(o.id, exceptions).length} craftsmen={craftsmen} />}
           <PaymentTermsSelect order={o} />
@@ -430,7 +435,7 @@ export async function OrderWorkspace({ orderId, actor, variant, initialTab }: { 
               <>
                 <InstallmentTable rows={schedule} />
                 <p className="text-xs text-muted-foreground">
-                  Set by {nameOf(profiles, o.installment_set_by ?? null)}{o.installment_set_at ? ` · ${formatDateTime(o.installment_set_at)}` : ""}. Verified payments are applied in order, down payment first.
+                  Set by {nameOf(profiles, o.installment_set_by ?? null)}{o.installment_set_at ? ` · ${formatDateTime(o.installment_set_at)}` : ""}. Verified payments are applied in order.
                 </p>
               </>
             ) : (

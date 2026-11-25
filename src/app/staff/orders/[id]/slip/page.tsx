@@ -81,10 +81,16 @@ export default async function SlipPage({ params, searchParams }: PageProps<"/sta
 
         <section className="border-b border-black py-3 text-sm">
           <div className="flex justify-between"><span>Furniture price</span><b>{formatPeso(o.furniture_price)}</b></div>
-          <div className="flex justify-between"><span>30% down payment (before production)</span><b>{formatPeso(down)}</b></div>
-          <div className="flex justify-between"><span>70% balance (on delivery)</span><b>{formatPeso((o.furniture_price ?? 0) - down)}</b></div>
+          {o.payment_plan === "full" ? (
+            <div className="flex justify-between"><span>Full payment (before production)</span><b>{formatPeso(o.furniture_price)}</b></div>
+          ) : o.payment_plan === "installment" ? (
+            <div className="flex justify-between"><span>Installment: no down payment, paid every 15 days</span><b>{o.installment_count ? `${o.installment_count} payments` : "schedule to follow"}</b></div>
+          ) : (<>
+            <div className="flex justify-between"><span>30% down payment (before production)</span><b>{formatPeso(down)}</b></div>
+            <div className="flex justify-between"><span>70% balance (on delivery)</span><b>{formatPeso((o.furniture_price ?? 0) - down)}</b></div>
+          </>)}
           <div className="flex justify-between"><span>Delivery fee</span><b>{o.delivery_fee === 0 ? "FREE (Valencia City)" : formatPeso(o.delivery_fee)}</b></div>
-          <div className="mt-1 flex justify-between border-t border-black pt-1 text-base"><span className="font-bold">Collect on delivery (after 30%)</span><b>{formatPeso((o.furniture_price ?? 0) - down + o.delivery_fee)}</b></div>
+          {(o.payment_plan == null || o.payment_plan === "down_30") && <div className="mt-1 flex justify-between border-t border-black pt-1 text-base"><span className="font-bold">Collect on delivery (after 30%)</span><b>{formatPeso((o.furniture_price ?? 0) - down + o.delivery_fee)}</b></div>}
           {o.payment_exception_type !== "Standard 30/70" && <p className="mt-1 text-xs">Payment terms: {o.payment_exception_type}{o.payment_exception_approved ? " (approved by owner)" : " (pending owner approval)"}</p>}
         </section>
 
