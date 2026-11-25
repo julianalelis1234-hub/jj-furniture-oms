@@ -1,4 +1,5 @@
-import { addDays, daysBetween } from "@/lib/domain/dates";
+import { addDays, daysBetween, todayISO } from "@/lib/domain/dates";
+import { paymentDue, type PaymentDue } from "@/lib/domain/payment-due";
 import { downPaymentShortfall, furniturePaidFrom, money } from "@/lib/domain/finance";
 import { stageIndex } from "@/lib/domain/status";
 import type {
@@ -73,7 +74,8 @@ export interface StaffTasks {
   /** customer-submitted online / bank payments to check and verify or reject */
   paymentsToVerify: { payment: Payment; order: Order }[];
   specProposals: OrderException[];
-  needsDownPayment: { order: Order; shortfall: number }[];
+  /** accepted orders still owed money now, by their payment terms (30% down, full or installment) */
+  awaitingPayment: ({ order: Order } & PaymentDue)[];
   missingFields: { order: Order; missing: string[] }[];
   specQuestions: OrderException[];
   toSchedule: Order[];
@@ -98,6 +100,7 @@ export function staffTasks(
   deliveries: DeliveryAssignment[],
   exceptions: OrderException[],
   notifications: NotificationLog[],
+  today: string = todayISO(),
 ): StaffTasks {
   const byId = new Map(orders.map((o) => [o.id, o]));
   const live = (orderId: string) => deliveries.some((d) => d.order_id === orderId && d.dispatch_status !== "Failed / Reschedule");
@@ -122,10 +125,13 @@ export function staffTasks(
       .map((payment) => ({ payment, order: byId.get(payment.order_id)! }))
       .filter((x) => x.order),
     specProposals: proposals,
-    needsDownPayment: orders
-      .filter((o) => o.status !== "Delivered" && o.specs_confirmed && !o.payment_exception_approved)
-      .map((order) => ({ order, shortfall: downPaymentShortfall(order, payments) }))
-      .filter((x) => x.shortfall > 0),
+    awaitingPayment: orders
+      .map((order) => {
+        const due = paymentDue(order, payments, today);
+        return due ? { order, ...due } : null;
+      })
+      .filter((x): x is { order: Order } & PaymentDue => x !== null)
+      .sort((a, b) => Number(b.overdue) - Number(a.overdue) || a.order.order_code.localeCompare(b.order.order_code)),
     missingFields: orders
       .filter((o) => o.status !== "Delivered")
       .map((order) => ({ order, missing: missingFieldsOf(order) }))
