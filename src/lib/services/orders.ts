@@ -19,7 +19,7 @@ import {
   type PriorityLabel,
 } from "@/lib/domain/types";
 import { editOrderSchema, newOrderSchema, specRevisionSchema, type NewOrderInput } from "@/lib/domain/validation";
-import { describeDiff, dimensionsText, itemNameFor, normalizeSpec, type Dims, type SpecDiff } from "@/lib/domain/furniture";
+import { describeDiff, diffSpecs, dimensionsText, itemNameFor, normalizeSpec, type Dims, type SpecDiff } from "@/lib/domain/furniture";
 import { nextOrderCode } from "./codes";
 import { afterQuotationIssued, provisionOnConfirm } from "./customer-portal";
 import type { CustomerAuthProvider } from "./customer-auth";
@@ -236,6 +236,17 @@ export async function reviseSpecs(store: DataStore, actor: Actor, orderId: strin
   const order = await mustGetOrder(store, orderId);
   const v = parsed.data;
   const spec = normalizeSpec({ ...v, custom_wood_note: v.custom_wood_note || null });
+  // an online order's design is the customer's choice: the shop only prices it (changes go
+  // through a customer proposal). Walk-in orders were typed by the staff and stay editable.
+  if (order.order_origin === "customer_self_service" && order.furniture_category) {
+    const current = normalizeSpec({
+      furniture_category: order.furniture_category, design_variant: order.design_variant, width_cm: order.width_cm, height_cm: order.height_cm,
+      depth_cm: order.depth_cm, wood_type: order.wood_type, custom_wood_note: order.custom_wood_note, color_finish: order.color_finish, quantity: order.quantity,
+    });
+    const changed = Object.keys(diffSpecs({ ...current }, { ...spec }));
+    if (changed.length)
+      throw new DomainError("VALIDATION", "The customer chose this design. The quotation can only set the price; ask the customer to propose any change.");
+  }
   const res = await store.addSpecRevision({
     order_id: orderId,
     type: "revised_quote",

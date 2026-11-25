@@ -119,6 +119,10 @@ describe("Option 2 — customer self-service quote request", () => {
     expect((await customerOrderView(store, order.id)).spec_state).toBe("awaiting_quotation");
     expect((await err(reviseSpecs(store, actors.staff, order.id, quote({ estimated_completion_date: "" }), 1))).code).toBe("VALIDATION");
     expect((await err(reviseSpecs(store, actors.craftsman, order.id, quote(), 1))).code).toBe("FORBIDDEN");
+    // the customer's design cannot be changed by the quotation: only priced
+    const changed = await err(reviseSpecs(store, actors.owner, order.id, quote({ width_cm: "90", wood_type: "Mahogany" }), 1));
+    expect(changed.code).toBe("VALIDATION");
+    expect(changed.message).toMatch(/only set the price/);
     const quoted = await reviseSpecs(store, actors.staff, order.id, quote(), 1);
     expect(quoted.status).toBe("Confirmed");
     expect(quoted.quotation_issued_at).not.toBeNull();
