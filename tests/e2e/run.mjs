@@ -194,7 +194,7 @@ await step("owner: sidebar dashboard KPIs, approve installment, pass inspection,
   const { page, ctx } = await asPersona("Mr. Vincris Lelis", desktop);
   expect(page.url().endsWith("/owner"), "owner portal");
   await page.getByRole("heading", { level: 1, name: /^Good (morning|afternoon|evening), Vincris$/ }).waitFor();
-  for (const label of ["Dashboard", "Orders & Quotations", "Staff", "Craftsmen", "Deliveries", "Lumber & Inventory", "Reports", "Roles & Access"])
+  for (const label of ["Dashboard", "Orders & Quotations", "Payments to verify", "Staff", "Craftsmen", "Deliveries", "Lumber & Inventory", "Reports", "Roles & Access"])
     expect(await page.getByTestId("owner-nav").getByRole("link", { name: new RegExp(`^${label.replace("&", "&")}`) }).isVisible(), `sidebar ${label}`);
   for (const id of ["kpi-to-confirm", "kpi-quote-payment", "kpi-workshop", "kpi-delivery", "kpi-deposits", "kpi-balances", "kpi-late", "kpi-low-stock"]) expect(await page.getByTestId(id).isVisible(), `metric ${id}`);
   expect((await page.getByTestId("low-stock").locator("li").count()) >= 1, "low lumber stock is flagged on the dashboard");
@@ -209,7 +209,7 @@ await step("owner: sidebar dashboard KPIs, approve installment, pass inspection,
   await page.getByRole("button", { name: "Passed — ready for delivery" }).click();
   await page.getByText("Inspection passed").waitFor();
   // every section opens from the sidebar
-  for (const [label, heading] of [["Orders & Quotations", "Orders & Quotations"], ["Staff", "Staff"], ["Deliveries", "Deliveries"], ["Reports", "Reports"], ["Roles & Access", "Roles & Access"]]) {
+  for (const [label, heading] of [["Orders & Quotations", "Orders & Quotations"], ["Payments to verify", "Payments to verify"], ["Staff", "Staff"], ["Deliveries", "Deliveries"], ["Reports", "Reports"], ["Roles & Access", "Roles & Access"]]) {
     await page.getByTestId("owner-nav").getByRole("link", { name: new RegExp(`^${label}`) }).click();
     await page.getByRole("heading", { level: 1, name: heading, exact: true }).waitFor();
   }
