@@ -48,18 +48,18 @@ export default async function Home() {
 
       <header className="sticky top-0 z-30 border-b border-border bg-background/90 backdrop-blur">
         <div className="mx-auto flex w-full max-w-7xl items-center gap-2 px-3 py-2 sm:gap-4 sm:px-6 sm:py-3 max-sm:[&_img]:size-8">
-          <Logo />
+          <Logo compact />
           <nav aria-label="Site" className="ml-6 hidden items-center gap-6 text-sm font-semibold md:flex">
             <a href="#sample-work" className="hover:text-primary">Sample work</a>
             <a href="#how" className="hover:text-primary">How ordering works</a>
             <a href="#about" className="hover:text-primary">About us</a>
           </nav>
-          <div className="ml-auto flex items-center gap-2 max-sm:[&_button]:min-h-10">
+          <div className="ml-auto flex shrink-0 items-center gap-1.5 sm:gap-2">
             <ThemeToggle />
             <Link href={portal ?? "/login"} data-testid="landing-login"
-              className="inline-flex h-10 items-center gap-2 rounded-xl bg-primary px-3 text-[13px] font-bold text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:ring-3 focus-visible:ring-ring/40 focus-visible:outline-none sm:h-11 sm:px-4 sm:text-sm">
-              <LogIn className="size-4" aria-hidden />
-              {portal ? "Open my portal" : <>Login{isDemoMode() && <span className="hidden sm:inline">&nbsp;/ Demo access</span>}</>}
+              className="inline-flex h-10 shrink-0 items-center gap-2 whitespace-nowrap rounded-xl bg-primary px-3 text-[13px] font-bold text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:ring-3 focus-visible:ring-ring/40 focus-visible:outline-none sm:h-11 sm:px-4 sm:text-sm">
+              <LogIn className={cn("size-4", portal && "max-sm:hidden")} aria-hidden />
+              {portal ? <><span className="sm:hidden">Portal</span><span className="hidden sm:inline">Open my portal</span></> : <>Login{isDemoMode() && <span className="hidden sm:inline">&nbsp;/ Demo access</span>}</>}
             </Link>
           </div>
         </div>
