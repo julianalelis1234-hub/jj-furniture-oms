@@ -27,6 +27,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Switch } from "@/components/ui/switch";
 import { formatDate, formatDateTime, todayISO } from "@/lib/domain/dates";
 import { formatPeso } from "@/lib/domain/finance";
+import { PAYMENT_PLAN_LABEL } from "@/lib/domain/types";
 import {
   enqueueAction,
   flushQueue,
@@ -369,6 +370,7 @@ function DeliveryDetail({ entry: e, today, onBack, onStart, onDelivered, onFaile
         <p className="text-sm font-semibold">Collect on delivery</p>
         <p className="text-3xl font-black tabular-nums">{formatPeso(o.collectible_on_delivery)}</p>
         <p className="text-xs opacity-80">balance {formatPeso(o.remaining_furniture_balance)} + delivery fee {o.delivery_fee === 0 ? "FREE" : formatPeso(o.delivery_fee)}</p>
+        {o.payment_plan && <p data-testid="drv-terms" className="mt-1 text-sm font-semibold">{paymentTermsLine(o)}</p>}
       </div>
 
       <div className="mt-3 grid grid-cols-2 gap-2">
@@ -380,7 +382,7 @@ function DeliveryDetail({ entry: e, today, onBack, onStart, onDelivered, onFaile
         {d.dispatch_status === "Scheduled" && (o.down_payment_ok ? (
           <Button size="xl" onClick={onStart}><Truck aria-hidden /> Start Trip</Button>
         ) : (
-          <p className="rounded-lg border border-warning bg-warning-soft p-2 text-sm font-semibold">Hold: 30% down payment not received and no owner approval yet. Call the shop before loading.</p>
+          <p className="rounded-lg border border-warning bg-warning-soft p-2 text-sm font-semibold">Hold: {o.payment_plan === "full" ? "the full payment" : "the 30% down payment"} is not verified yet and there is no owner approval. Call the shop before loading.</p>
         ))}
         {d.dispatch_status === "Out for Delivery" && (
           <>
@@ -461,4 +463,13 @@ function FailedDialog({ entry, online, onClose, onSubmit }: { entry: CachedEntry
       </DialogContent>
     </Dialog>
   );
+}
+
+/** The customer's payment terms, in the words the rider needs at the door. */
+function paymentTermsLine(o: ManifestEntry["order"]): string {
+  const label = o.payment_plan ? PAYMENT_PLAN_LABEL[o.payment_plan] : "";
+  if (o.remaining_furniture_balance <= 0) return `${label} · furniture paid in full`;
+  if (o.payment_plan === "installment")
+    return `${label}${o.installment_count ? ` (${o.installment_count} payments every 15 days)` : ""} · collect only what the shop told you`;
+  return `${label} · collect the balance`;
 }

@@ -14,7 +14,7 @@ export function staffInbox(data: OfficeData) {
     ...t.specProposals.map((e) => ({ id: e.order_id, order: code(e.order_id), label: "Review the customer's proposed changes", tab: "overview", kind: "question" as const })),
     ...t.toQuote.map((o) => ({ id: o.id, order: o.order_code, label: "Issue the quotation", tab: "quotation", kind: "quote" as const })),
     ...t.paymentsToVerify.map(({ payment, order }) => ({ id: order.id, order: order.order_code, label: `Verify a ${payment.payment_method} payment (${formatPeso(payment.amount)}, ref. ${payment.reference_number ?? "-"})`, tab: "payments", kind: "payment" as const })),
-    ...t.needsDownPayment.map(({ order, shortfall }) => ({ id: order.id, order: order.order_code, label: `Waiting for the 30% down payment (${formatPeso(shortfall)} short)`, tab: "payments", kind: "payment" as const })),
+    ...t.awaitingPayment.map(({ order, label, shortfall, overdue, stage }) => ({ id: order.id, order: order.order_code, label: stage === "installment_plan" ? "Set the installment plan" : `${overdue ? "Overdue" : "Waiting for"}: ${label} (${formatPeso(shortfall)} short)`, tab: "payments", kind: "payment" as const })),
     ...t.readyForProduction.map((o) => ({ id: o.id, order: o.order_code, label: "Release to the workshop (30% verified)", tab: "payments", kind: "workshop" as const })),
     ...t.cashHandovers.map(({ payment, order }) => ({ id: order.id, order: order.order_code, label: `Verify cash handover (${formatPeso(payment.amount)})`, tab: "payments", kind: "payment" as const })),
     ...t.specQuestions.map((e) => ({ id: e.order_id, order: code(e.order_id), label: "Answer a craftsman's question", tab: "overview", kind: "question" as const })),

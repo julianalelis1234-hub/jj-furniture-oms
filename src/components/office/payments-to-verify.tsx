@@ -2,6 +2,7 @@ import { Banknote, Clock, ShieldCheck, Wallet } from "lucide-react";
 import Link from "next/link";
 import { CardSection, KpiCard, KpiRow, PageHeading } from "@/components/dashboard";
 import { RowList } from "@/components/rows";
+import { cn } from "@/lib/utils";
 import { formatDateTime } from "@/lib/domain/dates";
 import { formatPeso } from "@/lib/domain/finance";
 import type { OfficeData } from "@/lib/server/office-data";
@@ -9,11 +10,19 @@ import { staffInbox } from "@/lib/server/staff-inbox";
 
 /**
  * Payments to verify (staff and owner): customer transfers and rider cash waiting to be
- * checked, and orders still short of the 30%. Each row opens the order's Payments tab.
+ * checked, and orders still owed money under their payment terms (30% down, full or installment). Each row opens the order's Payments tab.
  */
 export function PaymentsToVerify({ data, ordersPath }: { data: OfficeData; ordersPath: string }) {
   const { t } = staffInbox(data);
   const open = (id: string) => `${ordersPath}?order=${id}&tab=payments`;
+  const waiting = t.awaitingPayment;
+  const count = (k: string[]) => waiting.filter((w) => k.includes(w.stage)).length;
+  const parts = [
+    ["30% down", count(["down"])],
+    ["Full", count(["full"])],
+    ["Installment", count(["installment", "installment_plan"])],
+  ].filter(([, n]) => n).map(([l, n]) => `${l}: ${n}`);
+  const waitingSub = parts.length ? parts.join(" · ") : "every order is paid up to its terms";
   const pendingTotal = [...t.paymentsToVerify, ...t.cashHandovers].reduce((s, x) => s + x.payment.amount, 0);
   return (
     <>
@@ -22,7 +31,7 @@ export function PaymentsToVerify({ data, ordersPath }: { data: OfficeData; order
         <KpiCard label="Online & bank" value={t.paymentsToVerify.length} icon={<ShieldCheck />} sub="reference + receipt to check" tone={t.paymentsToVerify.length ? "warning" : "good"} />
         <KpiCard label="Rider cash" value={t.cashHandovers.length} icon={<Banknote />} sub="handovers to count" tone={t.cashHandovers.length ? "warning" : "good"} />
         <KpiCard label="Waiting to verify" value={formatPeso(pendingTotal)} icon={<Wallet />} sub="not yet counted" />
-        <KpiCard label="Short of 30%" value={t.needsDownPayment.length} icon={<Clock />} sub="orders waiting for a down payment" />
+        <KpiCard label="Waiting for payment" value={waiting.length} icon={<Clock />} sub={waitingSub} tone={waiting.some((w) => w.overdue) ? "warning" : undefined} />
       </KpiRow>
       <CardSection id="to-verify" title="Customer payments" chip="Open the order to verify or reject">
         {t.paymentsToVerify.length === 0 ? <p className="text-sm text-muted-foreground">No online or bank payments waiting.</p> : (
@@ -53,13 +62,21 @@ export function PaymentsToVerify({ data, ordersPath }: { data: OfficeData; order
             </RowList>
           )}
         </CardSection>
-        <CardSection id="short" title="Waiting for the 30% down payment" className="mb-0 sm:mb-0">
-          {t.needsDownPayment.length === 0 ? <p className="text-sm text-muted-foreground">Every accepted order has its 30%.</p> : (
-            <RowList>
-              {t.needsDownPayment.map(({ order: o, shortfall }) => (
+        <CardSection id="short" title="Waiting for payment" chip="By each order's payment terms" className="mb-0 sm:mb-0">
+          {waiting.length === 0 ? <p className="text-sm text-muted-foreground">No payments due: every order is paid up to its terms.</p> : (
+            <RowList data-testid="awaiting-payment">
+              {waiting.map(({ order: o, label, detail, shortfall, overdue, stage }) => (
                 <li key={o.id}>
-                  <Link href={open(o.id)} scroll={false} className="flex items-center gap-3 px-1 py-2.5 text-xs hover:bg-accent-soft/60 sm:px-2 sm:text-sm">
-                    <b className="tabular-nums">{o.order_code}</b><span className="min-w-0 flex-1">{o.customer_name}</span><span className="font-semibold text-warning tabular-nums">{formatPeso(shortfall)} short</span>
+                  <Link href={open(o.id)} scroll={false} className="flex items-start gap-3 px-1 py-2.5 text-xs hover:bg-accent-soft/60 sm:px-2 sm:text-sm">
+                    <b className="tabular-nums">{o.order_code}</b>
+                    <span className="min-w-0 flex-1">
+                      {o.customer_name}
+                      <span className="block font-semibold">{label}</span>
+                      <span className="block text-muted-foreground">{detail}</span>
+                    </span>
+                    <span className={cn("shrink-0 font-semibold tabular-nums", overdue ? "text-destructive" : "text-warning")}>
+                      {stage === "installment_plan" ? "Set plan" : `${formatPeso(shortfall)} short`}
+                    </span>
                   </Link>
                 </li>
               ))}

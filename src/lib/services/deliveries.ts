@@ -237,6 +237,7 @@ export async function driverManifest(store: DataStore, actor: Actor) {
           collectible_on_delivery: o.collectible_on_delivery, delivery_fee: o.delivery_fee,
           remaining_furniture_balance: o.remaining_furniture_balance, payment_exception_type: o.payment_exception_type,
           payment_exception_approved: o.payment_exception_approved, special_instructions: o.special_instructions,
+          payment_plan: o.payment_plan, installment_count: o.installment_count ?? null,
           down_payment_ok: o.payment_exception_approved || (o.furniture_price ?? 0) - o.remaining_furniture_balance >= o.standard_down_payment_due,
         },
       };

@@ -386,7 +386,11 @@ export async function transitionOrder(store: DataStore, actor: Actor, orderId: s
   if (opts.expectedVersion !== undefined && opts.expectedVersion !== order.version) {
     throw new DomainError("VERSION_CONFLICT", "This order was changed by someone else. Please refresh.", order);
   }
-  assertTransition(order, to, await writer.listPayments(orderId));
+  // Riders may only read the payments they collected themselves (RLS), so the
+  // down-payment check reads all verified payments with the server's elevated access.
+  // This is a read only: the update below still runs as the actor.
+  const paymentsReader = actor.role === "driver" ? store.elevated() : writer;
+  assertTransition(order, to, await paymentsReader.listPayments(orderId));
 
   const patch: OrderPatch = { status: to };
   const res = await writer.updateOrder(orderId, patch, opts.expectedVersion ?? order.version);
