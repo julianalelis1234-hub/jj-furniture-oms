@@ -20,14 +20,15 @@ const PORTAL_LABEL: Record<Role | "customer", { title: string; code: string }> =
   customer: { title: "Customer Portal", code: "CU-01" },
 };
 
-export function Logo() {
+/** `compact`: on phones, the name only (no tagline), so a crowded header keeps it on one line. */
+export function Logo({ compact = false }: { compact?: boolean }) {
   return (
-    <Link href="/" className="flex items-center gap-2.5" aria-label="JJ Enterprises — Furniture and Lumber Dealer — home">
+    <Link href="/" className={cn("flex items-center gap-2.5", compact && "min-w-0 max-sm:gap-2")} aria-label="JJ Enterprises — Furniture and Lumber Dealer — home">
       {/* the carved emblem, background removed (public/brand/jj-enterprises-logo.png) */}
       <Image src="/brand/jj-enterprises-logo-128.png" alt="" width={40} height={42} priority className="size-10 object-contain" />
-      <span className="leading-none">
-        <span className="block text-[1.15rem] font-extrabold tracking-[-0.02em]">JJ Enterprises</span>
-        <span className="block pt-0.5 text-[0.72rem] font-semibold text-muted-foreground">Furniture and Lumber Dealer</span>
+      <span className={cn("leading-none", compact && "min-w-0 max-[359px]:hidden")}>
+        <span className={cn("block text-[1.15rem] font-extrabold tracking-[-0.02em]", compact && "max-sm:text-base whitespace-nowrap")}>JJ Enterprises</span>
+        <span className={cn("block pt-0.5 text-[0.72rem] font-semibold text-muted-foreground", compact && "max-sm:hidden")}>Furniture and Lumber Dealer</span>
       </span>
     </Link>
   );
