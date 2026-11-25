@@ -130,6 +130,7 @@ export function DriverApp({ driverId, initialManifest, serverTime }: { driverId:
       if (s.applied + s.duplicates > 0) toast.success(`Synced ${s.applied + s.duplicates} action(s) to the shop server.`);
       if (s.conflicts) toast.error(`${s.conflicts} action(s) need your review — the shop changed the order.`);
       if (s.rejected) toast.error(`${s.rejected} action(s) were refused by the server. See details below.`);
+      if (s.removed) toast.info(`${s.removed} saved action(s) were cleared: the shop removed or reassigned that delivery.`);
       if (s.networkError && !quiet) toast.warning("Signal dropped while syncing. Remaining actions stay on this phone.");
       if (!s.networkError) await preload(true);
     } finally {

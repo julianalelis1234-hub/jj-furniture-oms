@@ -100,6 +100,15 @@ export async function enqueueAction(db: DriverDb, action: DriverAction): Promise
   return item;
 }
 
+/** Drops every saved action and the cached copy of a delivery that no longer exists for this rider. */
+export async function clearDelivery(db: DriverDb, deliveryId: string): Promise<void> {
+  const tx = db.transaction(["sync_queue", "manifest"], "readwrite");
+  const q = tx.objectStore("sync_queue");
+  for (const x of await q.getAll()) if (x.action.delivery_id === deliveryId) await q.delete(x.client_transaction_id);
+  await tx.objectStore("manifest").delete(deliveryId);
+  await tx.done;
+}
+
 export async function listQueue(db: DriverDb): Promise<QueueItem[]> {
   return db.getAllFromIndex("sync_queue", "by_seq");
 }
@@ -111,6 +120,8 @@ export interface FlushSummary {
   duplicates: number;
   conflicts: number;
   rejected: number;
+  /** deliveries removed by the shop: their saved actions were cleared from this phone */
+  removed: number;
   networkError: boolean;
   remaining: number;
 }
@@ -125,7 +136,7 @@ export interface FlushSummary {
  *  - network failure: stop and keep everything for the next attempt.
  */
 export async function flushQueue(db: DriverDb, send: SendFn): Promise<FlushSummary> {
-  const summary: FlushSummary = { applied: 0, duplicates: 0, conflicts: 0, rejected: 0, networkError: false, remaining: 0 };
+  const summary: FlushSummary = { applied: 0, duplicates: 0, conflicts: 0, rejected: 0, removed: 0, networkError: false, remaining: 0 };
   const blockedOrders = new Set<string>();
   const items = await listQueue(db);
 
@@ -174,6 +185,10 @@ export async function flushQueue(db: DriverDb, send: SendFn): Promise<FlushSumma
       summary.conflicts++;
       blockedOrders.add(item.action.order_id);
       await db.put("sync_queue", { ...item, state: "conflict", message: result.message, server_current: result.current, attempts: item.attempts + 1 });
+    } else if ((result as Extract<DriverActionResult, { status: "rejected" }>).gone) {
+      // the shop removed or reassigned this delivery: nothing to send any more
+      summary.removed++;
+      await clearDelivery(db, item.action.delivery_id);
     } else {
       summary.rejected++;
       blockedOrders.add(item.action.order_id);
