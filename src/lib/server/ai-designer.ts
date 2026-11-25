@@ -47,8 +47,11 @@ export async function designWithGemini(input: { text?: string; image?: { mimeTyp
       try {
         res = await ask(true);
       } catch (e) {
+        const st = (e as { status?: number }).status;
         // a model without the thinking setting rejects it (400): ask again without it
-        if ((e as { status?: number }).status === 400 && /think/i.test(e instanceof Error ? e.message : "")) res = await ask(false);
+        if (st === 400 && /think/i.test(e instanceof Error ? e.message : "")) res = await ask(false);
+        // "high demand" is often a few seconds long: one more try on the same model
+        else if (st === 503 && deadline - Date.now() > 10_000) { await new Promise((r) => setTimeout(r, 1500)); res = await ask(true); }
         else throw e;
       }
       const out = normalizeAiDesign(JSON.parse(res.text ?? "null"));
@@ -59,9 +62,9 @@ export async function designWithGemini(input: { text?: string; image?: { mimeTyp
       const aborted = e instanceof Error && (e.name === "AbortError" || /aborted/i.test(e.message));
       lastStatus = aborted ? 504 : (e as { status?: number }).status;
       console.warn(`[ai-designer] Gemini (${model}) request failed:`, lastStatus ?? "", e instanceof Error ? e.message.slice(0, 200) : "");
-      // an unknown model name (404) or an overloaded / failing model (500, 503) -> try the next model;
-      // anything else (bad key, bad request) would fail the same way on every model
-      if (![404, 500, 503, 504].includes(lastStatus ?? 0)) break;
+      // unknown model (404), out of this model's free quota (429), overloaded / failing (500, 503) or
+      // too slow (504) -> try the next model; anything else (bad key, bad request) fails on every model
+      if (![404, 429, 500, 503, 504].includes(lastStatus ?? 0)) break;
     }
   }
   throw new AiUnavailable(lastStatus === 429 || lastStatus === 503 || lastStatus === 504 ? "busy" : "failed");

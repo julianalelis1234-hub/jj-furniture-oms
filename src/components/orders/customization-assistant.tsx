@@ -44,7 +44,7 @@ export function CustomizationAssistant({ value, onChange, onUsePhoto, onNotes }:
   onNotes?: (text: string) => void;
 }) {
   const [text, setText] = useState("");
-  const [result, setResult] = useState<(AssistantResult & { source: Source }) | null>(null);
+  const [result, setResult] = useState<(AssistantResult & { source: Source; aiBusy?: boolean }) | null>(null);
   const [before, setBefore] = useState<ConfigValue | null>(null);
   const [photoUsed, setPhotoUsed] = useState(false);
   const [ai, setAi] = useState(false);
@@ -70,10 +70,12 @@ export function CustomizationAssistant({ value, onChange, onUsePhoto, onNotes }:
     window.dispatchEvent(new Event(PREVIEW_UPDATED_EVENT)); // the 3D view highlights the change (and opens on phones)
   };
 
-  const local = (input: string, extraNote?: string) => {
+  const local = (input: string, aiBusy = false) => {
     const r = parseRequest(input, { furniture_category: value.furniture_category, design_variant: value.design_variant });
-    if (extraNote) r.notes.unshift(extraNote);
-    applyPatch(r, "rules", input);
+    // the AI could not answer: keep the customer's whole description for the shop, so nothing is lost
+    if (aiBusy && input.trim()) onNotes?.(input.trim());
+    applyPatch(r, "rules", aiBusy ? "" : input);
+    setResult({ ...r, source: "rules", aiBusy });
   };
 
   const apply = async (input: string) => {
@@ -97,10 +99,10 @@ export function CustomizationAssistant({ value, onChange, onUsePhoto, onNotes }:
         applyPatch({ patch: r.patch, understood: r.understood, notes: r.notes, photo: lib ? { src: lib.src, alt: lib.alt, caption: lib.caption } : null }, "ai", input, r.shopNote);
         return;
       }
-      if (input.trim()) local(input, j.code === "RATE_LIMITED" ? "You sent many requests; this one was read with the quick rules." : "The AI designer is busy, so the quick rules read this instead.");
+      if (input.trim()) local(input, true);
       else setPhotoError("The photo could not be read right now. Please try again in a minute, or describe it in words.");
     } catch {
-      if (input.trim()) local(input, "The AI designer could not be reached, so the quick rules read this instead.");
+      if (input.trim()) local(input, true);
     } finally {
       setBusy(false);
     }
@@ -167,7 +169,17 @@ export function CustomizationAssistant({ value, onChange, onUsePhoto, onNotes }:
       {result && (
         <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto]" role="status" aria-live="polite" data-testid="assistant-result">
           <div className="grid gap-2 text-sm">
-            <p className="text-xs font-semibold text-muted-foreground" data-testid="assistant-source">{result.source === "ai" ? "Read by the AI designer (Gemini). Check the choices below." : "Read with the quick rules."}</p>
+            {result.aiBusy ? (
+              <div className="grid gap-2 rounded-xl border border-warning/50 bg-warning-soft p-3" role="alert" data-testid="assistant-busy">
+                <p className="font-semibold text-foreground">The AI designer is busy right now, so your description was not fully read.</p>
+                <p className="text-muted-foreground">Your full description was copied to <b>Notes for the shop</b>, so nothing is lost. Try again in a minute, or set the choices below by hand.</p>
+                <Button type="button" size="sm" variant="outline" className="w-fit rounded-full" disabled={busy} onClick={() => void apply(text)} data-testid="assistant-retry">
+                  {busy ? <Loader2 className="animate-spin" aria-hidden /> : <Sparkles aria-hidden />} Try the AI designer again
+                </Button>
+              </div>
+            ) : (
+              <p className="text-xs font-semibold text-muted-foreground" data-testid="assistant-source">{result.source === "ai" ? "Read by the AI designer (Gemini). Check the choices below." : "Read with the quick rules."}</p>
+            )}
             {result.understood.length > 0 ? (
               <ul className="grid gap-1">
                 {result.understood.map((u) => (
@@ -175,7 +187,7 @@ export function CustomizationAssistant({ value, onChange, onUsePhoto, onNotes }:
                 ))}
               </ul>
             ) : (
-              <p className="text-muted-foreground">I could not match that to a type, size, wood or finish. Try words like “dining table”, “2 meters”, “mahogany” or “walnut”, or pick below.</p>
+              !result.aiBusy && <p className="text-muted-foreground">I could not match that to a type, size, wood or finish. Try words like “dining table”, “2 meters”, “mahogany” or “walnut”, or pick below.</p>
             )}
             {result.notes.map((n) => (
               <p key={n} className="flex gap-2 text-muted-foreground"><Info className="mt-0.5 size-4 shrink-0" aria-hidden />{n}</p>
