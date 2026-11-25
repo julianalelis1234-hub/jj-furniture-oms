@@ -751,6 +751,12 @@ await step("3D turntable: exact W×H×D labels, non-blocking warning, NULL → 2
   expect((await page.getByTestId("ar-unsupported").innerText()).includes("Open this page on your phone"), "desktop: AR points to the phone");
   await page.keyboard.press("Escape");
   await page.getByTestId("ar-viewer").waitFor({ state: "detached" });
+  // new furniture types with details: a chest of drawers with one more drawer
+  await page.getByTestId("cat-Drawer Cabinet").click();
+  await page.getByTestId("opt-drawers-plus").click();
+  expect((await page.inputValue('input[type=hidden][name="design_variant"]')) === "Chest of Drawers · 6 drawers", "the drawer count is part of the design");
+  await page.getByTestId("preview-3d").waitFor();
+  await page.getByTestId("cat-Living Room Set").click();
   await page.fill('input[name="width_cm"]', "30");
   await page.getByTestId("feasibility-warning").first().waitFor();
   expect((await page.inputValue('input[name="width_cm"]')) === "30", "entered width is kept exactly (no clamping)");

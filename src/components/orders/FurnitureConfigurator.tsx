@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronDown, ChevronUp, DoorOpen, Lock, Package, Sofa, Table2, Warehouse } from "lucide-react";
+import { Archive, Armchair, BedDouble, ChevronDown, ChevronUp, DoorOpen, Flame, LampDesk, Lock, Minus, Package, Plus, RectangleHorizontal, Sofa, Table2, Tv, Warehouse } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   CATALOG,
@@ -11,6 +11,7 @@ import {
   type FurnitureCategory,
   type FurnitureSpec,
 } from "@/lib/domain/furniture";
+import { COUNT_KEYS, LEG_STYLES, composeVariant, effectiveOptions, optionRules, splitVariant, type DesignOptions } from "@/lib/domain/design-options";
 import { WOOD_TYPES, type WoodType } from "@/lib/domain/types";
 import { cn } from "@/lib/utils";
 import { finishLook, type PreviewSpec } from "./FurniturePreview";
@@ -95,8 +96,67 @@ const CAT_ICON: Record<FurnitureCategory, ReactNode> = {
   "Dining Table": <Table2 />,
   "Living Room Set": <Sofa />,
   "Kitchen / Wall Cabinet": <Warehouse />,
+  Chair: <Armchair />,
+  Bench: <RectangleHorizontal />,
+  "TV Stand / Console": <Tv />,
+  "Altar Table": <Flame />,
+  "Study Desk": <LampDesk />,
+  Headboard: <BedDouble />,
+  "Drawer Cabinet": <Archive />,
   "Custom Piece": <Package />,
 };
+
+/** Drawers / shelves / doors steppers and the leg style for designs that offer them. */
+function DesignOptionsPanel({ value, onChange, disabled }: { value: ConfigValue; onChange: (variant: string) => void; disabled?: boolean }) {
+  const cat = value.furniture_category || null;
+  const { base, options } = splitVariant(value.design_variant);
+  const rules = optionRules(cat, base);
+  const eff = effectiveOptions(cat, value.design_variant);
+  const keys = COUNT_KEYS.filter((k) => rules[k]);
+  if (!keys.length && !rules.legs) return null;
+  const update = (patch: DesignOptions) => onChange(composeVariant(cat, base, { ...options, ...patch }));
+  const label = { drawers: "Drawers", shelves: "Open shelves", doors: "Doors" } as const;
+  return (
+    <div className="grid gap-3 rounded-xl border border-dashed border-border p-3" data-testid="design-options">
+      <p className="text-xs font-semibold text-muted-foreground">Details for this design</p>
+      <div className="flex flex-wrap gap-x-5 gap-y-3">
+        {keys.map((k) => {
+          const r = rules[k]!;
+          const cur = eff[k] ?? null;
+          const shown = cur ?? r.def;
+          return (
+            <div key={k} className="grid gap-1">
+              <span className="text-sm font-semibold">{label[k]}</span>
+              <div className="flex items-center gap-1" role="group" aria-label={label[k]}>
+                <button type="button" disabled={disabled || (shown ?? r.min) <= r.min} onClick={() => update({ [k]: Math.max(r.min, (shown ?? r.min + 1) - 1) })}
+                  aria-label={`Fewer ${label[k].toLowerCase()}`} data-testid={`opt-${k}-minus`}
+                  className="grid size-11 place-items-center rounded-lg border bg-card hover:border-primary/50 disabled:opacity-40"><Minus className="size-4" aria-hidden /></button>
+                <output className="min-w-12 text-center text-base font-bold tabular-nums" data-testid={`opt-${k}`} aria-live="polite">{shown ?? "Auto"}</output>
+                <button type="button" disabled={disabled || (shown ?? r.min) >= r.max} onClick={() => update({ [k]: Math.min(r.max, (shown ?? r.min - 1) + 1) })}
+                  aria-label={`More ${label[k].toLowerCase()}`} data-testid={`opt-${k}-plus`}
+                  className="grid size-11 place-items-center rounded-lg border bg-card hover:border-primary/50 disabled:opacity-40"><Plus className="size-4" aria-hidden /></button>
+              </div>
+            </div>
+          );
+        })}
+        {rules.legs && (
+          <div className="grid gap-1">
+            <span className="text-sm font-semibold">Legs</span>
+            <div className="flex gap-2">
+              {LEG_STYLES.map((l) => (
+                <Chip key={l} name="leg_style" value={l} checked={(eff.legs ?? rules.legs!.def) === l} onSelect={() => update({ legs: l })} disabled={disabled} testId={`opt-legs-${l}`}>
+                  {l === "tapered" ? "Tapered" : "Straight"}
+                </Chip>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+/** categories whose presets are listed in the same order as their designs */
+const PRESET_PER_DESIGN: ReadonlySet<FurnitureCategory> = new Set(["Chair", "Bench", "TV Stand / Console", "Study Desk", "Drawer Cabinet"]);
 const WOOD_SWATCH: Record<WoodType, string> = { Mahogany: "#8a4a2b", Gmelina: "#d9b57e", Other: "#a68664" };
 
 function Chip({
@@ -236,6 +296,17 @@ export function FurnitureConfigurator({
       ...(p ? { width_cm: String(p.width_cm), height_cm: String(p.height_cm), depth_cm: String(p.depth_cm) } : {}),
     });
   };
+  // designs whose standard sizes differ (dining chair vs rocking chair): when the size is still a
+  // standard one (not typed by hand), switching design also switches to that design's size
+  const chooseDesign = (v: string) => {
+    const c = value.furniture_category;
+    const idx = cat ? cat.variants.indexOf(v) : -1;
+    const own = c && PRESET_PER_DESIGN.has(c) && idx >= 0 ? cat!.presets[idx] : undefined;
+    set({
+      design_variant: v,
+      ...(own && cat!.presets.some(presetActive) ? { width_cm: String(own.width_cm), height_cm: String(own.height_cm), depth_cm: String(own.depth_cm) } : {}),
+    });
+  };
   const presetActive = (p: { width_cm: number; height_cm: number; depth_cm: number }) =>
     num(value.width_cm) === p.width_cm && num(value.height_cm) === p.height_cm && num(value.depth_cm) === p.depth_cm;
   const isCustomSize = !cat?.presets.some(presetActive);
@@ -306,13 +377,18 @@ export function FurnitureConfigurator({
 
         <Group legend="Design" step={2} error={errors.design_variant}>
           {cat ? (
-            <div className="flex flex-wrap gap-2">
-              {cat.variants.map((v) => (
-                <Chip key={v} name="design_variant" value={v} checked={value.design_variant === v} onSelect={() => set({ design_variant: v })} disabled={readOnly}>
-                  {v}
-                </Chip>
-              ))}
-            </div>
+            <>
+              {/* the submitted design is the name plus its details ("Chest of Drawers · 6 drawers") */}
+              <input type="hidden" name="design_variant" value={value.design_variant} />
+              <div className="flex flex-wrap gap-2">
+                {cat.variants.map((v) => (
+                  <Chip key={v} name="design_base" value={v} checked={splitVariant(value.design_variant).base === v} onSelect={() => chooseDesign(v)} disabled={readOnly}>
+                    {v}
+                  </Chip>
+                ))}
+              </div>
+              <DesignOptionsPanel value={value} onChange={(v) => set({ design_variant: v })} disabled={readOnly} />
+            </>
           ) : (
             <p className="text-sm text-muted-foreground">Choose a category first.</p>
           )}

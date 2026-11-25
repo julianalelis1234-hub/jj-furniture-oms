@@ -1,4 +1,5 @@
 import { ExternalLink, Lock, PackageCheck, Printer, ShieldCheck, ShieldX, Truck } from "lucide-react";
+import { PartsList } from "@/components/orders/parts-list";
 import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
 import { DesignNote } from "@/components/design-note";
@@ -210,6 +211,8 @@ export async function OrderWorkspace({ orderId, actor, variant, initialTab }: { 
                 : <span className="font-semibold text-warning">⚠ Quotation not accepted yet — production is blocked.</span>}
             </p>
             <p className="mt-1 text-xs text-muted-foreground">Turning or zooming the preview never changes the specification; changes go through a new revision.</p>
+            <PartsList className="mt-3" quantity={o.quantity} woodLabel={o.wood_type === "Other" && o.custom_wood_note ? o.custom_wood_note : o.wood_type}
+              spec={{ furniture_category: o.furniture_category, design_variant: o.design_variant, width_cm: o.width_cm, height_cm: o.height_cm, depth_cm: o.depth_cm }} />
           </div>
           {/* the one 3D renderer (Furniture3DPreview via PreviewPanel); view-only */}
           <PreviewPanel spec={specOf(o)} legacyDimensions={o.is_legacy_incomplete ? o.dimensions : null} />

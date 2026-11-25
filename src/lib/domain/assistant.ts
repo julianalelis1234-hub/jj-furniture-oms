@@ -2,6 +2,7 @@
 // 2 meters long, dark finish") into configurator choices. Rule-based and local:
 // no text leaves the browser and nothing is invented. Whatever it cannot read is
 // reported back so the customer can pick it by hand.
+import { composeVariant, optionRules, splitVariant, type DesignOptions } from "./design-options";
 import { CATALOG, FINISHES, type FurnitureCategory } from "./furniture";
 import type { WoodType } from "./types";
 
@@ -41,6 +42,18 @@ export const PHOTO_LIBRARY: (ReferencePhoto & { category: FurnitureCategory; var
 
 /** Checked in this order: specific pieces first, so "cabinet with glass doors" is a cabinet, not a door. */
 const CATEGORY_WORDS: [RegExp, FurnitureCategory, string?][] = [
+  [/\bheadboard\b/, "Headboard"],
+  [/\b(rocking\s*chair|rocker|tumba[\s-]*tumba)\b/, "Chair", "Rocking Chair"],
+  [/\b(arm\s*chair)\b/, "Chair", "Armchair"],
+  [/\b(chairs?|silya|upuan)\b/, "Chair"],
+  [/\b(bench|bangko)\b/, "Bench"],
+  [/\b(tv\s*stand|tv\s*console|tv\s*cabinet|media\s*console|entertainment)\b/, "TV Stand / Console", "Low TV Stand"],
+  [/\b(console)\b/, "TV Stand / Console", "Console Table"],
+  [/\b(altar)\b/, "Altar Table"],
+  [/\b(desk|study\s*table|office\s*table|computer\s*table)\b/, "Study Desk"],
+  [/\b(bedside|night\s*stand|nightstand)\b/, "Drawer Cabinet", "Bedside Table"],
+  [/\b(dresser|vanity)\b/, "Drawer Cabinet", "Dresser"],
+  [/\b(chest\s*of\s*drawers|drawer\s*cabinet|tokador)\b/, "Drawer Cabinet", "Chest of Drawers"],
   [/\b(bed|kama|katre|bedframe)\b/, "Custom Piece", "Bed Frame"],
   [/\b(wardrobe|aparador|closet|armoire)\b/, "Custom Piece", "Wardrobe / Aparador"],
   [/\b(bookshelf|book\s*shelf|shelf|shelves|divider|estante)\b/, "Custom Piece", "Bookshelf / Divider"],
@@ -56,6 +69,13 @@ const VARIANT_WORDS: Record<FurnitureCategory, [RegExp, string][]> = {
   "Dining Table": [[/\bround|pedestal|bilog/, "Round Pedestal"]],
   "Living Room Set": [[/\bl[\s-]*shape|corner/, "L-Shape Corner Frame"], [/\bcurved|armrest|classic/, "Classic Curved Armrest Set"], [/\bslat|3[\s-]*1[\s-]*1/, "3-1-1 Slatted Wooden Set"]],
   "Kitchen / Wall Cabinet": [[/\bglass|display|hutch/, "Glass-Front Display Hutch"], [/\boverhead|wall|hanging/, "2-Door Overhead"], [/\bbase|counter|3[\s-]*door/, "3-Door Base Counter"]],
+  Chair: [[/\brock/, "Rocking Chair"], [/\barm/, "Armchair"], [/\bdining|slat/, "Slatted Dining Chair"]],
+  Bench: [[/\bback\s*rest|backrest|with\s*back|garden|park/, "Backrest Bench"]],
+  "TV Stand / Console": [[/\bconsole\s*table|entry|hallway/, "Console Table"], [/\btv/, "Low TV Stand"]],
+  "Altar Table": [[/\b(two|2)[\s-]*tier|tiered|step/, "Two-Tier Altar"]],
+  "Study Desk": [[/\bpedestal|drawers\b/, "Desk with Drawer Pedestal"]],
+  Headboard: [[/\bslat/, "Slatted Headboard"], [/\bpanel|plain|solid/, "Panel Headboard"]],
+  "Drawer Cabinet": [[/\bbedside|night/, "Bedside Table"], [/\bdresser|wide|low/, "Dresser"]],
   "Custom Piece": [],
 };
 
@@ -120,7 +140,7 @@ function readDims(t: string, understood: string[]): Pick<AssistantPatch, "width_
  * Reads a description and returns only what it is sure about. `current` is the
  * configurator's category, so "make it 2 meters" can resize the piece already chosen.
  */
-export function parseRequest(text: string, current?: { furniture_category: FurnitureCategory | "" }): AssistantResult {
+export function parseRequest(text: string, current?: { furniture_category: FurnitureCategory | ""; design_variant?: string }): AssistantResult {
   const t = ` ${text.toLowerCase().replace(/[’`]/g, "'").replace(/\s+/g, " ")} `;
   const patch: AssistantPatch = {};
   const understood: string[] = [];
@@ -188,10 +208,34 @@ export function parseRequest(text: string, current?: { furniture_category: Furni
   const qty = q ? Number(q[1]) : /\bpair\b/.test(t) ? 2 : 0;
   if (qty > 1 && qty <= 50) { patch.quantity = String(qty); understood.push(`Quantity: ${qty}`); }
 
+  // details: "4 drawers", "three shelves", "2 doors", "tapered legs"
+  const designCat = (patch.furniture_category ?? cat) as FurnitureCategory | undefined;
+  const designBase = splitVariant(patch.design_variant ?? current?.design_variant ?? "").base;
+  if (designCat && designBase) {
+    const rules = optionRules(designCat, designBase);
+    const opts: DesignOptions = { ...splitVariant(current?.design_variant).options };
+    const num = "(\\d{1,2}|one|two|three|four|five|six|seven|eight|isa|dalawa|tatlo|apat|anim|walo)";
+    for (const [key, word] of [["drawers", "drawers?"], ["shelves", "shel(?:f|ves)"], ["doors", "doors?"]] as const) {
+      const m = noDims.match(new RegExp(`\\b${num}\\s*(?:-\\s*)?${word}\\b`));
+      const r = rules[key];
+      if (!m || !r) continue;
+      const n = Number(m[1]) || NUMBER_WORDS[m[1]] || 0;
+      opts[key] = Math.min(r.max, Math.max(r.min, n));
+      understood.push(`${key[0].toUpperCase()}${key.slice(1)}: ${opts[key]}${n !== opts[key] ? ` (this design takes ${r.min}–${r.max})` : ""}`);
+    }
+    const legs = t.match(/\b(tapered|straight)\s+legs?\b/);
+    if (legs && rules.legs) { opts.legs = legs[1] as DesignOptions["legs"]; understood.push(`Legs: ${legs[1]}`); }
+    const composed = composeVariant(designCat, designBase, opts);
+    if (composed !== (patch.design_variant ?? current?.design_variant)) {
+      patch.design_variant = composed;
+      if (!patch.furniture_category && current?.furniture_category) patch.furniture_category = designCat;
+    }
+  }
+
   // things a person must answer
   if (/\b(price|cost|how much|magkano|budget|₱|php|peso)/.test(t)) notes.push("Price: the shop sends the official quotation after confirming your order.");
   if (/\b(deliver|delivery|when|kailan|deadline|rush|urgent|needed|before|until)/.test(t)) notes.push("Timing: your words were copied to “Notes for the shop”; the shop confirms the dates.");
-  if (/\b(carv|engrav|inlay|drawer|lock|mirror|cushion|foam|upholster)/.test(t)) notes.push("Extra details (carving, drawers, cushions…): copied to “Notes for the shop” so they are quoted.");
+  if (/\b(carv|engrav|inlay|lock|mirror|cushion|foam|upholster)/.test(t)) notes.push("Extra details (carving, locks, cushions…): copied to “Notes for the shop” so they are quoted.");
 
   const photoCat = patch.furniture_category ?? (cat as FurnitureCategory | undefined);
   const photo = photoCat ? PHOTO_LIBRARY.find((p) => p.category === photoCat) ?? null : null;

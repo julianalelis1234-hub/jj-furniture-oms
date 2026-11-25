@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { CATALOG, FINISHES, FURNITURE_CATEGORIES } from "./furniture";
+import { variantProblems } from "./design-options";
+import { CATALOG, FINISHES, FURNITURE_CATEGORIES, type FurnitureCategory } from "./furniture";
 import {
   CONFIRMATION_METHODS,
   EXCEPTION_CATEGORIES,
@@ -42,8 +43,10 @@ export function refineSpec(v: { furniture_category: string; design_variant: stri
     ctx.addIssue({ code: "custom", path: ["custom_wood_note"], message: 'Describe the wood when "Other" is selected.' });
   }
   const cat = CATALOG[v.furniture_category as keyof typeof CATALOG];
-  if (cat && !cat.variants.includes(v.design_variant)) {
-    ctx.addIssue({ code: "custom", path: ["design_variant"], message: `Choose a ${v.furniture_category} design.` });
+  if (cat) {
+    // the design name, plus optional details such as " · 4 drawers · tapered legs"
+    const problem = variantProblems(v.furniture_category as FurnitureCategory, v.design_variant)[0];
+    if (problem) ctx.addIssue({ code: "custom", path: ["design_variant"], message: problem });
   }
 }
 export const furnitureSpecSchema = z.object(furnitureSpecShape).superRefine(refineSpec);

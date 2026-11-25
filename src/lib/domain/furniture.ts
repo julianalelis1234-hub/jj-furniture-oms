@@ -7,6 +7,13 @@ export const FURNITURE_CATEGORIES = [
   "Dining Table",
   "Living Room Set",
   "Kitchen / Wall Cabinet",
+  "Chair",
+  "Bench",
+  "TV Stand / Console",
+  "Altar Table",
+  "Study Desk",
+  "Headboard",
+  "Drawer Cabinet",
   "Custom Piece",
 ] as const;
 export type FurnitureCategory = (typeof FURNITURE_CATEGORIES)[number];
@@ -48,6 +55,60 @@ export const CATALOG: Record<FurnitureCategory, { variants: string[]; presets: D
       { width_cm: 150, height_cm: 85, depth_cm: 55 },
     ],
     blurb: "Overhead, base and display cabinets",
+  },
+  Chair: {
+    variants: ["Slatted Dining Chair", "Rocking Chair", "Armchair"],
+    presets: [
+      { width_cm: 45, height_cm: 90, depth_cm: 50 },
+      { width_cm: 62, height_cm: 100, depth_cm: 90 },
+    ],
+    blurb: "Dining chairs, rocking chairs and armchairs",
+  },
+  Bench: {
+    variants: ["Plain Bench", "Backrest Bench"],
+    presets: [
+      { width_cm: 150, height_cm: 45, depth_cm: 35 },
+      { width_cm: 150, height_cm: 85, depth_cm: 55 },
+    ],
+    blurb: "Dining, garden and hallway benches",
+  },
+  "TV Stand / Console": {
+    variants: ["Low TV Stand", "Console Table"],
+    presets: [
+      { width_cm: 150, height_cm: 50, depth_cm: 40 },
+      { width_cm: 110, height_cm: 78, depth_cm: 35 },
+    ],
+    blurb: "TV stands and slim entryway consoles",
+  },
+  "Altar Table": {
+    variants: ["Classic Altar Table", "Two-Tier Altar"],
+    presets: [{ width_cm: 120, height_cm: 95, depth_cm: 45 }],
+    blurb: "Home altar tables with drawers",
+  },
+  "Study Desk": {
+    variants: ["Simple Study Desk", "Desk with Drawer Pedestal"],
+    presets: [
+      { width_cm: 100, height_cm: 75, depth_cm: 55 },
+      { width_cm: 120, height_cm: 75, depth_cm: 60 },
+    ],
+    blurb: "Study and office desks",
+  },
+  Headboard: {
+    variants: ["Panel Headboard", "Slatted Headboard"],
+    presets: [
+      { width_cm: 160, height_cm: 120, depth_cm: 6 },
+      { width_cm: 190, height_cm: 120, depth_cm: 6 },
+    ],
+    blurb: "Wall or bed-mounted headboards",
+  },
+  "Drawer Cabinet": {
+    variants: ["Chest of Drawers", "Bedside Table", "Dresser"],
+    presets: [
+      { width_cm: 80, height_cm: 110, depth_cm: 45 },
+      { width_cm: 50, height_cm: 60, depth_cm: 40 },
+      { width_cm: 120, height_cm: 85, depth_cm: 50 },
+    ],
+    blurb: "Chests, bedside tables and dressers",
   },
   "Custom Piece": {
     variants: ["Bed Frame", "Wardrobe / Aparador", "Bookshelf / Divider"],
@@ -118,15 +179,24 @@ export function dimensionsText(d: Dims): string {
 
 export function itemNameFor(spec: Pick<FurnitureSpec, "furniture_category" | "design_variant">): string {
   if (!spec.furniture_category || !spec.design_variant) return "Custom furniture";
-  if (spec.furniture_category === "Custom Piece") return spec.design_variant;
+  // the design's base name; options ("· 4 drawers") stay in the design field
+  const base = spec.design_variant.split(" · ")[0].trim();
   const noun: Record<FurnitureCategory, string> = {
     "Panel Door": "Panel Door",
     "Dining Table": "Dining Table",
     "Living Room Set": "Sala Set",
     "Kitchen / Wall Cabinet": "Cabinet",
+    // the design names of these already say what they are ("Rocking Chair", "Console Table")
+    Chair: "",
+    Bench: "",
+    "TV Stand / Console": "",
+    "Altar Table": "",
+    "Study Desk": "",
+    Headboard: "",
+    "Drawer Cabinet": "",
     "Custom Piece": "",
   };
-  return `${spec.design_variant} ${noun[spec.furniture_category]}`.trim();
+  return `${base} ${noun[spec.furniture_category]}`.trim();
 }
 
 export function normalizeSpec(s: FurnitureSpec): FurnitureSpec {
