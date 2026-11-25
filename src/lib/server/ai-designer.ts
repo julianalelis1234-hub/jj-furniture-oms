@@ -1,5 +1,5 @@
 import "server-only";
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, ThinkingLevel } from "@google/genai";
 import { AI_DESIGN_SCHEMA, aiSystemPrompt, normalizeAiDesign, type AiDesignResult } from "@/lib/domain/ai-design";
 
 /**
@@ -8,7 +8,7 @@ import { AI_DESIGN_SCHEMA, aiSystemPrompt, normalizeAiDesign, type AiDesignResul
  */
 export const aiDesignerEnabled = () => !!process.env.GEMINI_API_KEY;
 /** Tried in order; a model name Google retired (404) falls through to the next. */
-const MODELS = () => [...new Set([process.env.GEMINI_MODEL, "gemini-flash-latest", "gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.0-flash"].filter(Boolean) as string[])];
+const MODELS = () => [...new Set([process.env.GEMINI_MODEL, "gemini-3.8-flash", "gemini-flash-latest", "gemini-3.5-flash-lite", "gemini-flash-lite-latest"].filter(Boolean) as string[])];
 
 export class AiUnavailable extends Error {
   constructor(public reason: "off" | "busy" | "failed") { super(reason); }
@@ -24,9 +24,12 @@ export async function designWithGemini(input: { text?: string; image?: { mimeTyp
   if (input.image) parts.push({ inlineData: { mimeType: input.image.mimeType, data: input.image.data } });
   parts.push({ text: input.text?.trim() ? `Customer's description:\n"""${input.text.trim()}"""` : "The customer sent only the photo. Describe the furniture in it." });
   let lastStatus: number | undefined;
+  const deadline = Date.now() + 45_000; // stay inside the function time limit across all tries
   for (const model of MODELS()) {
+    const left = deadline - Date.now();
+    if (left < 5_000) break;
     try {
-      const res = await ai.models.generateContent({
+      const ask = (thinking: boolean) => ai.models.generateContent({
         model,
         contents: [{ role: "user", parts }],
         config: {
@@ -35,20 +38,31 @@ export async function designWithGemini(input: { text?: string; image?: { mimeTyp
           responseJsonSchema: AI_DESIGN_SCHEMA,
           temperature: 0.2,
           maxOutputTokens: 2048,
-          abortSignal: AbortSignal.timeout(15_000),
+          // filling a form needs no long reasoning: minimal thinking answers in a few seconds
+          ...(thinking ? { thinkingConfig: { thinkingLevel: ThinkingLevel.MINIMAL } } : {}),
+          abortSignal: AbortSignal.timeout(Math.min(25_000, left)),
         },
       });
+      let res;
+      try {
+        res = await ask(true);
+      } catch (e) {
+        // a model without the thinking setting rejects it (400): ask again without it
+        if ((e as { status?: number }).status === 400 && /think/i.test(e instanceof Error ? e.message : "")) res = await ask(false);
+        else throw e;
+      }
       const out = normalizeAiDesign(JSON.parse(res.text ?? "null"));
       if (!out) throw new AiUnavailable("failed");
       return out;
     } catch (e) {
       if (e instanceof AiUnavailable) throw e;
-      lastStatus = (e as { status?: number }).status;
+      const aborted = e instanceof Error && (e.name === "AbortError" || /aborted/i.test(e.message));
+      lastStatus = aborted ? 504 : (e as { status?: number }).status;
       console.warn(`[ai-designer] Gemini (${model}) request failed:`, lastStatus ?? "", e instanceof Error ? e.message.slice(0, 200) : "");
       // an unknown model name (404) or an overloaded / failing model (500, 503) -> try the next model;
       // anything else (bad key, bad request) would fail the same way on every model
-      if (![404, 500, 503].includes(lastStatus ?? 0)) break;
+      if (![404, 500, 503, 504].includes(lastStatus ?? 0)) break;
     }
   }
-  throw new AiUnavailable(lastStatus === 429 || lastStatus === 503 ? "busy" : "failed");
+  throw new AiUnavailable(lastStatus === 429 || lastStatus === 503 || lastStatus === 504 ? "busy" : "failed");
 }
