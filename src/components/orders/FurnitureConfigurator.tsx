@@ -164,6 +164,7 @@ export function FurnitureConfigurator({
   legacyDimensions,
   inDialog = false,
   intro,
+  ar = false,
 }: {
   value: ConfigValue;
   onChange: (v: ConfigValue) => void;
@@ -177,6 +178,8 @@ export function FurnitureConfigurator({
   inDialog?: boolean;
   /** shown first in the controls column (e.g. the customization assistant), so the 3D view sits right beside it */
   intro?: ReactNode;
+  /** customer designer only: the 3D view offers "View in your room" (AR) */
+  ar?: boolean;
 }) {
   const set = (patch: Partial<ConfigValue>) => onChange({ ...value, ...patch });
   const cat = value.furniture_category ? CATALOG[value.furniture_category] : null;
@@ -248,7 +251,7 @@ export function FurnitureConfigurator({
   const previewCard = (
     <div className={cn("relative", flashRing)}>
       {badge("top-[4.75rem] right-3")}
-      <FurniturePreviewSlot spec={preview} legacyDimensions={legacyDimensions} footer={previewFooter} />
+      <FurniturePreviewSlot spec={preview} legacyDimensions={legacyDimensions} footer={previewFooter} ar={ar} />
     </div>
   );
 
@@ -274,7 +277,7 @@ export function FurnitureConfigurator({
           </button>
         </div>
         {/* pinned 3D view: part of the sticky block, so scroll padding keeps focused inputs below it */}
-        {open && !isDesktop && <div className={cn("relative mx-2 mb-2", flashRing)} data-testid="pinned-preview">{badge("top-2 right-2")}<FurniturePreviewSlot spec={preview} legacyDimensions={legacyDimensions} compact /></div>}
+        {open && !isDesktop && <div className={cn("relative mx-2 mb-2", flashRing)} data-testid="pinned-preview">{badge("top-2 right-2")}<FurniturePreviewSlot spec={preview} legacyDimensions={legacyDimensions} compact ar={ar} /></div>}
       </div>
       {/* the size hint is too tall for the pinned view: on phones it sits in the page instead */}
       {!isDesktop && <div className="-mt-2 lg:hidden"><FeasibilityWarning spec={preview} /></div>}

@@ -31,7 +31,7 @@ const HOTSPOTS = [
 ];
 
 const STEPS = [
-  ["Design it in 3D", "Pick the type, size, wood and finish. The 3D model updates as you go, next to a 165 cm figure for true scale."],
+  ["Design it in 3D", "Pick the type, size, wood and finish. The 3D model updates as you go, and on your phone you can see it in your room."],
   ["We confirm your order", "The shop checks your design and emails you a link to create your account password."],
   ["Get your quotation and pay", "Choose 30% down payment, installment or full payment, by cash, GCash / Maya or bank transfer."],
   ["Follow it to your door", "See every stage, from production and quality inspection to delivery."],

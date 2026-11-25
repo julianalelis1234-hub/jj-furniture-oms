@@ -2,11 +2,11 @@
 
 import { ContactShadows, Edges, Line, OrbitControls } from "@react-three/drei";
 import { Canvas, useFrame } from "@react-three/fiber";
-import { Pause, Play, RotateCcw } from "lucide-react";
-import { useTheme } from "next-themes";
+import { Box, Pause, Play, RotateCcw } from "lucide-react";
+import { ArViewer } from "./ar-viewer";
 import { useEffect, useMemo, useRef, useState, type ComponentRef, type ReactNode } from "react";
 import * as THREE from "three";
-import { buildFurnitureParts, HUMAN_HEIGHT_CM, type MatKey, type Part } from "@/lib/domain/furniture3d";
+import { buildFurnitureParts, type MatKey, type Part } from "@/lib/domain/furniture3d";
 import type { FurnitureCategory } from "@/lib/domain/furniture";
 import type { WoodType } from "@/lib/domain/types";
 import { cn } from "@/lib/utils";
@@ -19,9 +19,6 @@ const RESUME_AFTER_MS = 2500;
 const BRASS = "#B8864B"; // physical brass hardware (product material, not theme)
 /** Theme Caramel #C48A5A: studio rim light, turntable rings and dimension guides. */
 const CARAMEL = "#C48A5A";
-/** Theme Mocha #6B4A3A: the muted 165 cm scale figure. */
-const MOCHA = "#6B4A3A";
-const LATTE = "#E7D6C1";
 type OrbitControlsImpl = ComponentRef<typeof OrbitControls>;
 
 export interface Furniture3DSpec {
@@ -200,27 +197,6 @@ function PartMesh({ part, mats }: { part: Part; mats: Record<MatKey, THREE.Mater
   );
 }
 
-/** 165 cm semi-transparent architectural figure — a separate object, never part of the furniture bounds. */
-function HumanReference({ x, color }: { x: number; color: string }) {
-  const mat = useMemo(() => new THREE.MeshStandardMaterial({ color, transparent: true, opacity: 0.32, roughness: 0.9, depthWrite: false }), [color]);
-  useEffect(() => () => mat.dispose(), [mat]);
-  const H = HUMAN_HEIGHT_CM / 100; // 1.65 units
-  const headR = 0.105;
-  return (
-    <group position={[x, 0, 0]} name="human-reference">
-      <mesh material={mat} position={[0, H - headR, 0]}><sphereGeometry args={[headR, 24, 16]} /></mesh>
-      <mesh material={mat} position={[0, 1.2, 0]}><capsuleGeometry args={[0.15, 0.32, 6, 16]} /></mesh>
-      {[-0.08, 0.08].map((dx) => (
-        <mesh key={dx} material={mat} position={[dx, 0.43, 0]}><capsuleGeometry args={[0.06, 0.74, 6, 12]} /></mesh>
-      ))}
-      {[-0.21, 0.21].map((dx) => (
-        <mesh key={dx} material={mat} position={[dx, 1.12, 0]} rotation={[0, 0, dx > 0 ? 0.1 : -0.1]}><capsuleGeometry args={[0.045, 0.5, 6, 12]} /></mesh>
-      ))}
-
-    </group>
-  );
-}
-
 /** Faint concentric showroom turntable rings in warm brass. */
 function Turntable({ radius }: { radius: number }) {
   return (
@@ -239,32 +215,29 @@ function Turntable({ radius }: { radius: number }) {
   );
 }
 
-/** Where the W / H / D / 165 cm labels sit in the scene (world units). */
 /**
  * Everything turns around the turntable centre, so frame the full turning
- * radius: furniture corners, the W / H / D labels and the 165 cm figure.
+ * radius: furniture corners and the W / H / D labels.
  */
 export function sceneFrame(spec: Furniture3DSpec) {
-  const { W, H, D, radius, humanX, off } = labelAnchors(spec);
+  const { W, H, D, radius, off } = labelAnchors(spec);
   const labelReach = Math.hypot(W / 2 + off * 1.8, D / 2 + off * 1.8) + 0.25;
-  const reach = Math.max(labelReach, radius * 1.18, Math.abs(humanX) + 0.3);
-  const sceneH = Math.max(H, 1.65);
+  const reach = Math.max(labelReach, radius * 1.18);
+  const sceneH = Math.max(H, 0.6);
   return { centerX: 0, sceneW: reach * 2, sceneH, depth: D };
 }
 
 export function labelAnchors(spec: Furniture3DSpec) {
   const W = spec.width_cm / 100, H = spec.height_cm / 100, D = spec.depth_cm / 100;
   const radius = Math.max(Math.hypot(W, D) / 2, 0.25);
-  const humanX = -(radius * 1.18 + 0.35);
   const off = Math.max(0.05, Math.min(W, H, D) * 0.08 + 0.04);
   const fmt = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1));
   return {
-    W, H, D, radius, humanX, off,
+    W, H, D, radius, off,
     labels: [
       { id: "w", text: `W ${fmt(spec.width_cm)} cm`, pos: [0, 0.003, D / 2 + off * 1.8] as const },
       { id: "h", text: `H ${fmt(spec.height_cm)} cm`, pos: [W / 2 + off * 1.8, H / 2, D / 2] as const },
       { id: "d", text: `D ${fmt(spec.depth_cm)} cm`, pos: [W / 2 + off * 1.8, 0.003, 0] as const },
-      { id: "human", text: "165 cm", pos: [humanX, -0.06, 0] as const },
     ],
   };
 }
@@ -293,16 +266,18 @@ function LabelProjector({ anchors, els }: { anchors: ReturnType<typeof labelAnch
   return null;
 }
 
-function Scene({ spec, autoRotate, onStart, onEnd, controlsRef, labelEls, humanColor }: {
-  spec: Furniture3DSpec; autoRotate: boolean; humanColor: string; onStart: () => void; onEnd: () => void; controlsRef: React.RefObject<OrbitControlsImpl | null>;
+function Scene({ spec, autoRotate, onStart, onEnd, controlsRef, labelEls, furnitureRef }: {
+  spec: Furniture3DSpec; autoRotate: boolean; onStart: () => void; onEnd: () => void; controlsRef: React.RefObject<OrbitControlsImpl | null>;
   labelEls: React.RefObject<Record<string, HTMLSpanElement | null>>;
+  /** the furniture group alone (what AR places in the room) */
+  furnitureRef?: React.RefObject<THREE.Group | null>;
 }) {
   const mats = useMaterials(spec.wood_type, spec.color_finish);
   const parts = useMemo(
     () => buildFurnitureParts(spec.furniture_category, spec.design_variant, { w: spec.width_cm, h: spec.height_cm, d: spec.depth_cm }),
     [spec.furniture_category, spec.design_variant, spec.width_cm, spec.height_cm, spec.depth_cm],
   );
-  const { W, H, D, radius, humanX, off, labels } = labelAnchors(spec);
+  const { W, H, D, radius, off, labels } = labelAnchors(spec);
   const frame = sceneFrame(spec);
   return (
     <>
@@ -312,16 +287,15 @@ function Scene({ spec, autoRotate, onStart, onEnd, controlsRef, labelEls, humanC
       <Turntable radius={radius} />
       {/* the furniture alone: exact W × H × D (1 unit = 100 cm) */}
       {/* keyed by design + size: edge outlines are rebuilt for the new geometry instead of lingering */}
-      <group key={`${spec.furniture_category}|${spec.design_variant}|${spec.width_cm}|${spec.height_cm}|${spec.depth_cm}`} scale={0.01} name="furniture">
+      <group key={`${spec.furniture_category}|${spec.design_variant}|${spec.width_cm}|${spec.height_cm}|${spec.depth_cm}`} scale={0.01} name="furniture" ref={furnitureRef}>
         {parts.map((p, i) => <PartMesh key={i} part={p} mats={mats} />)}
       </group>
-      <HumanReference x={humanX} color={humanColor} />
       {/* W × H × D dimension lines with the entered values */}
       <Line points={[[-W / 2, 0.003, D / 2 + off], [W / 2, 0.003, D / 2 + off]]} color={CARAMEL} lineWidth={1.2} />
       <Line points={[[W / 2 + off, 0, D / 2], [W / 2 + off, H, D / 2]]} color={CARAMEL} lineWidth={1.2} />
       <Line points={[[W / 2 + off, 0.003, -D / 2], [W / 2 + off, 0.003, D / 2]]} color={CARAMEL} lineWidth={1.2} />
       <LabelProjector anchors={labels} els={labelEls} />
-      <ContactShadows position={[0, 0.001, 0]} scale={radius * 3} blur={2.4} opacity={0.35} far={Math.max(H, 1.65) + 0.2} />
+      <ContactShadows position={[0, 0.001, 0]} scale={radius * 3} blur={2.4} opacity={0.35} far={H + 0.2} />
       <OrbitControls
         ref={controlsRef}
         makeDefault
@@ -333,7 +307,7 @@ function Scene({ spec, autoRotate, onStart, onEnd, controlsRef, labelEls, humanC
         minPolarAngle={0.15}
         maxPolarAngle={Math.PI / 2 - 0.06} // stay above the floor
         minDistance={0.6}
-        maxDistance={Math.max(W, H, D, 1.65) * 6}
+        maxDistance={Math.max(W, H, D, 1) * 6}
         autoRotate={autoRotate}
         autoRotateSpeed={AUTO_ROTATE_SPEED}
         onStart={onStart}
@@ -351,20 +325,23 @@ function prefersReducedMotion() {
  * Interactive 3D showroom turntable. Load only through FurniturePreviewSlot
  * (next/dynamic, ssr:false, WebGL check + error boundary with 2D fallback).
  */
-export default function Furniture3DPreview({ spec, className, footer, warning, compact = false }: {
+export default function Furniture3DPreview({ spec, className, footer, warning, compact = false, ar = false, expanded = false, furnitureRef }: {
   spec: Furniture3DSpec; className?: string; footer?: ReactNode; warning?: ReactNode;
   /** pinned mobile view: a shorter stage, one-line disclaimer, no footer */
   compact?: boolean;
+  /** customer designer only: the bottom-left AR button opens the full-screen view with "View in your room" */
+  ar?: boolean;
+  /** inside the full-screen AR view: the stage fills the height */
+  expanded?: boolean;
+  furnitureRef?: React.RefObject<THREE.Group | null>;
 }) {
+  const [arOpen, setArOpen] = useState(false);
   const [reduced] = useState(prefersReducedMotion);
   const [spinOn, setSpinOn] = useState(!reduced); // reduced motion: no auto-spin, manual orbit still works
   const [dragging, setDragging] = useState(false);
   const resume = useRef<ReturnType<typeof setTimeout> | null>(null);
   const controls = useRef<OrbitControlsImpl | null>(null);
   const labelEls = useRef<Record<string, HTMLSpanElement | null>>({});
-  // muted scale figure: Mocha on the Latte stage (light), Latte on the Mocha stage (dark)
-  const { resolvedTheme } = useTheme();
-  const humanColor = resolvedTheme === "dark" || resolvedTheme === "premium" ? LATTE : MOCHA;
   useEffect(() => () => { if (resume.current) clearTimeout(resume.current); }, []);
 
   const W = spec.width_cm / 100, H = spec.height_cm / 100, D = spec.depth_cm / 100;
@@ -382,12 +359,12 @@ export default function Furniture3DPreview({ spec, className, footer, warning, c
   };
 
   return (
-    <figure className={cn("jj-surface overflow-hidden rounded-2xl border border-live bg-secondary", className)} aria-label="Interactive 3D furniture preview" data-testid="preview-3d">
+    <figure className={cn("jj-surface overflow-hidden rounded-2xl border border-live bg-secondary", expanded && "flex min-h-0 flex-col", className)} aria-label="Interactive 3D furniture preview" data-testid="preview-3d">
       {compact
         ? <figcaption className="sr-only">{PREVIEW_3D_DISCLAIMER}</figcaption>
         : <figcaption className="border-b border-live/40 bg-background/70 px-3 py-2 text-[0.7rem] leading-snug font-semibold text-muted-foreground">{PREVIEW_3D_DISCLAIMER}</figcaption>}
       {!compact && warning}
-      <div className={cn("relative w-full touch-none", compact ? "aspect-[16/9] max-h-[24svh]" : "aspect-[340/250]")} data-compact={compact || undefined}>
+      <div className={cn("relative w-full touch-none", expanded ? "min-h-0 flex-1" : compact ? "aspect-[16/9] max-h-[24svh]" : "aspect-[340/250]")} data-compact={compact || undefined}>
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_50%_35%,var(--background)_0%,var(--secondary)_75%)]">
         <Canvas
           shadows
@@ -398,9 +375,9 @@ export default function Furniture3DPreview({ spec, className, footer, warning, c
         >
           <Scene
             spec={spec}
-            humanColor={humanColor}
             labelEls={labelEls}
             controlsRef={controls}
+            furnitureRef={furnitureRef}
             autoRotate={spinOn && !dragging}
             onStart={() => { if (resume.current) clearTimeout(resume.current); setDragging(true); }}
             onEnd={() => { resume.current = setTimeout(() => setDragging(false), RESUME_AFTER_MS); }}
@@ -412,10 +389,7 @@ export default function Furniture3DPreview({ spec, className, footer, warning, c
               key={l.id}
               ref={(el) => { labelEls.current[l.id] = el; }}
               data-testid={`dim-${l.id}`}
-              className={cn(
-                "absolute top-0 left-0 rounded px-1.5 py-0.5 text-[10px] whitespace-nowrap tabular-nums opacity-0",
-                l.id === "human" ? "bg-background/80 text-muted-foreground" : "border border-live bg-background/90 font-bold text-foreground shadow-sm",
-              )}
+              className="absolute top-0 left-0 rounded border border-live bg-background/90 px-1.5 py-0.5 text-[10px] font-bold whitespace-nowrap text-foreground tabular-nums opacity-0 shadow-sm"
             >
               {l.text}
             </span>
@@ -424,6 +398,13 @@ export default function Furniture3DPreview({ spec, className, footer, warning, c
         <span className="pointer-events-none absolute top-2 left-2 rounded-full border border-live bg-background/90 px-2.5 py-0.5 text-[0.7rem] font-bold">
           {spec.wood_label || spec.wood_type} <span className="font-normal text-muted-foreground">· {spec.color_finish}</span>
         </span>
+        {ar && !expanded && (
+          <button type="button" onClick={() => setArOpen(true)} data-testid="ar-open" aria-haspopup="dialog"
+            aria-label="Open full screen and view it in your room (AR)"
+            className="absolute bottom-2 left-2 flex h-9 items-center gap-1.5 rounded-full border border-live bg-background/95 pr-3 pl-2 text-xs font-bold text-primary shadow-sm hover:bg-accent-soft focus-visible:ring-3 focus-visible:ring-ring/40 focus-visible:outline-none">
+            <Box className="size-4" aria-hidden /> AR
+          </button>
+        )}
       </div>
       </div>
       <div className={cn("flex flex-wrap items-center gap-1.5 border-t border-live/40 bg-background/70 px-2", compact ? "py-1" : "py-1.5")}>
@@ -438,6 +419,7 @@ export default function Furniture3DPreview({ spec, className, footer, warning, c
         <span className="ml-auto text-[0.7rem] text-muted-foreground">{compact ? "Illustrative preview only" : "Drag to turn · pinch / scroll to zoom"}</span>
       </div>
       {!compact && footer}
+      {arOpen && <ArViewer spec={spec} onClose={() => setArOpen(false)} />}
     </figure>
   );
 }
