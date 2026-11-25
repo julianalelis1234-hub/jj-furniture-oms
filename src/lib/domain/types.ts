@@ -170,6 +170,11 @@ export interface Order extends StructuredSpecColumns {
   reference_photo_url: string | null;
   /** private storage path of the customer's room photo (migration 011); staff view it through the server only */
   room_photo_path?: string | null;
+  /** installment plan set by the owner/staff (migration 013): 2–6 payments every 15 days after the 30% down payment */
+  installment_count?: number | null;
+  installment_first_due?: string | null;
+  installment_set_by?: string | null;
+  installment_set_at?: string | null;
   specs_confirmed: boolean;
   status: OrderStatus;
   priority_rank: number;
@@ -314,6 +319,9 @@ export interface Payment {
   rejected_at?: string | null;
   rejected_by_id?: string | null;
   rejection_reason?: string | null;
+  /** who verified it and when (migration 013; older rows have only the note) */
+  verified_by_id?: string | null;
+  verified_at?: string | null;
 }
 
 export interface StatusHistory {

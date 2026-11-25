@@ -16,6 +16,7 @@ import { PostConfirmationRequest } from "./order-request";
 import { AcceptQuotation, SubmitPayment, type ShopAccounts } from "./quote-and-pay";
 import { isDemoMode } from "@/lib/config";
 import { PAYMENT_PLAN_LABEL } from "@/lib/domain/types";
+import { InstallmentTable } from "@/components/orders/installment-table";
 import { cn } from "@/lib/utils";
 
 /** Where customers send online / bank payments. Demo Mode shows fictional details; production reads them from the environment. */
@@ -27,8 +28,10 @@ function shopAccounts(): ShopAccounts {
 /** What the next payment should be: the rest of the 30% (or of the full price), minus what is already waiting to be checked. */
 function suggestedAmount(v: Awaited<ReturnType<typeof customerOwnedOrder>>["view"]): number | null {
   const pending = v.payments.filter((x) => x.state === "pending").reduce((s, x) => s + x.amount, 0);
+  const nextDue = v.installments?.find((r) => r.state !== "paid");
   const target = v.payment_plan === "full" ? v.payment.remaining_furniture_balance
-    : v.payment_plan === "down_30" ? v.payment.standard_down_payment_due - v.payment.furniture_paid : 0;
+    : v.payment_plan === "down_30" ? v.payment.standard_down_payment_due - v.payment.furniture_paid
+    : nextDue ? nextDue.amount - nextDue.paid : 0;
   const left = Math.round((target - pending) * 100) / 100;
   return left > 0 ? left : null;
 }
@@ -111,7 +114,12 @@ export default async function CustomerOrderDetail({ params }: { params: Promise<
           )}
           {(v.spec_state === "accepted" || v.spec_state === "locked") && (<>
             {v.payment_plan && <p>Your terms: <b>{PAYMENT_PLAN_LABEL[v.payment_plan]}</b>{v.preferred_payment_method && <> · {v.preferred_payment_method}</>}.</p>}
-            {v.payment_plan === "installment" && v.spec_state === "accepted" && <p className="text-sm text-muted-foreground">The owner reviews installment terms before production starts.</p>}
+            {v.payment_plan === "installment" && (v.installments ? (
+              <div className="grid gap-2" data-testid="customer-installments">
+                <p className="text-sm font-semibold">Your payment schedule: the 30% down payment, then one payment every 15 days.</p>
+                <InstallmentTable rows={v.installments} />
+              </div>
+            ) : <p className="text-sm text-muted-foreground">The shop is preparing your installment schedule. You will see the amounts and due dates here.</p>)}
             {p.remaining_furniture_balance > 0 && v.status !== "Delivered" && (<>
               <SubmitPayment orderCode={v.order_code} max={p.remaining_furniture_balance} preferred={v.preferred_payment_method} accounts={shopAccounts()}
                 suggested={suggestedAmount(v)} />

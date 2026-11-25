@@ -54,3 +54,14 @@ export async function loadOwnerContext(store: DataStore) {
   };
   return { data, lumberItems, lumberMovements, badges };
 }
+
+/**
+ * Who verified a payment: the recorded verifier (migration 013); for older rows the name
+ * in the verification note; for office-logged payments the person who logged them.
+ */
+export function verifierName(p: { verified_by_id?: string | null; notes: string | null; submitted_by?: string | null; collected_by_id: string | null }, profiles: { id: string; full_name: string }[]) {
+  if (p.verified_by_id) return nameOf(profiles, p.verified_by_id);
+  const m = p.notes?.match(/verified by ([^:·]+)/i);
+  if (m) return m[1].trim();
+  return p.submitted_by ? "—" : nameOf(profiles, p.collected_by_id);
+}

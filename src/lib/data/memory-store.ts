@@ -699,9 +699,13 @@ export class MemoryStore implements DataStore {
   async updatePayment(id: string, patch: Partial<Payment>) {
     const p = this.find(this.t.payments, id, "Payment");
     // audit-safe ledger (mirrors private.payments_guard): only verification and appended notes may change
-    const allowed = new Set(["verified_by_owner_or_staff", "notes", "rejected_at", "rejected_by_id", "rejection_reason"]);
+    const allowed = new Set(["verified_by_owner_or_staff", "notes", "rejected_at", "rejected_by_id", "rejection_reason", "verified_by_id", "verified_at"]);
     if (Object.keys(patch).some((k) => !allowed.has(k) && patch[k as keyof Payment] !== p[k as keyof Payment]))
       throw new DomainError("IMMUTABLE_RECORD", "Only verification, rejection and appended notes may change on a payment.");
+    // mirrors private.payments_verifier_stamp (013): the verifier is recorded once, at verification
+    const verifying = !p.verified_by_owner_or_staff && patch.verified_by_owner_or_staff === true;
+    if (!verifying && ((("verified_by_id" in patch) && patch.verified_by_id !== p.verified_by_id) || (("verified_at" in patch) && patch.verified_at !== p.verified_at)))
+      throw new DomainError("IMMUTABLE_RECORD", "The verifier of a payment is recorded once, when it is verified.");
     if (p.rejected_at && (("rejected_at" in patch && patch.rejected_at !== p.rejected_at) || ("rejection_reason" in patch && patch.rejection_reason !== p.rejection_reason)))
       throw new DomainError("IMMUTABLE_RECORD", "A payment can be rejected only once.");
     if (p.rejected_at && patch.verified_by_owner_or_staff)

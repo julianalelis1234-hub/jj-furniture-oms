@@ -11,6 +11,7 @@ import {
   DecideExceptionControls,
   EditDetailsDialog,
   InspectionControls,
+  InstallmentPlanForm,
   LogPaymentDialog,
   PaymentTermsSelect,
   ResendReviewLinkButton,
@@ -30,14 +31,16 @@ import { PreviewPanel } from "@/components/orders/preview-panel";
 import { PriorityBadge, StageTracker, StatusBadge } from "@/components/status";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { toClientOrder } from "@/lib/client-order";
-import { formatDate, formatDateTime } from "@/lib/domain/dates";
+import { addDays, formatDate, formatDateTime, todayISO } from "@/lib/domain/dates";
+import { installmentSchedule } from "@/lib/domain/installments";
+import { InstallmentTable } from "@/components/orders/installment-table";
 import { feePaidFrom, formatPeso, furniturePaidFrom, money } from "@/lib/domain/finance";
 import { describeDiff, formatDims, type FurnitureSpec, type SpecDiff } from "@/lib/domain/furniture";
 import { blockingItems, isQuoteExpired, quoteValidityDays } from "@/lib/domain/gate";
 import { isProductionLocked, quoteStep } from "@/lib/domain/status";
 import { CONFIRMATION_METHOD_LABEL, PAYMENT_PLAN_LABEL, type Actor, type Order, type SpecRevision } from "@/lib/domain/types";
 import { getStore } from "@/lib/server/context";
-import { nameOf } from "@/lib/server/office-data";
+import { nameOf, verifierName } from "@/lib/server/office-data";
 import { isCustomerProposal } from "@/lib/services/exceptions";
 import { SMS_SIMULATED_NOTE, smsMode } from "@/lib/services/notify";
 import { cn } from "@/lib/utils";
@@ -356,6 +359,7 @@ export async function OrderWorkspace({ orderId, actor, variant, initialTab }: { 
   );
 
   // ------------------------------------------- 3. payments & production gate ----
+  const schedule = installmentSchedule(o, verifiedPaid, todayISO());
   const payment = (
     <div className="grid gap-4">
       <Card className="gap-0 py-0" data-testid="production-gate">
@@ -418,6 +422,28 @@ export async function OrderWorkspace({ orderId, actor, variant, initialTab }: { 
           </CardContent>
         </Card>
       )}
+      {o.payment_plan === "installment" && (
+        <Card data-testid="installment-plan">
+          <CardHeader><CardTitle>Installment plan</CardTitle></CardHeader>
+          <CardContent className="grid gap-3">
+            {schedule ? (
+              <>
+                <InstallmentTable rows={schedule} />
+                <p className="text-xs text-muted-foreground">
+                  Set by {nameOf(profiles, o.installment_set_by ?? null)}{o.installment_set_at ? ` · ${formatDateTime(o.installment_set_at)}` : ""}. Verified payments are applied in order, down payment first.
+                </p>
+              </>
+            ) : (
+              <p className="rounded-xl border border-warning/50 bg-warning-soft p-2.5 text-sm font-semibold text-warning">
+                The customer chose installment payments. Set the number of payments and the first due date.
+              </p>
+            )}
+            {o.furniture_price != null && o.status !== "Delivered" && (
+              <InstallmentPlanForm orderId={o.id} count={o.installment_count ?? 3} firstDue={o.installment_first_due ?? addDays(todayISO(), 15)} />
+            )}
+          </CardContent>
+        </Card>
+      )}
       <Card>
         <CardHeader><CardTitle>Verified payments ({verified.length})</CardTitle></CardHeader>
         <CardContent className="grid gap-3">
@@ -426,8 +452,11 @@ export async function OrderWorkspace({ orderId, actor, variant, initialTab }: { 
               {verified.map((p) => (
                 <li key={p.id} className="flex flex-wrap items-center gap-2 rounded-lg border p-2">
                   <span className="flex-1"><b className="tabular-nums">{formatPeso(p.amount)}</b> · {p.payment_type} · {p.payment_method}
-                    <span className="block text-xs text-muted-foreground">{formatDateTime(p.paid_at)} · {nameOf(profiles, p.collected_by_id)}{p.notes ? ` · ${p.notes}` : ""}</span></span>
-                  <span className="text-xs font-semibold text-success">Verified</span>
+                    <span className="block text-xs text-muted-foreground">{formatDateTime(p.paid_at)} · {p.submitted_by ? "submitted by the customer" : nameOf(profiles, p.collected_by_id)}{p.notes ? ` · ${p.notes}` : ""}</span></span>
+                  <span className="text-right text-xs font-semibold text-success" data-testid="verified-by">
+                    Verified by {verifierName(p, profiles)}
+                    {p.verified_at && <span className="block font-normal text-muted-foreground">{formatDateTime(p.verified_at)}</span>}
+                  </span>
                 </li>
               ))}
             </ul>

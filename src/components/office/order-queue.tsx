@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { StatusBadge } from "@/components/status";
-import { formatDate } from "@/lib/domain/dates";
+import { formatDateTime } from "@/lib/domain/dates";
 import { formatPeso } from "@/lib/domain/finance";
 import type { OrderStatus } from "@/lib/domain/types";
 import { cn } from "@/lib/utils";
@@ -28,6 +28,10 @@ export interface QueueRow {
   down: number;
   deliveryFee: number;
   pct: number;
+  /** "Installment · 3 × ₱6,067 every 15 days · next Dec 10: ₱6,067" or the plan name */
+  plan: string | null;
+  /** "Verified by Vincris Lelis · Nov 25, 3:10 PM" for the latest verified payment */
+  lastVerified: string | null;
 }
 export interface QueueFilter {
   key: string;
@@ -67,6 +71,8 @@ function Money({ r }: { r: QueueRow }) {
         Verified {formatPeso(r.verifiedPaid)}{r.verifiedPaid > 0 ? ` (${r.pct}%)` : ` · 30% due ${formatPeso(r.down)}`} · balance {formatPeso(r.remaining)}
       </span>
       <PayBar r={r} />
+      {r.plan && <span className="mt-1 block text-xs font-semibold text-foreground" data-testid="queue-plan">{r.plan}</span>}
+      {r.lastVerified && <span className="mt-1 block text-xs text-success" data-testid="queue-verified-by">{r.lastVerified}</span>}
       <span className="mt-1 block text-xs text-muted-foreground">{r.deliveryFee > 0 ? `+ ${formatPeso(r.deliveryFee)} delivery fee` : "Free delivery"}</span>
     </>
   );
@@ -132,7 +138,7 @@ export function OrderQueue({ rows, filters, basePath, openId }: { rows: QueueRow
                   className={cn("cursor-pointer border-t border-border align-top transition-colors hover:bg-accent-soft/60", openId === r.id && "bg-accent-soft")}>
                   <td className="px-4 py-3.5">
                     <Link href={`${basePath}?order=${r.id}`} scroll={false} onClick={(e) => e.stopPropagation()} className="font-bold text-foreground underline-offset-4 hover:underline">{r.code}</Link>
-                    <span className="block text-xs text-muted-foreground tabular-nums">{formatDate(r.created_at.slice(0, 10))}</span>
+                    <span className="block text-xs text-muted-foreground tabular-nums">{formatDateTime(r.created_at)}</span>
                   </td>
                   <td className="px-4 py-3.5">
                     <span className="flex min-w-0 items-start gap-2.5">
@@ -170,7 +176,7 @@ export function OrderQueue({ rows, filters, basePath, openId }: { rows: QueueRow
                   <b className="truncate">{r.customer}</b>
                   <span className={cn("shrink-0 rounded-full border px-1.5 py-0.5 text-[10px] font-semibold", ACCOUNT[r.account].cls)}>{ACCOUNT[r.account].label}</span>
                 </span>
-                <span className="text-xs">{r.quantity > 1 ? `${r.quantity} × ` : ""}{r.item}<span className="block text-[11px] text-muted-foreground tabular-nums">{r.dims ?? "Dimensions pending"} · {r.material} · {formatDate(r.created_at.slice(0, 10))}</span></span>
+                <span className="text-xs">{r.quantity > 1 ? `${r.quantity} × ` : ""}{r.item}<span className="block text-[11px] text-muted-foreground tabular-nums">{r.dims ?? "Dimensions pending"} · {r.material} · {formatDateTime(r.created_at)}</span></span>
                 <span className="text-xs"><Money r={r} /></span>
               </Link>
             </li>
