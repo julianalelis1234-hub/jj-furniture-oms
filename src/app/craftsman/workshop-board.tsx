@@ -10,7 +10,7 @@ import { PriorityBadge } from "@/components/status";
 import { formatDate, todayISO, daysBetween } from "@/lib/domain/dates";
 import type { WorkshopOrder } from "@/lib/domain/types";
 import { cn } from "@/lib/utils";
-import { FurniturePreview } from "@/components/orders/FurniturePreview";
+import { PreviewThumb } from "@/components/orders/preview-thumb";
 import { formatDims } from "@/lib/domain/furniture";
 import { PartsList } from "@/components/orders/parts-list";
 
@@ -71,20 +71,20 @@ export function WorkshopBoard({ jobs, names, me, questions }: { jobs: WorkshopOr
                 {j.approved_revision_number && (
                   <p className="text-xs font-semibold text-success tabular-nums">Build from confirmed spec revision {j.approved_revision_number}</p>
                 )}
-                <FurniturePreview
-                  compact
-                  className="mt-2"
-                  legacyDimensions={j.is_legacy_incomplete ? j.dimensions : null}
-                  spec={{ furniture_category: j.furniture_category, design_variant: j.design_variant, width_cm: j.width_cm, height_cm: j.height_cm, depth_cm: j.depth_cm, wood_type: j.wood_type, color_finish: j.color_finish }}
-                />
-                <dl className="mt-2 grid gap-1 text-base">
-                  <div className="flex gap-2"><Ruler className="mt-1 size-4 shrink-0" aria-hidden /><dd className="font-bold tabular-nums">{formatDims(j) ? `W ${j.width_cm} × H ${j.height_cm} × D ${j.depth_cm} cm` : <span className="text-warning">Dimensions Pending Clarification — {j.dimensions}</span>}</dd></div>
-                  {j.design_variant && <div><dt className="inline text-muted-foreground">Design: </dt><dd className="inline font-semibold">{j.design_variant}</dd></div>}
-                  <div><dt className="inline text-muted-foreground">Wood: </dt><dd className="inline font-semibold">{j.wood_type}{j.custom_wood_note ? ` (${j.custom_wood_note})` : ""}</dd></div>
-                  <div><dt className="inline text-muted-foreground">Finish: </dt><dd className="inline font-semibold">{j.color_finish}</dd></div>
-                  {j.special_instructions && <p className="mt-1 rounded-lg bg-accent-soft p-2 text-sm whitespace-pre-line text-foreground">{j.special_instructions}</p>}
-                  {j.reference_photo_url && <a href={j.reference_photo_url} target="_blank" rel="noreferrer noopener" className="text-sm text-primary underline">Open reference photo</a>}
-                </dl>
+                {/* a small picture beside the details; tap it for the full-size view */}
+                <div className="mt-2 flex items-start gap-3 sm:gap-4">
+                  <PreviewThumb title={`${j.order_code} · ${j.quantity} × ${j.item_name}`}
+                    legacyDimensions={j.is_legacy_incomplete ? j.dimensions : null}
+                    spec={{ furniture_category: j.furniture_category, design_variant: j.design_variant, width_cm: j.width_cm, height_cm: j.height_cm, depth_cm: j.depth_cm, wood_type: j.wood_type, color_finish: j.color_finish, wood_label: j.wood_type === "Other" ? j.custom_wood_note : null }} />
+                  <dl className="grid min-w-0 flex-1 content-start gap-1 text-base">
+                    <div className="flex gap-2"><Ruler className="mt-1 size-4 shrink-0" aria-hidden /><dd className="font-bold tabular-nums">{formatDims(j) ? `W ${j.width_cm} × H ${j.height_cm} × D ${j.depth_cm} cm` : <span className="text-warning">Dimensions Pending Clarification — {j.dimensions}</span>}</dd></div>
+                    {j.design_variant && <div><dt className="inline text-muted-foreground">Design: </dt><dd className="inline font-semibold">{j.design_variant}</dd></div>}
+                    <div><dt className="inline text-muted-foreground">Wood: </dt><dd className="inline font-semibold">{j.wood_type}{j.custom_wood_note ? ` (${j.custom_wood_note})` : ""}</dd></div>
+                    <div><dt className="inline text-muted-foreground">Finish: </dt><dd className="inline font-semibold">{j.color_finish}</dd></div>
+                    {j.special_instructions && <p className="mt-1 rounded-lg bg-accent-soft p-2 text-sm whitespace-pre-line text-foreground">{j.special_instructions}</p>}
+                    {j.reference_photo_url && <a href={j.reference_photo_url} target="_blank" rel="noreferrer noopener" className="text-sm text-primary underline">Open reference photo</a>}
+                  </dl>
+                </div>
                 <PartsList className="mt-2" quantity={j.quantity} woodLabel={j.wood_type === "Other" && j.custom_wood_note ? j.custom_wood_note : j.wood_type}
                   spec={{ furniture_category: j.furniture_category, design_variant: j.design_variant, width_cm: j.width_cm, height_cm: j.height_cm, depth_cm: j.depth_cm }} />
                 <p className={cn("mt-2 text-sm", due < 0 ? "font-bold text-destructive" : due <= 2 ? "font-semibold text-warning" : "text-muted-foreground")}>
