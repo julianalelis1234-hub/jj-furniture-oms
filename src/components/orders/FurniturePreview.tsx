@@ -244,6 +244,8 @@ export function FurniturePreview({
     const box: Box = { x: fx, y: groundY - h * sc, w: w * sc, h: h * sc };
     const odx = depthDx * sc, ody = depthDy * sc;
     const shapes = parts(cat!, variant!, w, h, d);
+    // pieces drawn from the 3D parts (chairs, desks, …) are open frames: no solid box faces around them
+    const projected = FITTED_2D.has(cat!) || variant!.includes(" · ");
     // the visible side face: open frames (tables, sofas, beds) only show their top/arm/rail thickness
     const [sideFrom, sideTo] = sideFace(cat!, variant!, h);
     const toPx = (x: number, y: number) => [box.x + x * sc, box.y + y * sc] as const;
@@ -265,8 +267,8 @@ export function FurniturePreview({
         {/* ground */}
         <line x1={pad - 4} y1={groundY} x2={VW - pad + 4} y2={groundY} className="jj-ground" />
         {/* oblique depth faces (top + side) */}
-        {cat !== "Living Room Set" && <path d={`M${box.x} ${box.y} l${odx} ${-ody} h${box.w} l${-odx} ${ody} Z`} style={{ ...surfaceStyle, fill: mix(look.surface, "#ffffff", 0.16) }} stroke={look.edge} strokeWidth={0.8} />}
-        <path d={`M${box.x + box.w} ${box.y + sideFrom * sc} l${odx} ${-ody} v${(sideTo - sideFrom) * sc} l${-odx} ${ody} Z`} style={{ ...surfaceStyle, fill: mix(look.surface, "#000000", 0.22) }} stroke={look.edge} strokeWidth={0.8} />
+        {!projected && cat !== "Living Room Set" && <path d={`M${box.x} ${box.y} l${odx} ${-ody} h${box.w} l${-odx} ${ody} Z`} style={{ ...surfaceStyle, fill: mix(look.surface, "#ffffff", 0.16) }} stroke={look.edge} strokeWidth={0.8} />}
+        {!projected && <path d={`M${box.x + box.w} ${box.y + sideFrom * sc} l${odx} ${-ody} v${(sideTo - sideFrom) * sc} l${-odx} ${ody} Z`} style={{ ...surfaceStyle, fill: mix(look.surface, "#000000", 0.22) }} stroke={look.edge} strokeWidth={0.8} />}
         {/* front parts */}
         <g stroke={look.edge} strokeWidth={0.9} style={{ transition: "stroke 200ms ease-out" }}>
           {shapes.map((p, i) => {
