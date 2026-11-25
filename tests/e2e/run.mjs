@@ -538,6 +538,10 @@ await step("online order: design → order slip → staff confirm → create pas
   await page.selectOption("#municipality", "Lantapan");
   await page.fill("#delivery_address", "Purok 2, Brgy. Songco, near the health center");
   await noHorizontalScroll(page, "customer-request-mobile");
+  // a photo of the room (e.g. taken in AR) goes with the order, shrunk to a JPEG in the browser
+  const roomShot = await page.screenshot({ type: "png" });
+  await page.getByTestId("room-photo-input").setInputFiles({ name: "IMG_0042.PNG", mimeType: "image/png", buffer: roomShot });
+  await page.getByText("Photo added").waitFor();
   await page.getByRole("button", { name: "Submit order" }).click();
   await page.getByTestId("request-done").waitFor();
   const reqCode = (await page.getByTestId("request-code").innerText()).trim();
@@ -551,6 +555,11 @@ await step("online order: design → order slip → staff confirm → create pas
   // staff confirm the order, then issue the quotation
   const staff = await asPersona("Gilbert Decena", desktop);
   const reqDrawer = await openOrder(staff.page, reqCode);
+  const roomHref = await reqDrawer.getByTestId("room-photo-link").getAttribute("href");
+  const roomRes = await staff.page.request.get(roomHref);
+  expect(roomRes.status() === 200 && roomRes.headers()["content-type"] === "image/jpeg" && (await roomRes.body()).length > 1000, `staff can open the room photo (${roomRes.status()} ${roomRes.headers()["content-type"]})`);
+  const anonRes = await (await browser.newContext({ baseURL: BASE })).request.get(roomHref);
+  expect(anonRes.status() === 404, "the room photo is never public");
   staff.page.once("dialog", (d) => d.accept());
   await reqDrawer.getByTestId("next-step").getByRole("button", { name: "Confirm order" }).click();
   await staff.page.getByText("Order confirmed. The customer was emailed a link to create their password.").first().waitFor();
@@ -732,8 +741,16 @@ await step("3D turntable: exact W×H×D labels, non-blocking warning, NULL → 2
   await page.getByTestId("preview-3d").waitFor({ timeout: 20000 });
   expect((await page.getByTestId("preview-3d").innerText()).includes("Illustrative 3D Preview — Reference Aid Only (Not a Manufacturing Drawing)"), "3D disclaimer");
   expect((await page.getByTestId("spin-toggle").innerText()).includes("3D Spin"), "reduced motion: auto-spin starts paused");
-  for (const [id, text] of [["dim-w", "W 180 cm"], ["dim-h", "H 85 cm"], ["dim-d", "D 75 cm"], ["dim-human", "165 cm"]])
+  for (const [id, text] of [["dim-w", "W 180 cm"], ["dim-h", "H 85 cm"], ["dim-d", "D 75 cm"]])
     expect((await page.getByTestId(id).innerText()).trim() === text, `${id} label should read ${text}`);
+  expect((await page.locator("[data-testid=preview-3d]").innerText()).includes("165 cm") === false, "no human figure in the 3D view");
+  // AR: bottom-left button -> full-screen view; a computer has no AR, so it says to use a phone
+  await page.getByTestId("ar-open").first().click();
+  await page.getByTestId("ar-viewer").waitFor();
+  await page.getByTestId("ar-unsupported").waitFor();
+  expect((await page.getByTestId("ar-unsupported").innerText()).includes("Open this page on your phone"), "desktop: AR points to the phone");
+  await page.keyboard.press("Escape");
+  await page.getByTestId("ar-viewer").waitFor({ state: "detached" });
   await page.fill('input[name="width_cm"]', "30");
   await page.getByTestId("feasibility-warning").first().waitFor();
   expect((await page.inputValue('input[name="width_cm"]')) === "30", "entered width is kept exactly (no clamping)");

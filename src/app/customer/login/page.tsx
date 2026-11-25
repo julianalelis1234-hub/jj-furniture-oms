@@ -43,7 +43,7 @@ export default async function CustomerLoginPage() {
             <h2 id="opt2" className="text-xl font-bold">
               <span className="sr-only">Option 2 · </span>Customize &amp; Request a Quote
             </h2>
-            <p className="text-sm">Choose the furniture type, design, exact size, wood and finish. The live preview shows it next to a 165 cm person for scale.</p>
+            <p className="text-sm">Choose the furniture type, design, exact size, wood and finish. The live preview shows it at its exact size.</p>
             <ol className="grid gap-1 text-sm text-muted-foreground">
               <li>1. Design your piece and enter your email.</li>
               <li>2. JJ Enterprises checks it and emails you the official quotation with a secure link.</li>

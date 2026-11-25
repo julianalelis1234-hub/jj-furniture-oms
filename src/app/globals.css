@@ -363,7 +363,6 @@
 
 /* ------------------------------------------------------ furniture preview */
 .jj-ground { stroke: var(--border); stroke-width: 1.2; }
-.jj-human { fill: var(--muted-foreground); opacity: 0.3; }
 .jj-dim line { stroke: var(--muted-foreground); stroke-width: 0.8; }
 .jj-dim text, .jj-dim-text-muted { fill: var(--foreground); font-size: 8.5px; font-weight: 700; font-variant-numeric: tabular-nums; }
 .jj-dim-text-muted { fill: var(--muted-foreground); font-weight: 600; }

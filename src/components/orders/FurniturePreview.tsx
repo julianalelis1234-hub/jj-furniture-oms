@@ -159,8 +159,6 @@ function parts(cat: FurnitureCategory, variant: string, w: number, h: number): S
   return s;
 }
 
-/** 165 cm human reference silhouette, feet at (0,0) going up (cm units). */
-const HUMAN = "M0 -165 m-9 12 a9 9 0 1 0 18 0 a9 9 0 1 0 -18 0 M-14 -140 h28 l6 60 h-8 l-3 -44 l-2 0 v114 h-9 l-2 -62 l-2 62 h-9 v-114 h-2 l-3 44 h-8 z";
 
 /** Vertical span (cm from the top) of the right-hand oblique side face. */
 function sideFace(cat: string, variant: string, h: number): [number, number] {
@@ -208,17 +206,17 @@ export function FurniturePreview({
   const { width_cm: w, height_cm: h, depth_cm: d, furniture_category: cat, design_variant: variant } = spec;
   const pending = w == null || h == null || d == null || !cat || !variant;
 
-  // canvas: 340 × 230 view units; scale shared by furniture and the 165 cm human
-  const VW = 340, VH = 230, pad = 18, humanW = 34;
+  // canvas: 340 × 230 view units; the furniture alone, centred
+  const VW = 340, VH = 230, pad = 18;
   let body: ReactNode = null;
   if (!pending) {
     const depthDx = Math.min(d, 120) * 0.42, depthDy = Math.min(d, 120) * 0.24; // oblique depth (cm → cm)
-    const sceneWcm = humanW + 18 + w + depthDx;
-    const sceneHcm = Math.max(h + depthDy, 165) + 4;
+    const sceneWcm = w + depthDx;
+    const sceneHcm = h + depthDy + 4;
     const groundY = VH - pad - 14;
     const topReserve = 40; // keeps the wood/finish chip and the D label clear of the drawing
     const sc = Math.min((VW - 2 * pad - 50) / sceneWcm, (groundY - topReserve) / sceneHcm);
-    const fx = pad + (humanW + 18) * sc; // furniture left
+    const fx = pad + Math.max(0, (VW - 2 * pad - 50 - sceneWcm * sc) / 2); // furniture left, centred
     const box: Box = { x: fx, y: groundY - h * sc, w: w * sc, h: h * sc };
     const odx = depthDx * sc, ody = depthDy * sc;
     const shapes = parts(cat!, variant!, w, h);
@@ -242,11 +240,6 @@ export function FurniturePreview({
       <>
         {/* ground */}
         <line x1={pad - 4} y1={groundY} x2={VW - pad + 4} y2={groundY} className="jj-ground" />
-        {/* human reference */}
-        <g transform={`translate(${pad + (humanW / 2) * sc} ${groundY}) scale(${sc})`} className="jj-human">
-          <path d={HUMAN} />
-        </g>
-        <text x={pad + (humanW / 2) * sc} y={groundY + 12} textAnchor="middle" className="jj-dim-text-muted">165 cm</text>
         {/* oblique depth faces (top + side) */}
         {cat !== "Living Room Set" && <path d={`M${box.x} ${box.y} l${odx} ${-ody} h${box.w} l${-odx} ${ody} Z`} style={{ ...surfaceStyle, fill: mix(look.surface, "#ffffff", 0.16) }} stroke={look.edge} strokeWidth={0.8} />}
         <path d={`M${box.x + box.w} ${box.y + sideFrom * sc} l${odx} ${-ody} v${(sideTo - sideFrom) * sc} l${-odx} ${ody} Z`} style={{ ...surfaceStyle, fill: mix(look.surface, "#000000", 0.22) }} stroke={look.edge} strokeWidth={0.8} />

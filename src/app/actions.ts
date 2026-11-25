@@ -1,5 +1,6 @@
 "use server";
 
+import { getRoomPhotoStore } from "@/lib/server/proof-store";
 import { refresh } from "next/cache";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
@@ -294,7 +295,12 @@ export type OrderSlip = {
 
 export async function customerRequestAction(_: unknown, fd: FormData): Promise<ActionResult<OrderSlip>> {
   return run(null, async () => {
-    const { order: o } = await createCustomerRequest(await getPublicStore(), Object.fromEntries(fd));
+    const photo = fd.get("room_photo");
+    fd.delete("room_photo");
+    const roomPhoto = photo instanceof File && photo.size > 0
+      ? { file: { bytes: new Uint8Array(await photo.arrayBuffer()), type: photo.type, size: photo.size }, store: getRoomPhotoStore() }
+      : null;
+    const { order: o } = await createCustomerRequest(await getPublicStore(), Object.fromEntries(fd), roomPhoto);
     return {
       order_code: o.order_code, email: o.customer_email ?? "", customer_name: o.customer_name, customer_phone: o.customer_phone,
       delivery_address: o.delivery_address, municipality: o.municipality, item: o.item_name, size: o.dimensions,

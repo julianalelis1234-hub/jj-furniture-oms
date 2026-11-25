@@ -72,10 +72,12 @@ export function FeasibilityWarning({ spec }: { spec: PreviewSpec }) {
  * all three dimensions are known; otherwise the existing 2D SVG preview (which
  * shows "Dimensions Pending Clarification" for missing W/H/D).
  */
-export function FurniturePreviewSlot({ spec, legacyDimensions, footer, compact = false }: {
+export function FurniturePreviewSlot({ spec, legacyDimensions, footer, compact = false, ar = false }: {
   spec: PreviewSpec; legacyDimensions?: string | null; footer?: ReactNode;
   /** the pinned mobile view: shorter stage, no footer */
   compact?: boolean;
+  /** customer designer only: offer the AR "View in your room" button */
+  ar?: boolean;
 }) {
   const webgl = useWebGL();
   const complete =
@@ -103,6 +105,7 @@ export function FurniturePreviewSlot({ spec, legacyDimensions, footer, compact =
         warning={<FeasibilityWarning spec={spec} />}
         footer={footer}
         compact={compact}
+        ar={ar}
       />
     </Preview3DBoundary>
   );

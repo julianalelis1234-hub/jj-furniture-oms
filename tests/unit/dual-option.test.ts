@@ -95,6 +95,23 @@ describe("Option 2 — customer self-service quote request", () => {
     expect((await err(createCustomerRequest(store, request({ website: "spam", customer_phone: "09000000999" })))).code).toBe("VALIDATION");
   });
 
+  it("keeps an optional room photo privately under the order code (never its file name) and refuses non-images", async () => {
+    const files = new Map<string, Uint8Array>();
+    const photoStore = { put: async (path: string, bytes: Uint8Array) => { files.set(path, bytes); }, get: async () => null };
+    const jpeg = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3]);
+    const store = await seededStore();
+    const { order } = await createCustomerRequest(store, request(), { file: { bytes: jpeg, type: "image/jpeg", size: jpeg.length }, store: photoStore });
+    expect(order.room_photo_path).toMatch(new RegExp(`^${order.order_code}/[0-9a-f-]{36}\\.jpg$`));
+    expect(files.get(order.room_photo_path!)).toEqual(jpeg);
+    const { order: plain } = await createCustomerRequest(store, request({ customer_phone: "09170000222" }));
+    expect(plain.room_photo_path ?? null).toBeNull();
+    const pdf = new TextEncoder().encode("%PDF-1.4 x");
+    const e = await err(createCustomerRequest(store, request({ customer_phone: "09170000333" }), { file: { bytes: pdf, type: "application/pdf", size: pdf.length }, store: photoStore }));
+    expect(e.code).toBe("VALIDATION");
+    const fake = new Uint8Array([1, 2, 3, 4]);
+    expect((await err(createCustomerRequest(store, request({ customer_phone: "09170000444" }), { file: { bytes: fake, type: "image/png", size: 4 }, store: photoStore }))).code).toBe("VALIDATION");
+  });
+
   it("after confirming, staff issue the official quotation (completion date required) -> stays Confirmed, valid QUOTE_VALIDITY_DAYS", async () => {
     const store = await seededStore();
     const { order } = await createCustomerRequest(store, request());

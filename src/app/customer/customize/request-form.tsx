@@ -4,6 +4,7 @@ import { Loader2, Send } from "lucide-react";
 import { useState } from "react";
 import { customerRequestAction, type OrderSlip } from "@/app/actions";
 import { OrderSlipView } from "./order-slip";
+import { RoomPhotoField } from "./room-photo-field";
 import { CustomizationAssistant } from "@/components/orders/customization-assistant";
 import { Field, NativeSelect, TextArea, TextInput, useServerAction } from "@/components/form";
 import { emptyConfig, FurnitureConfigurator, type ConfigValue } from "@/components/orders/FurnitureConfigurator";
@@ -19,6 +20,7 @@ export function RequestForm() {
   const [done, setDone] = useState<OrderSlip | null>(null);
   const [notes, setNotes] = useState("");
   const [photoUrl, setPhotoUrl] = useState("");
+  const [roomPhoto, setRoomPhoto] = useState<File | null>(null);
   const err = (k: string) => errors[k];
 
   if (done) return <OrderSlipView slip={done} />;
@@ -29,6 +31,7 @@ export function RequestForm() {
       onSubmit={(e) => {
         e.preventDefault();
         const fd = new FormData(e.currentTarget);
+        if (roomPhoto) fd.set("room_photo", roomPhoto);
         run(() => customerRequestAction(null, fd), (r) => r.data && setDone(r.data));
       }}
       className="grid gap-4"
@@ -43,7 +46,7 @@ export function RequestForm() {
       {/* flat sections, no card: a clipping wrapper would stop the 3D view from staying in place */}
       <section aria-labelledby="step-design" className="grid gap-4">
         <h2 id="step-design" className="text-2xl">Design your furniture</h2>
-          <FurnitureConfigurator value={config} onChange={setConfig} errors={errors} showQuantity
+          <FurnitureConfigurator value={config} onChange={setConfig} errors={errors} showQuantity ar
             intro={<CustomizationAssistant value={config} onChange={setConfig} onUsePhoto={setPhotoUrl}
               onNotes={(t) => setNotes((n) => (n.includes(t) ? n : [n, t].filter(Boolean).join("\n")))} />} />
           <div className="grid gap-3 sm:grid-cols-2">
@@ -56,6 +59,7 @@ export function RequestForm() {
               <TextInput id="reference_photo_url" name="reference_photo_url" type="url" placeholder="https://…" invalid={!!err("reference_photo_url")}
                 value={photoUrl} onChange={(e) => setPhotoUrl(e.target.value)} />
             </Field>
+            <RoomPhotoField value={roomPhoto} onChange={setRoomPhoto} />
           </div>
       </section>
 

@@ -161,6 +161,8 @@ export interface Order extends StructuredSpecColumns {
   color_finish: string;
   special_instructions: string | null;
   reference_photo_url: string | null;
+  /** private storage path of the customer's room photo (migration 011); staff view it through the server only */
+  room_photo_path?: string | null;
   specs_confirmed: boolean;
   status: OrderStatus;
   priority_rank: number;

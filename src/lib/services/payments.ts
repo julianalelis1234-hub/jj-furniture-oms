@@ -59,6 +59,14 @@ const PROOF_TYPES: Record<string, { ext: string; magic: (b: Uint8Array) => boole
   "application/pdf": { ext: "pdf", magic: (b) => String.fromCharCode(...b.slice(0, 5)) === "%PDF-" },
 };
 
+/** A photo of the customer's room (taken in AR or with the camera): images only, checked by its first bytes. */
+export function checkRoomPhoto(file: { bytes: Uint8Array; type: string; size: number }): { ext: string } {
+  if (file.size > PROOF_MAX_BYTES) throw new DomainError("VALIDATION", "The room photo is larger than 5 MB. Choose a smaller photo.");
+  const t = PROOF_TYPES[file.type];
+  if (!t || file.type === "application/pdf" || !t.magic(file.bytes)) throw new DomainError("VALIDATION", "The room photo must be a JPG, PNG or WebP image.");
+  return { ext: t.ext };
+}
+
 /** Checks the declared type AND the file's own first bytes, so a renamed file is refused. */
 export function checkProof(file: { bytes: Uint8Array; type: string; size: number }): { ext: string } {
   if (file.size === 0) throw new DomainError("VALIDATION", "Attach a photo or PDF of your receipt.");

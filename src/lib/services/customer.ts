@@ -4,6 +4,7 @@ import { effectiveDeliveryFee, furniturePaidFrom, feePaidFrom } from "@/lib/doma
 import { blockingItems, isQuoteExpired } from "@/lib/domain/gate";
 import { QUOTE_REVISION_TYPES, type Order, type OrderStatus, type Payment, type PaymentMethod, type PaymentPlan, type SpecRevision } from "@/lib/domain/types";
 import { recordConfirmation } from "./orders";
+import { checkRoomPhoto, type ProofStore } from "./payments";
 import { nextOrderCode } from "./codes";
 import { describeDiff, dimensionsText, itemNameFor, normalizeSpec, type Dims, type FurnitureSpec, type SpecDiff } from "@/lib/domain/furniture";
 import { customerProposalSchema, customerRequestSchema } from "@/lib/domain/validation";
@@ -259,7 +260,13 @@ const MAX_OPEN_REQUESTS_PER_PHONE = 3;
  * UNVERIFIED; the review link sent with the quotation verifies it. No PIN is
  * created. Idempotent on client_request_key.
  */
-export async function createCustomerRequest(publicStore: DataStore, raw: unknown) {
+/** An optional room photo sent with the order (from AR or the camera); stored privately, never under its file name. */
+export interface RoomPhotoUpload {
+  file: { bytes: Uint8Array; type: string; size: number };
+  store: ProofStore;
+}
+
+export async function createCustomerRequest(publicStore: DataStore, raw: unknown, roomPhoto?: RoomPhotoUpload | null) {
   const parsed = customerRequestSchema.safeParse(raw);
   if (!parsed.success) throw new DomainError("VALIDATION", "Please check the highlighted fields.", parsed.error);
   const v = parsed.data;
@@ -288,6 +295,12 @@ export async function createCustomerRequest(publicStore: DataStore, raw: unknown
   });
   // one permanent Order ID from submission; it is also the online order's paper slip number (migration 009)
   const code = nextOrderCode(existing, new Date().getFullYear());
+  let room_photo_path: string | undefined;
+  if (roomPhoto && roomPhoto.file.size > 0) {
+    const { ext } = checkRoomPhoto(roomPhoto.file);
+    room_photo_path = `${code}/${crypto.randomUUID()}.${ext}`;
+    await roomPhoto.store.put(room_photo_path, roomPhoto.file.bytes, roomPhoto.file.type);
+  }
   const order = await store.insertOrder({
     order_code: code,
     paper_slip_number: code,
@@ -313,6 +326,7 @@ export async function createCustomerRequest(publicStore: DataStore, raw: unknown
     custom_wood_note: spec.custom_wood_note,
     special_instructions: v.special_instructions || null,
     reference_photo_url: v.reference_photo_url || null,
+    ...(room_photo_path ? { room_photo_path } : {}),
     specs_confirmed: false,
     status: "Waiting for Confirmation",
     priority_rank: 99,

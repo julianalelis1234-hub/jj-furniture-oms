@@ -198,6 +198,8 @@ export async function OrderWorkspace({ orderId, actor, variant, initialTab }: { 
               <dt className="text-muted-foreground">Delivery notes</dt><dd className="whitespace-pre-line">{o.special_instructions || "—"}</dd>
               <dt className="text-muted-foreground">Reference</dt>
               <dd>{o.reference_photo_url ? <a href={o.reference_photo_url} target="_blank" rel="noreferrer noopener" className="text-primary underline">Open photo</a> : "—"}</dd>
+              <dt className="text-muted-foreground">Room photo</dt>
+              <dd>{o.room_photo_path ? <a href={`/api/orders/${o.id}/room-photo`} target="_blank" rel="noreferrer noopener" className="text-primary underline" data-testid="room-photo-link">Open the customer&apos;s room photo</a> : "—"}</dd>
               <dt className="text-muted-foreground">Craftsman</dt><dd>{nameOf(profiles, o.assigned_craftsman_id)}</dd>
               <dt className="text-muted-foreground">Est. completion</dt><dd className="font-semibold">{formatDate(o.estimated_completion_date)}</dd>
               <dt className="text-muted-foreground">Delivery date</dt><dd className="font-semibold">{formatDate(o.scheduled_delivery_date)}</dd>

@@ -325,5 +325,3 @@ export function partsBounds(parts: Part[]): { min: V3; max: V3 } {
   return { min, max };
 }
 
-/** The 165 cm human reference — a separate object; never part of the furniture bounds. */
-export const HUMAN_HEIGHT_CM = 165;
