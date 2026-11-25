@@ -39,7 +39,7 @@ import {
   transitionOrder,
   type AcceptanceInput,
 } from "@/lib/services/orders";
-import { logPayment, rejectPayment, verifyCashHandover, verifyPayment } from "@/lib/services/payments";
+import { logPayment, rejectPayment, setInstallmentPlan, verifyCashHandover, verifyPayment } from "@/lib/services/payments";
 
 
 /** Uniform wrapper: server-side authorization, domain errors -> friendly results, UI refresh. */
@@ -192,7 +192,14 @@ export async function reviseSpecsAction(orderId: string, expectedRevision: numbe
 
 /** Verify a customer-submitted (or driver cash) payment: only verified payments count toward the 30% gate. */
 export async function verifyPaymentAction(paymentId: string) {
-  return run(["owner", "staff"], async (a) => { await verifyPayment(await getStore(), a, paymentId); }, "Payment verified.");
+  let by = "";
+  return run(["owner", "staff"], async (a) => { by = a.full_name; await verifyPayment(await getStore(), a, paymentId); }, () => `Payment verified by ${by}.`);
+}
+
+/** Owner/staff set the installment plan (2–6 payments every 15 days after the 30% down payment). */
+export async function setInstallmentPlanAction(orderId: string, count: number, firstDue: string) {
+  return run(["owner", "staff"], async (a) => { await setInstallmentPlan(await getStore(), a, orderId, count, firstDue); },
+    "Installment plan saved. The customer was told the amounts and due dates.");
 }
 
 export async function rejectPaymentAction(paymentId: string, reason: string) {

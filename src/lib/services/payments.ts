@@ -1,6 +1,8 @@
 import type { DataStore } from "@/lib/data/store";
 import { DomainError } from "@/lib/domain/errors";
-import { money } from "@/lib/domain/finance";
+import { todayISO } from "@/lib/domain/dates";
+import { formatPeso, money } from "@/lib/domain/finance";
+import { INSTALLMENT_EVERY_DAYS, INSTALLMENT_MAX, INSTALLMENT_MIN, installmentSchedule } from "@/lib/domain/installments";
 import { REFERENCE_PAYMENT_METHODS, type Actor, type Order, type PaymentMethod, type PaymentType } from "@/lib/domain/types";
 import { paymentSchema } from "@/lib/domain/validation";
 import { ensureRole } from "./guard";
@@ -26,6 +28,8 @@ export async function logPayment(store: DataStore, actor: Actor, raw: unknown) {
     payment_method: v.payment_method,
     collected_by_id: actor.id,
     verified_by_owner_or_staff: true,
+    verified_by_id: actor.id,
+    verified_at: new Date().toISOString(),
     notes: v.notes || null,
     paid_at: new Date().toISOString(),
   });
@@ -40,6 +44,8 @@ export async function verifyCashHandover(store: DataStore, actor: Actor, payment
   if (payment.verified_by_owner_or_staff) return payment;
   return store.updatePayment(paymentId, {
     verified_by_owner_or_staff: true,
+    verified_by_id: actor.id,
+    verified_at: new Date().toISOString(),
     notes: [payment.notes, `Handover verified by ${actor.full_name}${note ? `: ${note}` : ""}`].filter(Boolean).join(" · "),
   });
 }
@@ -156,6 +162,8 @@ export async function verifyPayment(store: DataStore, actor: Actor, paymentId: s
   if (payment.rejected_at) throw new DomainError("IMMUTABLE_RECORD", "This payment was rejected. Ask the customer to submit it again.");
   return store.updatePayment(paymentId, {
     verified_by_owner_or_staff: true,
+    verified_by_id: actor.id,
+    verified_at: new Date().toISOString(),
     notes: [payment.notes, `Verified by ${actor.full_name}${note?.trim() ? `: ${note.trim()}` : ""}`].filter(Boolean).join(" · "),
   });
 }
@@ -175,4 +183,43 @@ export async function rejectPayment(store: DataStore, actor: Actor, paymentId: s
   await notifyCustomer(store, order,
     `JJ Enterprises: your payment of ₱${payment.amount.toLocaleString("en-PH")} for ${order.order_code} (ref. ${payment.reference_number ?? "-"}) was not accepted: ${why}. Please check it and submit it again.`);
   return updated;
+}
+
+// ------------------------------------------------------- installment plan (013) ----
+/**
+ * Owner/staff set (or change) the installment plan of an order whose customer chose
+ * "Installment": 2–6 equal payments every 15 days after the 30% down payment.
+ */
+export async function setInstallmentPlan(store: DataStore, actor: Actor, orderId: string, count: number, firstDue: string) {
+  ensureRole(actor, ["owner", "staff"], "set installment plans");
+  const order = await mustGetOrder(store, orderId);
+  if (order.payment_plan !== "installment") throw new DomainError("VALIDATION", "The customer did not choose installment payments for this order.");
+  if (order.furniture_price == null) throw new DomainError("VALIDATION", "Issue the quotation before setting the installment plan.");
+  const n = Number(count);
+  if (!Number.isInteger(n) || n < INSTALLMENT_MIN || n > INSTALLMENT_MAX)
+    throw new DomainError("VALIDATION", `Choose ${INSTALLMENT_MIN} to ${INSTALLMENT_MAX} payments.`);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(firstDue) || Number.isNaN(Date.parse(`${firstDue}T00:00:00Z`)))
+    throw new DomainError("VALIDATION", "Choose the first due date.");
+  if (firstDue < todayISO()) throw new DomainError("VALIDATION", "The first due date cannot be in the past.");
+  const res = await store.updateOrder(order.id, {
+    installment_count: n,
+    installment_first_due: firstDue,
+    installment_set_by: actor.id,
+    installment_set_at: new Date().toISOString(),
+  });
+  if (!res.ok) throw new DomainError("VERSION_CONFLICT", "The order changed. Please reload and try again.");
+  const schedule = installmentSchedule(res.order, 0, todayISO());
+  const each = schedule?.[1]?.amount ?? 0;
+  await store.insertHistory({
+    order_id: order.id,
+    from_status: order.status,
+    to_status: order.status,
+    changed_by_id: actor.id,
+    notes: `Installment plan set by ${actor.full_name}: 30% down payment, then ${n} payments of ${formatPeso(each)} every ${INSTALLMENT_EVERY_DAYS} days from ${firstDue}`,
+    client_transaction_id: null,
+    changed_at: new Date().toISOString(),
+  });
+  await notifyCustomer(store, res.order,
+    `JJ Enterprises: your installment plan for ${order.order_code} is ready: 30% down payment of ${formatPeso(order.standard_down_payment_due)}, then ${n} payments of about ${formatPeso(each)} every ${INSTALLMENT_EVERY_DAYS} days starting ${firstDue}. See the dates in your account.`);
+  return res.order;
 }

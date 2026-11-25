@@ -242,7 +242,7 @@ try {
   await caption("Payments & Gate: customer submissions wait here; only verified payments count toward the 30%");
   await pause(2500);
   await drawer.getByTestId("unverified-payment").first().getByRole("button", { name: /^Verify/ }).click();
-  await toast("Payment verified.");
+  await toast("Payment verified by");
   await drawer.getByTestId("next-step").getByRole("button", { name: "Release to workshop" }).click();
   await caption("The server re-checks: verified 30%, accepted latest quotation, no price drift, no blocking items");
   await pause(2500);

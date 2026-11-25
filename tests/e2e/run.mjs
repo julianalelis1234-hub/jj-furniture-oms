@@ -613,7 +613,8 @@ await step("online order: design → order slip → staff confirm → create pas
   expect((await page.request.get(proofHref)).status() === 404, "a customer session cannot fetch receipts by URL");
   staff.page.once("dialog", (d) => d.accept());
   await row.getByRole("button", { name: /^Verify/ }).click();
-  await staff.page.getByText("Payment verified.").first().waitFor();
+  await staff.page.getByText("Payment verified by Gilbert Decena.").first().waitFor(); // the toast names the verifier
+  await drawer.getByTestId("verified-by").filter({ hasText: "Verified by Gilbert Decena" }).first().waitFor();
   await staff.ctx.close();
   await page.reload();
   await page.getByTestId("customer-payments").getByText("Verified").waitFor();

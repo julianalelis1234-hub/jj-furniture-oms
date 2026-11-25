@@ -4,6 +4,8 @@ import { effectiveDeliveryFee, furniturePaidFrom, feePaidFrom } from "@/lib/doma
 import { blockingItems, isQuoteExpired } from "@/lib/domain/gate";
 import { QUOTE_REVISION_TYPES, type Order, type OrderStatus, type Payment, type PaymentMethod, type PaymentPlan, type SpecRevision } from "@/lib/domain/types";
 import { recordConfirmation } from "./orders";
+import { todayISO } from "@/lib/domain/dates";
+import { installmentSchedule, type InstallmentRow } from "@/lib/domain/installments";
 import { checkRoomPhoto, type ProofStore } from "./payments";
 import { nextOrderCode } from "./codes";
 import { describeDiff, dimensionsText, itemNameFor, normalizeSpec, type Dims, type FurnitureSpec, type SpecDiff } from "@/lib/domain/furniture";
@@ -72,6 +74,8 @@ export interface CustomerOrderView {
   confirmed_at: string | null;
   quotation_issued_at: string | null;
   payment_plan: PaymentPlan | null;
+  /** the owner-set installment schedule with what is paid (null when there is no plan yet) */
+  installments: InstallmentRow[] | null;
   preferred_payment_method: PaymentMethod | null;
   payments: CustomerPaymentView[];
   revisions: { revision_number: number; revision_type: string; created_at: string; changes: string }[];
@@ -170,6 +174,7 @@ export async function customerOrderView(publicStore: DataStore, orderId: string)
     confirmed_at: o.confirmed_at,
     quotation_issued_at: o.quotation_issued_at,
     payment_plan: o.payment_plan,
+    installments: o.payment_plan === "installment" ? installmentSchedule(o, furniturePaidFrom(payments), todayISO()) : null,
     preferred_payment_method: o.preferred_payment_method,
     payments: payments
       .sort((a, b) => b.paid_at.localeCompare(a.paid_at))

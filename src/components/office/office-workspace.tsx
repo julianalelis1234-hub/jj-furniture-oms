@@ -5,7 +5,11 @@ import { LinkButton } from "@/components/link-button";
 import { OrderDrawer } from "@/components/office/order-drawer";
 import { OrderQueue, type QueueRow } from "@/components/office/order-queue";
 import { OrderWorkspace } from "@/components/office/order-workspace";
-import { formatPeso, furniturePaidFrom } from "@/lib/domain/finance";
+import { formatDate, formatDateTime, todayISO } from "@/lib/domain/dates";
+import { formatPeso, furniturePaidFrom, money } from "@/lib/domain/finance";
+import { installmentSchedule } from "@/lib/domain/installments";
+import { PAYMENT_PLAN_LABEL } from "@/lib/domain/types";
+import { verifierName } from "@/lib/server/office-data";
 import { formatDims } from "@/lib/domain/furniture";
 import type { Actor, Order, Payment } from "@/lib/domain/types";
 import type { OfficeData } from "@/lib/server/office-data";
@@ -19,10 +23,23 @@ function accountOf(o: Order): QueueRow["account"] {
 }
 
 /** Queue rows without contact details (emails, phones and addresses stay in the drawer). */
-export function queueRows(orders: Order[], payments: Payment[]): QueueRow[] {
+export function queueRows(orders: Order[], payments: Payment[], profiles: { id: string; full_name: string }[] = []): QueueRow[] {
+  const today = todayISO();
   return orders.map((o) => {
-    const paid = furniturePaidFrom(payments.filter((p) => p.order_id === o.id));
+    const mine = payments.filter((p) => p.order_id === o.id);
+    const paid = furniturePaidFrom(mine);
+    // the latest verified payment: who verified it and when
+    const last = mine.filter((p) => p.verified_by_owner_or_staff).sort((a, b) => (b.verified_at ?? b.paid_at).localeCompare(a.verified_at ?? a.paid_at))[0];
+    const schedule = installmentSchedule(o, paid, today);
+    const next = schedule?.find((r) => r.state !== "paid");
+    const plan = o.payment_plan === "installment"
+      ? schedule
+        ? `Installment · ${o.installment_count} × ${formatPeso(schedule[1].amount)} every 15 days${next ? ` · next ${next.due ? formatDate(next.due) : "down payment"}: ${formatPeso(money(next.amount - next.paid))}${next.state === "overdue" ? " (overdue)" : ""}` : " · fully paid"}`
+        : "Installment · plan not set yet"
+      : o.payment_plan ? PAYMENT_PLAN_LABEL[o.payment_plan] : null;
     return {
+      plan,
+      lastVerified: last ? `Verified by ${verifierName(last, profiles)}${last.verified_at ? ` · ${formatDateTime(last.verified_at)}` : ""}` : null,
       id: o.id, code: o.order_code, created_at: o.created_at, customer: o.customer_name, account: accountOf(o),
       item: o.item_name, quantity: o.quantity, dims: formatDims(o) ?? null,
       material: `${o.wood_type === "Other" && o.custom_wood_note ? o.custom_wood_note : o.wood_type} · ${o.color_finish}`,
@@ -88,7 +105,7 @@ export async function OfficeWorkspace({ actor, data, title, description, basePat
       </div>
       </>}
       {between}
-      <OrderQueue rows={queueRows(data.orders, data.payments)} filters={filters} basePath={basePath} openId={openOk ? openId : null} />
+      <OrderQueue rows={queueRows(data.orders, data.payments, data.profiles)} filters={filters} basePath={basePath} openId={openOk ? openId : null} />
       {openOk && (
         <OrderDrawer closeHref={basePath}>
           <OrderWorkspace orderId={openId!} actor={actor} variant="drawer" initialTab={tab} />
