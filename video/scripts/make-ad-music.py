@@ -139,7 +139,8 @@ def main():
 
     drop = 10 * BEAT  # 4.80 s
     ending = int(os.environ.get("MUSIC_END_BEAT", "112")) * BEAT  # 53.76 s by default
-    breakdown = (56 * BEAT, 60 * BEAT)  # one bar around 26.9 - 28.8 s
+    _bb = int(os.environ.get("MUSIC_BREAK_BEAT", "56"))
+    breakdown = (_bb * BEAT, (_bb + 4) * BEAT)  # one bar; 26.9 - 28.8 s by default
     beats = int(LEN / BEAT) + 1
 
     for b in range(beats):

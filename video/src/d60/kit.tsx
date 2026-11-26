@@ -130,7 +130,7 @@ export const Backdrop: React.FC<{ hue?: "warm" | "cool" }> = () => {
   );
 };
 
-export type Tag = "CUSTOMER" | "OWNER" | "LIVE SYNC" | "CRAFTSMAN" | "RIDER" | "CUSTOMER · AR";
+export type Tag = "CUSTOMER" | "OWNER" | "OWNER · STAFF" | "LIVE SYNC" | "CRAFTSMAN" | "RIDER" | "CUSTOMER · AR";
 
 /** Lower-left caption: role tag + headline, words rise in one by one. */
 export const Caption: React.FC<{ tag: Tag; text: string; at?: number; out?: number; x?: number; y?: number; size?: number }> = ({ tag, text, at = 0.1, out, x = 80, y = 930, size = 50 }) => {
