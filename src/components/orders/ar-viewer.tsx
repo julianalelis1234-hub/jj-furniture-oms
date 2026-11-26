@@ -243,7 +243,7 @@ export function ArViewer({ spec, onClose }: { spec: Furniture3DSpec; onClose: ()
           <video ref={camVideo} className="absolute inset-0 size-full object-cover" playsInline muted autoPlay aria-hidden />
           <div ref={camHost} className="absolute inset-0" />
           <ArHud
-            controls={camState === "on"}
+            controls={camState === "on"} faded
             hint={camState === "starting" ? "Starting the camera…" : "Drag the joystick to move it. Use the arrows to turn it. Tap Take photo when it looks right."}
             note={photoNote ?? "The size here is approximate. Tap Exact size for Apple AR at its true size."}
             onDone={stopCam} onRotate={(d) => cam.current?.rotate(d)} onMove={(r, f) => cam.current?.move(r, f)}
