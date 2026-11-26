@@ -1,6 +1,6 @@
 "use client";
 
-import { Camera, Check, Copy, Hand, Loader2, Ruler, Smartphone, X } from "lucide-react";
+import { Camera, Check, Copy, Download, Hand, Loader2, RotateCcw, Ruler, Smartphone, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { createPortal, flushSync } from "react-dom";
 import type * as THREE from "three";
@@ -38,6 +38,10 @@ export function ArViewer({ spec, onClose }: { spec: Furniture3DSpec; onClose: ()
   const [camState, setCamState] = useState<"off" | "starting" | "on">("off");
   const [camPlace, setCamPlace] = useState<"searching" | "aim" | "placed">("searching");
   const [shot, setShot] = useState<"idle" | "busy" | "added" | "failed">("idle");
+  // the photo just taken, waiting for the customer to choose what to do with it
+  const [review, setReview] = useState<{ file: File; url: string; saved: boolean } | null>(null);
+  const reviewUrl = review?.url;
+  useEffect(() => () => { if (reviewUrl) URL.revokeObjectURL(reviewUrl); }, [reviewUrl]);
   const [xrPhoto, setXrPhoto] = useState(false); // Android: Chrome granted camera access
 
   // iPhone: make the AR file as soon as the 3D model is on screen, so the tap opens it at once
@@ -92,7 +96,7 @@ export function ArViewer({ spec, onClose }: { spec: Furniture3DSpec; onClose: ()
       xr.current = await startWebXr(model, overlay.current, {
         tracking: (found) => setXrState((s) => (s === "placed" ? s : found ? "aim" : "searching")),
         placed: () => setXrState("placed"),
-        ended: () => { xr.current = null; setXrState("idle"); setShot("idle"); setUsedAr(true); },
+        ended: () => { xr.current = null; setXrState("idle"); setShot("idle"); setReview(null); setUsedAr(true); },
       });
       setXrPhoto(xr.current.canPhoto);
       setXrState((s) => (s === "starting" ? "searching" : s));
@@ -124,7 +128,7 @@ export function ArViewer({ spec, onClose }: { spec: Furniture3DSpec; onClose: ()
         setError("The camera could not start. Allow camera access for this site in Settings › Safari › Camera, then try again.");
       });
   };
-  const stopCam = () => { cam.current?.end(); cam.current = null; setCamState("off"); setCamPlace("searching"); setShot("idle"); setUsedAr(true); };
+  const stopCam = () => { cam.current?.end(); cam.current = null; setCamState("off"); setCamPlace("searching"); setShot("idle"); setReview(null); setUsedAr(true); };
   /** iPhone: Apple AR Quick Look at true size (synchronous: Safari needs it inside the tap) */
   const exactSize = () => {
     if (!qlUrl) return;
@@ -138,8 +142,9 @@ export function ArViewer({ spec, onClose }: { spec: Furniture3DSpec; onClose: ()
     setShot("busy");
     try {
       const file = await source.photo();
-      window.dispatchEvent(new CustomEvent("jj:room-photo", { detail: file }));
-      setShot("added");
+      // nothing is added or saved until the customer chooses
+      setReview({ file, url: URL.createObjectURL(file), saved: false });
+      setShot("idle");
     } catch (e) {
       console.warn("[AR] photo failed:", e);
       setShot("failed");
@@ -163,6 +168,54 @@ export function ArViewer({ spec, onClose }: { spec: Furniture3DSpec; onClose: ()
       className="inline-flex h-12 items-center gap-2 rounded-full bg-black/65 px-4 text-base font-bold text-white shadow-lg">
       <Hand className="size-5" aria-hidden /> Place again
     </button>
+  );
+  const addToOrder = () => {
+    if (!review) return;
+    window.dispatchEvent(new CustomEvent("jj:room-photo", { detail: review.file }));
+    setReview(null);
+    setShot("added");
+  };
+  /** the phone's share sheet has "Save Image" / "Save to Photos"; otherwise a download */
+  const saveToPhone = async () => {
+    if (!review) return;
+    const files = [review.file];
+    try {
+      if (navigator.canShare?.({ files })) {
+        await navigator.share({ files, title: "My room with the furniture" });
+      } else {
+        const a = document.createElement("a");
+        a.href = review.url;
+        a.download = `jj-room-${Date.now()}.jpg`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+      }
+      setReview((r) => (r ? { ...r, saved: true } : r));
+    } catch {
+      /* the customer closed the share sheet */
+    }
+  };
+  const reviewPanel = review && (
+    <div className="pointer-events-auto absolute inset-0 z-10 flex flex-col items-center justify-center gap-4 bg-black p-5 text-white" role="dialog" aria-label="Your photo" data-testid="ar-photo-review">
+      <p className="text-lg font-bold">Keep this photo?</p>
+      {/* eslint-disable-next-line @next/next/no-img-element -- a local blob preview */}
+      <img src={review.url} alt="The furniture in your room" className="max-h-[52vh] w-auto max-w-full rounded-xl object-contain shadow-lg" />
+      <div className="grid w-full max-w-sm gap-2">
+        <button type="button" onClick={addToOrder} data-testid="ar-photo-add"
+          className="inline-flex h-12 items-center justify-center gap-2 rounded-full bg-white px-5 text-base font-bold text-black shadow-lg">
+          <Check className="size-5" aria-hidden /> Add to my order
+        </button>
+        <button type="button" onClick={saveToPhone} data-testid="ar-photo-save"
+          className="inline-flex h-12 items-center justify-center gap-2 rounded-full border border-white/60 px-5 text-base font-bold text-white">
+          {review.saved ? <Check className="size-5" aria-hidden /> : <Download className="size-5" aria-hidden />} {review.saved ? "Saved to your phone" : "Save to my phone"}
+        </button>
+        <button type="button" onClick={() => setReview(null)} data-testid="ar-photo-retake"
+          className="inline-flex h-11 items-center justify-center gap-2 rounded-full px-5 text-sm font-semibold text-white/85">
+          <RotateCcw className="size-4" aria-hidden /> Retake
+        </button>
+      </div>
+      <p className="max-w-sm text-center text-xs text-white/70">The photo is only added to your order if you tap Add to my order.</p>
+    </div>
   );
   const photoNote = shot === "added" ? <b className="text-[#9fd3a4]">Photo added to your order ✓</b>
     : shot === "failed" ? "The photo could not be taken here. Take a screenshot instead." : null;
@@ -252,6 +305,7 @@ export function ArViewer({ spec, onClose }: { spec: Furniture3DSpec; onClose: ()
             onDone={() => xr.current?.end()} onRotate={(d) => xr.current?.rotate(d)} onMove={(r, f) => xr.current?.move(r, f)}
             action={xrState === "placed" && xrPhoto ? photoButton : undefined} />
         )}
+        {inXr && reviewPanel}
       </div>
 
       {/* iPhone joystick camera view: rear camera + the furniture drawn over it */}
@@ -279,6 +333,7 @@ export function ArViewer({ spec, onClose }: { spec: Furniture3DSpec; onClose: ()
               </div>
             )}
           />
+          {reviewPanel}
         </div>
       )}
     </div>,
