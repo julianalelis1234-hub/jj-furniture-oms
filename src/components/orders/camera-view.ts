@@ -31,6 +31,8 @@ export function askMotionPermission(): Promise<boolean> {
 export interface CameraViewHandle {
   move(right: number, forward: number): void;
   rotate(deg: number): void;
+  /** take the piece off the floor so it can be placed again; returns whether the ring is on the floor */
+  pickUp(): boolean;
   /** camera image + furniture as a JPEG */
   photo(): Promise<File>;
   end(): void;
@@ -94,9 +96,10 @@ export async function startCameraView(
   reticle.renderOrder = 10;
   reticle.visible = false;
   scene.add(reticle);
-  // with motion the customer places it by tapping the ring; without, it stands in front of them
-  let placed = !motion;
-  piece.visible = placed;
+  // the customer always starts by choosing the spot: tap to put it on the ring
+  // (without motion access the ring stays straight ahead; the joystick moves it after)
+  let placed = false;
+  piece.visible = false;
 
   const camera = new THREE.PerspectiveCamera(60, 1, 0.05, 50);
   camera.rotation.order = "YXZ";
@@ -132,7 +135,7 @@ export async function startCameraView(
   renderer.setAnimationLoop(() => {
     camera.rotation.y += (target.yaw - camera.rotation.y) * 0.2;
     camera.rotation.x += (target.pitch - camera.rotation.x) * 0.2;
-    if (motion) {
+    if (!placed) {
       // where the centre of the screen meets the floor (y = 0)
       camera.updateMatrixWorld();
       camera.getWorldDirection(ray);
@@ -151,16 +154,19 @@ export async function startCameraView(
   const onUp = (e: PointerEvent) => {
     const d = down;
     down = null;
-    if (!d || Math.hypot(e.clientX - d.x, e.clientY - d.y) > 12 || !reticle.visible) return;
+    if (placed || !d || Math.hypot(e.clientX - d.x, e.clientY - d.y) > 12 || !reticle.visible) return;
     piece.position.set(reticle.position.x, 0, reticle.position.z);
     // turn the front of the piece toward the customer
     piece.rotation.y = Math.atan2(camera.position.x - piece.position.x, camera.position.z - piece.position.z);
     piece.visible = true;
-    if (!placed) { placed = true; on.placed?.(); }
+    reticle.visible = false;
+    aiming = false;
+    placed = true;
+    on.placed?.();
   };
   canvas.addEventListener("pointerdown", onDown);
   canvas.addEventListener("pointerup", onUp);
-  if (placed) queueMicrotask(() => on.placed?.());
+
 
   const fwd = new THREE.Vector3();
   return {
@@ -171,6 +177,7 @@ export async function startCameraView(
       piece.position.z += fwd.z * forward + fwd.x * right;
     },
     rotate(deg) { piece.rotation.y += deg * D2R; },
+    pickUp() { piece.visible = false; placed = false; aiming = false; return true; },
     async photo() {
       const w = canvas.width, h = canvas.height;
       const out = document.createElement("canvas");

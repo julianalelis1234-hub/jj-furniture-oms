@@ -109,6 +109,8 @@ export interface WebXrHandle {
   rotate(deg: number): void;
   /** slide the placed piece along the floor, relative to where the phone points (metres) */
   move(right: number, forward: number): void;
+  /** take the piece off the floor so it can be placed again; returns whether the ring is on the floor */
+  pickUp(): boolean;
   end(): void;
 }
 
@@ -166,8 +168,11 @@ export async function startWebXr(model: THREE.Object3D, overlay: HTMLElement, on
   const camPos = new THREE.Vector3();
   const fwd = new THREE.Vector3();
   const side = new THREE.Vector3();
+  let placed = false;
   session.addEventListener("select", () => {
-    if (!reticle.visible) return;
+    // once placed it stays put until the customer taps Place again
+    if (placed || !reticle.visible) return;
+    placed = true;
     model.position.setFromMatrixPosition(reticle.matrix);
     // turn the front of the piece toward the customer
     renderer.xr.getCamera().getWorldPosition(camPos);
@@ -181,7 +186,7 @@ export async function startWebXr(model: THREE.Object3D, overlay: HTMLElement, on
       const ref = renderer.xr.getReferenceSpace();
       const hits = frame.getHitTestResults(hitSource as unknown as XRHitTestSource);
       const pose = hits.length && ref ? hits[0].getPose(ref) : null;
-      reticle.visible = !!pose;
+      reticle.visible = !!pose && !placed; // no ring while the piece stands on the floor
       if (pose) reticle.matrix.fromArray(pose.transform.matrix);
       if (!!pose !== wasTracking) { wasTracking = !!pose; on.tracking(wasTracking); }
     }
@@ -283,6 +288,7 @@ export async function startWebXr(model: THREE.Object3D, overlay: HTMLElement, on
       return new Promise<File>((resolve, reject) => { photoReq = { resolve, reject }; });
     },
     rotate(deg) { model.rotation.y += (deg * Math.PI) / 180; },
+    pickUp() { model.visible = false; placed = false; return wasTracking; },
     move(right, forward) {
       if (!model.visible) return;
       const cam = renderer.xr.getCamera();

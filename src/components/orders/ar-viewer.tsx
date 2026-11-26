@@ -1,6 +1,6 @@
 "use client";
 
-import { Camera, Check, Copy, Loader2, Ruler, Smartphone, X } from "lucide-react";
+import { Camera, Check, Copy, Hand, Loader2, Ruler, Smartphone, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { createPortal, flushSync } from "react-dom";
 import type * as THREE from "three";
@@ -152,6 +152,18 @@ export function ArViewer({ spec, onClose }: { spec: Furniture3DSpec; onClose: ()
       {shot === "added" ? "Take another photo" : "Take photo"}
     </button>
   );
+  /** take the piece off the floor: the ring comes back and the next tap places it again */
+  const placeAgain = () => {
+    setShot("idle");
+    if (cam.current) { cam.current.pickUp(); setCamPlace("searching"); return; }
+    if (xr.current) { const onFloor = xr.current.pickUp(); setXrState(onFloor ? "aim" : "searching"); }
+  };
+  const placeAgainButton = (
+    <button type="button" onClick={placeAgain} data-testid="ar-place-again"
+      className="inline-flex h-12 items-center gap-2 rounded-full bg-black/65 px-4 text-base font-bold text-white shadow-lg">
+      <Hand className="size-5" aria-hidden /> Place again
+    </button>
+  );
   const photoNote = shot === "added" ? <b className="text-[#9fd3a4]">Photo added to your order ✓</b>
     : shot === "failed" ? "The photo could not be taken here. Take a screenshot instead." : null;
 
@@ -235,7 +247,8 @@ export function ArViewer({ spec, onClose }: { spec: Furniture3DSpec; onClose: ()
       <div ref={overlay} className={inXr ? "pointer-events-none fixed inset-0" : "hidden"}>
         {inXr && (
           <ArHud step={xrState === "starting" ? undefined : step} total={3} hint={hint} controls={xrState === "placed"} faded
-            note={xrState === "placed" ? (photoNote ?? (xrPhoto ? "Tap the floor to place it somewhere else." : "Take a screenshot to save a photo of it in your room.")) : undefined}
+            note={xrState === "placed" ? (photoNote ?? (xrPhoto ? "Tap Place again to pick it up and put it somewhere else." : "Take a screenshot to save a photo of it in your room. Tap Place again to put it somewhere else.")) : undefined}
+            topAction={xrState === "placed" ? placeAgainButton : undefined}
             onDone={() => xr.current?.end()} onRotate={(d) => xr.current?.rotate(d)} onMove={(r, f) => xr.current?.move(r, f)}
             action={xrState === "placed" && xrPhoto ? photoButton : undefined} />
         )}
@@ -253,7 +266,8 @@ export function ArViewer({ spec, onClose }: { spec: Furniture3DSpec; onClose: ()
               : camPlace === "searching" ? "Point your phone at the floor where you want it."
               : camPlace === "aim" ? "Tap the screen to put the furniture on the ring."
               : "Drag the joystick to move it. Use the arrows to turn it. Tap Take photo when it looks right."}
-            note={photoNote ?? (camPlace === "placed" ? "Tap the floor to place it somewhere else. The size here is approximate; tap Exact size for Apple AR at its true size." : undefined)}
+            note={photoNote ?? (camPlace === "placed" ? "Tap Place again to pick it up and put it somewhere else. The size here is approximate; tap Exact size for Apple AR at its true size." : undefined)}
+            topAction={camState === "on" && camPlace === "placed" ? placeAgainButton : undefined}
             onDone={stopCam} onRotate={(d) => cam.current?.rotate(d)} onMove={(r, f) => cam.current?.move(r, f)}
             action={camState === "on" && (
               <div className="flex flex-wrap justify-center gap-2">
