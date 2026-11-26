@@ -48,19 +48,19 @@ export function ArJoystick({ onMove, disabled = false }: { onMove: (right: numbe
       aria-label="Joystick: drag to move the furniture on the floor"
       data-testid="ar-joystick"
       aria-disabled={disabled || undefined}
-      className={`relative size-36 touch-none rounded-full border-4 border-white/70 bg-gradient-to-b from-[#e9e7ef] to-[#b9b6c2] shadow-[inset_0_4px_10px_rgb(0_0_0/0.25),0_6px_18px_rgb(0_0_0/0.35)] select-none ${disabled ? "opacity-50" : ""}`}
+      className={`relative size-28 touch-none rounded-full border-[3px] border-white/70 bg-gradient-to-b from-[#e9e7ef] to-[#b9b6c2] shadow-[inset_0_4px_10px_rgb(0_0_0/0.25),0_6px_18px_rgb(0_0_0/0.35)] select-none ${disabled ? "opacity-50" : ""}`}
       onPointerDown={(e) => { if (disabled) return; e.currentTarget.setPointerCapture(e.pointerId); setActive(true); update(e.clientX, e.clientY); }}
       onPointerMove={(e) => { if (active) update(e.clientX, e.clientY); }}
       onPointerUp={release}
       onPointerCancel={release}
     >
-      <div className="pointer-events-none absolute top-1/2 left-1/2 grid size-[4.75rem] place-items-center rounded-full bg-gradient-to-b from-white to-[#e4e2ea] shadow-[0_3px_8px_rgb(0_0_0/0.3)] transition-transform duration-75"
+      <div className="pointer-events-none absolute top-1/2 left-1/2 grid size-[3.75rem] place-items-center rounded-full bg-gradient-to-b from-white to-[#e4e2ea] shadow-[0_3px_8px_rgb(0_0_0/0.3)] transition-transform duration-75"
         style={{ translate: `calc(-50% + ${knob.x}px) calc(-50% + ${knob.y}px)` }}>
-        <div className="relative size-14 text-[#7d7990]" aria-hidden>
-          <ChevronUp className="absolute top-0 left-1/2 size-5 -translate-x-1/2" strokeWidth={3} />
-          <ChevronDown className="absolute bottom-0 left-1/2 size-5 -translate-x-1/2" strokeWidth={3} />
-          <ChevronLeft className="absolute top-1/2 left-0 size-5 -translate-y-1/2" strokeWidth={3} />
-          <ChevronRight className="absolute top-1/2 right-0 size-5 -translate-y-1/2" strokeWidth={3} />
+        <div className="relative size-11 text-[#7d7990]" aria-hidden>
+          <ChevronUp className="absolute top-0 left-1/2 size-4 -translate-x-1/2" strokeWidth={3} />
+          <ChevronDown className="absolute bottom-0 left-1/2 size-4 -translate-x-1/2" strokeWidth={3} />
+          <ChevronLeft className="absolute top-1/2 left-0 size-4 -translate-y-1/2" strokeWidth={3} />
+          <ChevronRight className="absolute top-1/2 right-0 size-4 -translate-y-1/2" strokeWidth={3} />
         </div>
       </div>
     </div>
