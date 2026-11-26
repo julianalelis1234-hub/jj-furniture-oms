@@ -40,6 +40,7 @@
     "render:demo60": "remotion render Demo60 out/jj-enterprises-demo-60s.mp4 --codec h264 --audio-codec aac --crf 18 --x264-preset medium --browser-executable=${REMOTION_BROWSER:-/opt/pw-browsers/chromium_headless_shell-1243/chrome-headless-shell-linux64/chrome-headless-shell}",
     "render:demo70": "remotion render Demo70 out/jj-enterprises-demo-1m10s.mp4 --codec h264 --audio-codec aac --crf 18 --x264-preset medium --browser-executable=${REMOTION_BROWSER:-/opt/pw-browsers/chromium_headless_shell-1243/chrome-headless-shell-linux64/chrome-headless-shell}",
     "render:roles": "remotion render DemoRoles out/jj-enterprises-demo-roles-1m10s.mp4 --codec h264 --audio-codec aac --crf 18 --x264-preset medium --browser-executable=${REMOTION_BROWSER:-/opt/pw-browsers/chromium_headless_shell-1243/chrome-headless-shell-linux64/chrome-headless-shell}",
+    "render:roles80": "remotion render DemoRoles80 out/jj-enterprises-demo-roles-1m20s.mp4 --codec h264 --audio-codec aac --crf 18 --x264-preset medium --browser-executable=${REMOTION_BROWSER:-/opt/pw-browsers/chromium_headless_shell-1243/chrome-headless-shell-linux64/chrome-headless-shell}",
     "ad-music": "python3 -I scripts/make-ad-music.py",
     "render:3m30": "remotion render PitchVideo out/jj-furniture-pitch-demo-3m30.mp4 --codec h264 --audio-codec aac --crf 18 --x264-preset medium --browser-executable=${REMOTION_BROWSER:-/opt/pw-browsers/chromium_headless_shell-1243/chrome-headless-shell-linux64/chrome-headless-shell}"
   },

@@ -4,6 +4,7 @@ import { AD_SECONDS, AdVideo } from "./ad/AdVideo";
 import { D60_SECONDS, Demo60 } from "./d60/Demo60";
 import { D70_SECONDS, Demo70 } from "./d60/Demo70";
 import { DemoRoles, ROLES_SECONDS } from "./d60/DemoRoles";
+import { DemoRoles80, ROLES80_SECONDS } from "./d60/DemoRoles80";
 import { P90_SECONDS, Pitch90 } from "./p90/Pitch90";
 import { PitchVideo } from "./PitchVideo";
 import { S1Home } from "./scenes/S1Home";
@@ -28,6 +29,7 @@ export const RemotionRoot: React.FC = () => (
     <Composition id="Demo60" component={Demo60} durationInFrames={D60_SECONDS * FPS} fps={FPS} width={W} height={H} />
     <Composition id="Demo70" component={Demo70} durationInFrames={D70_SECONDS * FPS} fps={FPS} width={W} height={H} />
     <Composition id="DemoRoles" component={DemoRoles} durationInFrames={ROLES_SECONDS * FPS} fps={FPS} width={W} height={H} />
+    <Composition id="DemoRoles80" component={DemoRoles80} durationInFrames={ROLES80_SECONDS * FPS} fps={FPS} width={W} height={H} />
     <Folder name="Scenes">
       <Composition id="S1-Home" component={S1Home} durationInFrames={len("s1")} fps={FPS} width={W} height={H} />
       <Composition id="S2-Roles" component={S2Roles} durationInFrames={len("s2")} fps={FPS} width={W} height={H} />
