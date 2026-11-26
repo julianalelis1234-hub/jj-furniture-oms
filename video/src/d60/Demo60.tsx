@@ -14,7 +14,7 @@ const BEAT = 60 / 125;
 const b = (n: number) => +(n * BEAT).toFixed(4);
 
 /** clip path helpers */
-const clip = (n: string) => `clips/d60-${n}.mp4`;
+export const clip = (n: string) => `clips/d60-${n}.mp4`;
 
 // ------------------------------------------------------------------- time warps
 // [clipSeconds, sceneSeconds]; scenes are local (each starts at 0)
@@ -42,10 +42,10 @@ const DESCRIBE: Seg[] = [
 // --------------------------------------------------------------------- timeline
 type SceneDef = { id: string; start: number; len: number; C: React.FC; dir?: number };
 
-const Scrim: React.FC = () => <AbsoluteFill style={{ background: "linear-gradient(0deg, rgba(12,7,5,0.92) 0%, rgba(12,7,5,0.55) 22%, transparent 42%)", pointerEvents: "none" }} />;
+export const Scrim: React.FC = () => <AbsoluteFill style={{ background: "linear-gradient(0deg, rgba(12,7,5,0.92) 0%, rgba(12,7,5,0.55) 22%, transparent 42%)", pointerEvents: "none" }} />;
 
 // 0 · hook ------------------------------------------------------------------------
-const Hook: React.FC = () => {
+export const Hook: React.FC = () => {
   const frame = useCurrentFrame();
   const t = frame / FPS;
   const logo = spring({ frame: frame - 12, fps: FPS, config: SPRING });
@@ -78,7 +78,7 @@ const Hook: React.FC = () => {
 
 // 1 · customer designs ---------------------------------------------------------------
 const WIN = { x: 90, y: 54, w: 1740, h: 979 };
-const Design: React.FC = () => {
+export const Design: React.FC = () => {
   const m = META.customize;
   const S = (a: number) => Math.round(a * FPS);
   return (
@@ -123,7 +123,7 @@ const Design: React.FC = () => {
 };
 
 // 2 · AR -------------------------------------------------------------------------------
-const Ar: React.FC = () => {
+export const Ar: React.FC = () => {
   const frame = useCurrentFrame();
   const t = frame / FPS;
   const S = (a: number) => Math.round(a * FPS);
@@ -183,7 +183,7 @@ const L = { x: 60, y: 120, w: 880, h: 720 };
 const R = { x: 980, y: 120, w: 880, h: 720 };
 
 // 3 · live sync: order lands on the owner's screen -----------------------------------------
-const SyncOrder: React.FC = () => (
+export const SyncOrder: React.FC = () => (
   <AbsoluteFill>
     <Backdrop />
     <Punch>
@@ -373,12 +373,12 @@ const Delivered: React.FC = () => {
 };
 
 // 11 · end card ---------------------------------------------------------------------------------------------
-const EndCard: React.FC = () => {
+export const EndCard: React.FC<{ len?: number }> = ({ len = 6.24 }) => {
   const frame = useCurrentFrame();
   const t = frame / FPS;
   const p = spring({ frame, fps: FPS, config: { damping: 13, stiffness: 120, mass: 0.8 } });
   const qr = spring({ frame: frame - Math.round(0.9 * FPS), fps: FPS, config: SPRING });
-  const fade = ease((t - 5.55) / 0.65);
+  const fade = ease((t - (len - 0.69)) / 0.65);
   return (
     <AbsoluteFill>
       <Backdrop />
@@ -419,7 +419,7 @@ export const SCENES: SceneDef[] = [
 ];
 
 // ---------------------------------------------------------------------------- sound
-type Sfx = { t: number; kind: "click" | "chime" | "whoosh" | "pop" | "swell"; gain: number };
+export type Sfx = { t: number; kind: "click" | "chime" | "whoosh" | "pop" | "swell"; gain: number };
 const at = (id: string) => SCENES.find((s) => s.id === id)!.start;
 const clickSfx = (sceneStart: number, meta: keyof typeof META, anchors: Anchor[], from: number, to: number, gain = -12): Sfx[] =>
   META[meta].events.filter((e) => e.type === "click").map((e) => ({ t: sceneStart + toScene(anchors, e.t), kind: "click" as const, gain })).filter((s) => s.t >= sceneStart + from && s.t <= sceneStart + to);
@@ -429,7 +429,7 @@ const segAt = (segs: Seg[], c: number) => { const g = segs.find((x) => c >= x.c0
 const segSfx = (sceneStart: number, meta: keyof typeof META, segs: Seg[], gain = -12): Sfx[] =>
   META[meta].events.filter((e) => e.type === "click").map((e) => ({ t: sceneStart + segAt(segs, e.t), kind: "click" as const, gain })).filter((x) => x.t > sceneStart - 1);
 
-const SFX: Sfx[] = [
+export const SFX: Sfx[] = [
   { t: 0.05, kind: "swell", gain: -10 },
   { t: 0.2, kind: "pop", gain: -9 },
   ...SCENES.slice(1).filter((s) => !["sync-accept", "manage"].includes(s.id)).map((s) => ({ t: s.start - 0.12, kind: "whoosh" as const, gain: -13 })),

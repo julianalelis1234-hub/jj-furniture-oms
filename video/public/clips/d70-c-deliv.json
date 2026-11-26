@@ -1,0 +1,17 @@
+{
+  "name": "d70-c-deliv",
+  "scale": 2,
+  "duration": 38.357,
+  "viewport": {
+    "width": 390,
+    "height": 844
+  },
+  "frames": 72,
+  "events": [
+    {
+      "t": 10.415,
+      "type": "chime",
+      "label": "delivered-live"
+    }
+  ]
+}

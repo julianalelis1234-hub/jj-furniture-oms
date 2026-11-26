@@ -1,0 +1,89 @@
+{
+  "name": "d70-release",
+  "scale": 1,
+  "duration": 17.36,
+  "viewport": {
+    "width": 1920,
+    "height": 1080
+  },
+  "frames": 127,
+  "events": [
+    {
+      "t": 0.251,
+      "type": "focus",
+      "label": "next-step",
+      "box": {
+        "x": 985,
+        "y": 197,
+        "width": 911,
+        "height": 164
+      }
+    },
+    {
+      "t": 1.246,
+      "type": "move",
+      "x": 1122.734375,
+      "y": 322,
+      "ms": 750
+    },
+    {
+      "t": 2.258,
+      "type": "click",
+      "x": 1122.734375,
+      "y": 322,
+      "label": "approve"
+    },
+    {
+      "t": 3.189,
+      "type": "chime",
+      "label": "approved"
+    },
+    {
+      "t": 4.575,
+      "type": "move",
+      "x": 1108.546875,
+      "y": 322,
+      "ms": 750
+    },
+    {
+      "t": 5.579,
+      "type": "click",
+      "x": 1108.546875,
+      "y": 322,
+      "label": "release"
+    },
+    {
+      "t": 6.792,
+      "type": "move",
+      "x": 960,
+      "y": 648.28125,
+      "ms": 750
+    },
+    {
+      "t": 7.837,
+      "type": "click",
+      "x": 960,
+      "y": 648.28125,
+      "label": "craftsman"
+    },
+    {
+      "t": 9.784,
+      "type": "move",
+      "x": 1090.8125,
+      "y": 747.28125,
+      "ms": 750
+    },
+    {
+      "t": 10.783,
+      "type": "click",
+      "x": 1090.8125,
+      "y": 747.28125,
+      "label": "start"
+    },
+    {
+      "t": 11.601,
+      "type": "chime",
+      "label": "released"
+    }
+  ]
+}

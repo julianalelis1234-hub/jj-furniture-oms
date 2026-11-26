@@ -1,0 +1,17 @@
+{
+  "name": "d70-insp",
+  "scale": 1,
+  "duration": 16.488,
+  "viewport": {
+    "width": 1920,
+    "height": 1080
+  },
+  "frames": 17,
+  "events": [
+    {
+      "t": 6.43,
+      "type": "chime",
+      "label": "inspection-arrived"
+    }
+  ]
+}

@@ -1,0 +1,108 @@
+{
+  "name": "d70-pass",
+  "scale": 1,
+  "duration": 17.675,
+  "viewport": {
+    "width": 1920,
+    "height": 1080
+  },
+  "frames": 120,
+  "events": [
+    {
+      "t": 0.047,
+      "type": "focus",
+      "label": "inspection",
+      "box": {
+        "x": 469,
+        "y": 646.1875,
+        "width": 1238,
+        "height": 154.796875
+      }
+    },
+    {
+      "t": 0.594,
+      "type": "move",
+      "x": 536.7421875,
+      "y": 764.984375,
+      "ms": 750
+    },
+    {
+      "t": 1.476,
+      "type": "click",
+      "x": 536.7421875,
+      "y": 764.984375,
+      "label": "pass"
+    },
+    {
+      "t": 1.962,
+      "type": "move",
+      "x": 1052.0234375,
+      "y": 627.5,
+      "ms": 750
+    },
+    {
+      "t": 2.842,
+      "type": "click",
+      "x": 1052.0234375,
+      "y": 627.5,
+      "label": "passed"
+    },
+    {
+      "t": 3.251,
+      "type": "chime",
+      "label": "ready"
+    },
+    {
+      "t": 4.252,
+      "type": "cut",
+      "label": "to-orders"
+    },
+    {
+      "t": 6.844,
+      "type": "move",
+      "x": 1097.6484375,
+      "y": 274,
+      "ms": 750
+    },
+    {
+      "t": 7.829,
+      "type": "click",
+      "x": 1097.6484375,
+      "y": 274,
+      "label": "schedule"
+    },
+    {
+      "t": 9.492,
+      "type": "move",
+      "x": 960,
+      "y": 455.5,
+      "ms": 750
+    },
+    {
+      "t": 10.465,
+      "type": "click",
+      "x": 960,
+      "y": 455.5,
+      "label": "rider"
+    },
+    {
+      "t": 12.209,
+      "type": "move",
+      "x": 1086.3515625,
+      "y": 742.5,
+      "ms": 750
+    },
+    {
+      "t": 13.127,
+      "type": "click",
+      "x": 1086.3515625,
+      "y": 742.5,
+      "label": "schedule-save"
+    },
+    {
+      "t": 13.873,
+      "type": "chime",
+      "label": "scheduled"
+    }
+  ]
+}

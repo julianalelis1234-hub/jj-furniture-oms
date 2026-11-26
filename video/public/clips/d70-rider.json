@@ -1,0 +1,73 @@
+{
+  "name": "d70-rider",
+  "scale": 2,
+  "duration": 13.828,
+  "viewport": {
+    "width": 390,
+    "height": 844
+  },
+  "frames": 172,
+  "events": [
+    {
+      "t": 0.115,
+      "type": "move",
+      "x": 195,
+      "y": 650.0703125,
+      "ms": 750
+    },
+    {
+      "t": 0.995,
+      "type": "click",
+      "x": 195,
+      "y": 650.0703125,
+      "label": "open"
+    },
+    {
+      "t": 1.568,
+      "type": "move",
+      "x": 195,
+      "y": 624.921875,
+      "ms": 750
+    },
+    {
+      "t": 2.443,
+      "type": "click",
+      "x": 195,
+      "y": 624.921875,
+      "label": "start-trip"
+    },
+    {
+      "t": 4.334,
+      "type": "move",
+      "x": 195,
+      "y": 625.921875,
+      "ms": 750
+    },
+    {
+      "t": 5.209,
+      "type": "click",
+      "x": 195,
+      "y": 625.921875,
+      "label": "delivered"
+    },
+    {
+      "t": 6.345,
+      "type": "move",
+      "x": 195,
+      "y": 580.5,
+      "ms": 750
+    },
+    {
+      "t": 7.255,
+      "type": "click",
+      "x": 195,
+      "y": 580.5,
+      "label": "save"
+    },
+    {
+      "t": 7.704,
+      "type": "chime",
+      "label": "delivered"
+    }
+  ]
+}

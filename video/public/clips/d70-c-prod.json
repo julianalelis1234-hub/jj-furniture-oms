@@ -1,0 +1,17 @@
+{
+  "name": "d70-c-prod",
+  "scale": 2,
+  "duration": 43.284,
+  "viewport": {
+    "width": 390,
+    "height": 844
+  },
+  "frames": 74,
+  "events": [
+    {
+      "t": 14.894,
+      "type": "chime",
+      "label": "in-production-live"
+    }
+  ]
+}

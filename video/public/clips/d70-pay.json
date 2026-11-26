@@ -1,0 +1,69 @@
+{
+  "name": "d70-pay",
+  "scale": 1,
+  "duration": 9.264,
+  "viewport": {
+    "width": 1920,
+    "height": 1080
+  },
+  "frames": 24,
+  "events": [
+    {
+      "t": 0.113,
+      "type": "focus",
+      "label": "plan",
+      "box": {
+        "x": 985,
+        "y": 771,
+        "width": 911,
+        "height": 310
+      }
+    },
+    {
+      "t": 0.761,
+      "type": "move",
+      "x": 1081.0078125,
+      "y": 1017,
+      "ms": 750
+    },
+    {
+      "t": 1.641,
+      "type": "click",
+      "x": 1081.0078125,
+      "y": 1017,
+      "label": "log"
+    },
+    {
+      "t": 2.382,
+      "type": "move",
+      "x": 960,
+      "y": 506.5,
+      "ms": 750
+    },
+    {
+      "t": 3.258,
+      "type": "click",
+      "x": 960,
+      "y": 506.5
+    },
+    {
+      "t": 4.267,
+      "type": "move",
+      "x": 1099.3125,
+      "y": 777.5,
+      "ms": 750
+    },
+    {
+      "t": 5.141,
+      "type": "click",
+      "x": 1099.3125,
+      "y": 777.5,
+      "label": "save-payment"
+    },
+    {
+      "t": 5.8,
+      "type": "chime",
+      "label": "paid"
+    }
+  ]
+}

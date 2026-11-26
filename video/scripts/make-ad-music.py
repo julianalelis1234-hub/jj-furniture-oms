@@ -18,7 +18,7 @@ import numpy as np
 SR = 48_000
 BPM = 125
 BEAT = 60 / BPM  # 0.48 s
-LEN = 60.0
+LEN = float(os.environ.get("MUSIC_LEN", "60"))  # 70 for the 1:10 demo (MUSIC_LEN=70 MUSIC_END_BEAT=134 MUSIC_NAME=demo70-music)
 N = int(SR * LEN)
 OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "public", "audio")
 rng = np.random.default_rng(125)
@@ -138,7 +138,7 @@ def main():
     K, C, H, HO = kick(), clap(), hat(), hat(True)
 
     drop = 10 * BEAT  # 4.80 s
-    ending = 112 * BEAT  # 53.76 s
+    ending = int(os.environ.get("MUSIC_END_BEAT", "112")) * BEAT  # 53.76 s by default
     breakdown = (56 * BEAT, 60 * BEAT)  # one bar around 26.9 - 28.8 s
     beats = int(LEN / BEAT) + 1
 
@@ -214,15 +214,15 @@ def main():
     mix = mix / np.max(np.abs(mix)) * 10 ** (-1 / 20)
 
     os.makedirs(OUT, exist_ok=True)
-    wav = os.path.join(OUT, "ad-music.wav")
+    wav = os.path.join(OUT, os.environ.get("MUSIC_NAME", "ad-music") + ".wav")
     with wave.open(wav, "wb") as w:
         w.setnchannels(2)
         w.setsampwidth(2)
         w.setframerate(SR)
         w.writeframes((mix * 32767).astype("<i2").tobytes())
-    subprocess.run(["ffmpeg", "-loglevel", "error", "-y", "-i", wav, "-c:a", "libmp3lame", "-b:a", "256k", os.path.join(OUT, "ad-music.mp3")], check=True)
+    subprocess.run(["ffmpeg", "-loglevel", "error", "-y", "-i", wav, "-c:a", "libmp3lame", "-b:a", "256k", os.path.join(OUT, os.environ.get("MUSIC_NAME", "ad-music") + ".mp3")], check=True)
     os.remove(wav)
-    print("ad-music.mp3: 60 s @ 125 BPM")
+    print(f"{os.environ.get('MUSIC_NAME', 'ad-music')}.mp3: {LEN:g} s @ 125 BPM")
 
 
 if __name__ == "__main__":

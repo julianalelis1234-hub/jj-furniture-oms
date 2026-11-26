@@ -1,0 +1,22 @@
+{
+  "name": "d70-accepted",
+  "scale": 1,
+  "duration": 31.592,
+  "viewport": {
+    "width": 1920,
+    "height": 1080
+  },
+  "frames": 153,
+  "events": [
+    {
+      "t": -0.04,
+      "type": "focus",
+      "label": "next-step"
+    },
+    {
+      "t": 14.491,
+      "type": "chime",
+      "label": "accepted-live"
+    }
+  ]
+}

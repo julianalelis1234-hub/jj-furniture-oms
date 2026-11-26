@@ -1,0 +1,17 @@
+{
+  "name": "d70-c-insp",
+  "scale": 2,
+  "duration": 27.897,
+  "viewport": {
+    "width": 390,
+    "height": 844
+  },
+  "frames": 49,
+  "events": [
+    {
+      "t": 2.961,
+      "type": "chime",
+      "label": "insp-live"
+    }
+  ]
+}
