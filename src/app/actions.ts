@@ -20,7 +20,7 @@ import { resendForOrder } from "@/lib/email/requests";
 import { customerSignIn, customerSignOut, getCustomer, getCustomerAuth } from "@/lib/server/customer-auth";
 import { createCustomerRequest } from "@/lib/services/customer";
 import { scheduleDelivery } from "@/lib/services/deliveries";
-import { decideException, requestException, reviewCustomerProposal } from "@/lib/services/exceptions";
+import { approveInstallmentPlan, decideException, requestException, reviewCustomerProposal } from "@/lib/services/exceptions";
 import { retryNotification, SMS_SIMULATED_NOTE, smsMode } from "@/lib/services/notify";
 import { addLumberItem, recordLumberMovement, setReorderLevel } from "@/lib/services/inventory";
 import {
@@ -281,6 +281,12 @@ export async function scheduleDeliveryAction(_: unknown, fd: FormData) {
 // ------------------------------------------------------------ exceptions --
 export async function requestExceptionAction(input: { order_id: string; category: string; description: string }) {
   return run(["owner", "staff", "craftsman", "driver"], async (a) => { await requestException(await getStore(), a, input); }, "Sent to the office.");
+}
+
+/** Owner: approve the customer's installment plan from the order (production may then start with no down payment). */
+export async function approveInstallmentAction(orderId: string) {
+  return run(["owner"], async (a) => { await approveInstallmentPlan(await getStore(), a, orderId); },
+    "Installment plan approved. You can now release the order to the workshop.");
 }
 
 export async function decideExceptionAction(id: string, decision: "Approved" | "Rejected" | "Resolved", note?: string) {

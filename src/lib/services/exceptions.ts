@@ -126,3 +126,27 @@ export async function reviewCustomerProposal(
   });
   return updated;
 }
+
+
+/**
+ * Owner: approve a customer's installment plan from the order itself. Approves the pending
+ * "Installment Approval" item (creating it first if the order has none), which lets the
+ * order go to production with no down payment.
+ */
+export async function approveInstallmentPlan(store: DataStore, actor: Actor, orderId: string): Promise<OrderException> {
+  ensureRole(actor, ["owner"], "approve installment plans");
+  const order = await store.getOrder(orderId);
+  if (!order) throw new DomainError("NOT_FOUND", "Order not found.");
+  if (order.payment_plan !== "installment") throw new DomainError("VALIDATION", "The customer did not choose installment payments for this order.");
+  if (order.payment_exception_approved) throw new DomainError("VALIDATION", "This installment plan is already approved.");
+  let ex = (await store.listExceptions(orderId)).find((e) => e.status === "Pending" && e.category === "Installment Approval");
+  if (!ex) {
+    ex = await store.insertException({
+      order_id: orderId, category: "Installment Approval",
+      description: `Installment requested for ${order.order_code} (${order.customer_name}). Owner approval required.`,
+      requested_by: actor.full_name, status: "Pending", is_production_blocking: false, resolved_by_id: null,
+      created_at: new Date().toISOString(), resolved_at: null,
+    });
+  }
+  return decideException(store, actor, ex.id, "Approved");
+}
