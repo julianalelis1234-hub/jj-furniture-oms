@@ -19,6 +19,7 @@ import {
   XCircle,
 } from "lucide-react";
 import {
+  approveInstallmentAction,
   assignCraftsmanAction,
   confirmOrderAction,
   decideExceptionAction,
@@ -339,7 +340,7 @@ export function EditDetailsDialog({ order }: { order: ClientOrder }) {
 
 export { ReviseSpecsDialog } from "./spec-dialogs";
 
-/** Owner/staff: number of payments (2–6, every 15 days after the 30% down payment) and the first due date. */
+/** Owner/staff: number of payments (2–6, every 15 days, no down payment) and the first due date. */
 export function InstallmentPlanForm({ orderId, count, firstDue }: { orderId: string; count: number; firstDue: string }) {
   const { pending, run } = useServerAction();
   const [n, setN] = useState(String(count));
@@ -348,7 +349,7 @@ export function InstallmentPlanForm({ orderId, count, firstDue }: { orderId: str
     <form className="flex flex-wrap items-end gap-2" data-testid="installment-form"
       onSubmit={(e) => { e.preventDefault(); run(() => setInstallmentPlanAction(orderId, Number(n), due)); }}>
       <label className="grid gap-1 text-xs font-semibold">
-        Payments after the down payment
+        Number of payments
         <NativeSelect value={n} onChange={(e) => setN(e.target.value)} disabled={pending} options={["2", "3", "4", "5", "6"]} name="installment_count" />
       </label>
       <label className="grid gap-1 text-xs font-semibold">
@@ -359,6 +360,19 @@ export function InstallmentPlanForm({ orderId, count, firstDue }: { orderId: str
       <Button type="submit" disabled={pending || !due} className="h-11">{pending ? "Saving…" : "Save plan"}</Button>
       <p className="basis-full text-xs text-muted-foreground">Then one payment every 15 days. The customer sees the dates and amounts in their account.</p>
     </form>
+  );
+}
+
+/** Owner: approve the customer's installment plan right on the order; staff see who must do it. */
+export function ApproveInstallmentButton({ order, isOwner }: { order: ClientOrder; isOwner: boolean }) {
+  if (!isOwner) return <p className="text-sm font-semibold text-warning" data-testid="installment-needs-owner">Waiting for the owner to approve the installment plan.</p>;
+  return (
+    <span data-testid="approve-installment">
+      <ActionButton variant="success" action={() => approveInstallmentAction(order.id)}
+        confirmText={`Approve the installment plan for ${order.order_code}? Production can then start with no down payment; the customer pays by the schedule.`}>
+        <BadgeCheck aria-hidden /> Approve installment plan
+      </ActionButton>
+    </span>
   );
 }
 

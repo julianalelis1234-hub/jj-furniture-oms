@@ -10,6 +10,7 @@ import {
   DecideExceptionControls,
   EditDetailsDialog,
   InspectionControls,
+  ApproveInstallmentButton,
   InstallmentPlanForm,
   LogPaymentDialog,
   PaymentTermsSelect,
@@ -161,6 +162,7 @@ export async function OrderWorkspace({ orderId, actor, variant, initialTab }: { 
                 ? (o.payment_exception_approved ? "Installment approved by the owner, no down payment needed." : "release to the workshop after the owner approves the installment plan (no down payment).")
                 : <>release to the workshop after the {needName} ({formatPeso(down)}) is verified.</>} {formatPeso(verifiedPaid)} verified so far{unverifiedSum > 0 && <> (+ {formatPeso(unverifiedSum)} waiting for verification)</>}.
             </p>
+            {isInstallment && !o.payment_exception_approved && <ApproveInstallmentButton order={o} isOwner={isOwner} />}
             <StartProductionDialog order={o} verifiedPaid={verifiedPaid} blocking={blockingItems(o.id, exceptions).length} craftsmen={craftsmen} />
             <LogPaymentDialog order={o} defaultAmount={Math.max(0, down - verifiedPaid) || undefined} />
           </>;
@@ -431,6 +433,16 @@ export async function OrderWorkspace({ orderId, actor, variant, initialTab }: { 
         <Card data-testid="installment-plan">
           <CardHeader><CardTitle>Installment plan</CardTitle></CardHeader>
           <CardContent className="grid gap-3">
+            {o.payment_exception_approved ? (
+              <p className="rounded-xl border border-success/50 bg-success-soft p-2.5 text-sm font-semibold text-success" data-testid="installment-approved">
+                Approved by the owner: production can start with no down payment.
+              </p>
+            ) : o.specs_confirmed && (
+              <div className="flex flex-wrap items-center gap-3 rounded-xl border border-warning/50 bg-warning-soft p-2.5">
+                <p className="flex-1 text-sm font-semibold text-warning">Not approved yet. Production starts once the owner approves this installment plan.</p>
+                <ApproveInstallmentButton order={o} isOwner={isOwner} />
+              </div>
+            )}
             {schedule ? (
               <>
                 <InstallmentTable rows={schedule} />

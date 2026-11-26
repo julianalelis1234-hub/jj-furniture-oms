@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { DomainError } from "@/lib/domain/errors";
-import { decideException } from "@/lib/services/exceptions";
+import { approveInstallmentPlan, decideException } from "@/lib/services/exceptions";
 import { createOrder, startProduction } from "@/lib/services/orders";
 import { actors, payDown, seededStore, staffAccept, validOrderInput } from "./helpers";
 
@@ -39,5 +39,20 @@ describe("the workshop starts by the customer's payment terms", () => {
     });
     await decideException(store, actors.owner, ex.id, "Approved");
     expect((await startProduction(store, actors.staff, id)).status).toBe("In Production"); // ₱0 paid
+  });
+
+  it("the owner approves the installment plan from the order, then production can start", async () => {
+    const { store, id } = await accepted("installment");
+    expect((await err(approveInstallmentPlan(store, actors.staff, id))).code).toBe("FORBIDDEN");
+    const ex = await approveInstallmentPlan(store, actors.owner, id); // no pending item yet: created and approved
+    expect(ex).toMatchObject({ category: "Installment Approval", status: "Approved" });
+    expect((await store.getOrder(id))!.payment_exception_approved).toBe(true);
+    expect((await err(approveInstallmentPlan(store, actors.owner, id))).message).toMatch(/already approved/);
+    expect((await startProduction(store, actors.staff, id)).status).toBe("In Production");
+  });
+
+  it("only installment orders can be approved this way", async () => {
+    const { store, id } = await accepted("full");
+    expect((await err(approveInstallmentPlan(store, actors.owner, id))).message).toMatch(/did not choose installment/);
   });
 });
