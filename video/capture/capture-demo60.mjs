@@ -70,6 +70,8 @@ try {
   const cust = await desktop();
   const owner = await desktop();
   await signIn(owner.page, "Owner");
+  // from the quotation on, the customer follows the order on a phone (recorded beside the owner)
+  const cphone = await phone();
 
   // ------------------------------------------------ 1. customer designs with the AI + options
   {
@@ -180,9 +182,9 @@ try {
     results.push(await rec.stop());
   }
 
-  // ---------------------- off camera: the customer creates a password from the email link
+  // ------- the customer creates a password from the email link (off camera), then sees the quotation
   {
-    const { page } = cust;
+    const { page } = cphone;
     await page.goto("/demo/inbox"); await settle(page);
     const item = page.getByTestId("inbox-item").filter({ hasText: CUSTOMER.email }).filter({ has: page.locator('a[href^="/customer/set-password"]') }).first();
     await item.waitFor({ timeout: 20_000 });
@@ -194,12 +196,18 @@ try {
     if (!(await page.getByTestId("customer-orders").innerText()).includes(code)) {
       code = (await page.getByTestId("customer-orders").locator("a").first().innerText()).match(/JJ-\d{4}-\d{4}|DR-\d{4}/)?.[0] ?? code;
     }
-    await page.goto(`/customer/orders/${code}`); await settle(page);
+    await page.goto(`/customer/orders/${code}`); await settle(page); await page.waitForTimeout(1200);
+    const qrec = new Recorder(page, "d60-quote-cust", { scale: 2 }); await qrec.start();
+    await page.waitForTimeout(1500);
+    qrec.mark("scroll");
+    await center(page, page.getByTestId("accept-quotation"), 1400);
+    await page.waitForTimeout(1500);
+    results.push(await qrec.stop());
   }
 
   // ------------------- 4. customer accepts: installment, cash · owner sees it live
   {
-    const { page } = cust;
+    const { page } = cphone;
     const op = owner.page;
     await op.getByTestId("drawer-close").click().catch(() => {});
     await op.goto("/owner/orders"); await settle(op);
@@ -210,7 +218,7 @@ try {
     await op.evaluate(() => window.__recCursor?.hide(true));
     const accept = page.getByTestId("accept-quotation");
     await center(page, accept, 600);
-    const crec = new Recorder(page, "d60-accept"); const orec = new Recorder(op, "d60-accepted");
+    const crec = new Recorder(page, "d60-accept", { scale: 2 }); const orec = new Recorder(op, "d60-accepted");
     await crec.start(); await orec.start();
     const a = actor(page, crec); const oa = actor(op, orec);
     await oa.focus(d.getByTestId("next-step"), "next-step");
@@ -232,12 +240,12 @@ try {
 
   // -------- 5. owner manages it: approve plan, schedule, cash payment, release · customer live
   {
-    const { page } = cust;
+    const { page } = cphone;
     const op = owner.page;
     await page.reload(); await settle(page);
-    await page.evaluate(() => window.__recCursor?.hide(true));
+    await center(page, page.getByText("Your terms:").first(), 600);
     const d = op.getByTestId("order-drawer");
-    const orec = new Recorder(op, "d60-manage"); const crec = new Recorder(page, "d60-live");
+    const orec = new Recorder(op, "d60-manage"); const crec = new Recorder(page, "d60-live", { scale: 2 });
     await orec.start(); await crec.start();
     const a = actor(op, orec); const ca = actor(page, crec);
     await ca.focus(page.locator("main").first(), "page");
@@ -273,7 +281,7 @@ try {
     await a.click(d.getByTestId("next-step").getByRole("button", { name: "Release to workshop" }), { label: "release" });
     await op.selectOption("#assigned_craftsman_id", { label: "Nolito Remulta" }).catch(() => {});
     await a.wait(0.6);
-    const toProd = page.waitForFunction(() => /In Production/i.test(document.body.innerText), null, { timeout: 30_000, polling: 50 }).then(() => crec.mark("chime", { label: "in-production-live" }));
+    const toProd = page.waitForFunction(() => /is now In Production/i.test(document.body.innerText), null, { timeout: 30_000, polling: 50 }).then(() => crec.mark("chime", { label: "in-production-live" }));
     await a.click(op.getByRole("dialog").last().getByRole("button", { name: "Start production" }), { label: "start" });
     await op.getByText("Released to the workshop.").first().waitFor();
     orec.mark("chime", { label: "released" });
@@ -343,13 +351,12 @@ try {
     await dr.page.getByText("Online • Synced").waitFor();
     const row = dr.page.locator(`[data-testid="delivery-rows"] li[data-code="${code}"]`).getByTestId("delivery-row");
     await row.waitFor({ timeout: 20_000 });
-    const { page } = cust;
+    const { page } = cphone;
     await page.goto(`/customer/orders/${code}`); await settle(page);
-    await page.evaluate(() => window.__recCursor?.hide(true));
     const op = owner.page;
     await op.goto("/owner/orders"); await settle(op);
     await op.evaluate(() => window.__recCursor?.hide(true));
-    const rrec = new Recorder(dr.page, "d60-rider", { scale: 2 }); const crec = new Recorder(page, "d60-done-cust"); const orec = new Recorder(op, "d60-done-owner");
+    const rrec = new Recorder(dr.page, "d60-rider", { scale: 2 }); const crec = new Recorder(page, "d60-done-cust", { scale: 2 }); const orec = new Recorder(op, "d60-done-owner");
     await rrec.start(); await crec.start(); await orec.start();
     const ra = actor(dr.page, rrec);
     await ra.click(row, { label: "open" });
@@ -359,7 +366,7 @@ try {
     rrec.mark("chime", { label: "out" });
     await ra.click(detail.getByRole("button", { name: "Mark Delivered & Log Cash Collected" }), { label: "delivered" });
     await ra.wait(0.5);
-    const custLive = page.waitForFunction(() => /Delivered/.test(document.body.innerText), null, { timeout: 30_000, polling: 50 }).then(() => crec.mark("chime", { label: "delivered-live" }));
+    const custLive = page.waitForFunction(() => /Delivered\. Thank you/.test(document.body.innerText), null, { timeout: 30_000, polling: 50 }).then(() => crec.mark("chime", { label: "delivered-live" }));
     await ra.click(dr.page.getByRole("button", { name: "Save delivery" }), { label: "save" });
     await dr.page.getByText(/Synced \d+ action/).first().waitFor({ timeout: 20_000 }).catch(() => {});
     rrec.mark("chime", { label: "delivered" });
