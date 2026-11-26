@@ -7,7 +7,10 @@ import * as THREE from "three";
  * camera fills the screen and the furniture is drawn over it on a virtual
  * floor. The phone's tilt and turn (device orientation) move the virtual
  * camera so the piece roughly stays where it was put, but nothing is tracked:
- * the size is approximate. The customer moves it with the joystick and can
+ * the size is approximate. Placing works like Android: point the phone at the
+ * floor, a brown ring appears where the centre of the screen meets the floor
+ * (worked out from the phone's tilt and a chest-height eye), tap to put the
+ * piece there; tap again to move it. The customer moves it with the joystick and can
  * take a photo (camera image + furniture) for the order.
  *
  * Nothing leaves the phone unless the customer adds the photo to the order.
@@ -33,7 +36,10 @@ export interface CameraViewHandle {
   end(): void;
 }
 
-export async function startCameraView(model: THREE.Object3D, host: HTMLElement, video: HTMLVideoElement, motion: boolean): Promise<CameraViewHandle> {
+export async function startCameraView(
+  model: THREE.Object3D, host: HTMLElement, video: HTMLVideoElement, motion: boolean,
+  on: { tracking?: (found: boolean) => void; placed?: () => void } = {},
+): Promise<CameraViewHandle> {
   const stream = await navigator.mediaDevices.getUserMedia({
     video: { facingMode: { ideal: "environment" }, width: { ideal: 1920 }, height: { ideal: 1080 } },
     audio: false,
@@ -80,6 +86,18 @@ export async function startCameraView(model: THREE.Object3D, host: HTMLElement, 
   piece.position.set(0, 0, -Math.max(MIN_DISTANCE, size.y * 1.7, size.x * 1.3));
   scene.add(piece);
 
+  // aim ring on the virtual floor (same look as Android)
+  const reticle = new THREE.Mesh(
+    new THREE.RingGeometry(0.12, 0.15, 48).rotateX(-Math.PI / 2),
+    new THREE.MeshBasicMaterial({ color: "#C48A5A" }),
+  );
+  reticle.renderOrder = 10;
+  reticle.visible = false;
+  scene.add(reticle);
+  // with motion the customer places it by tapping the ring; without, it stands in front of them
+  let placed = !motion;
+  piece.visible = placed;
+
   const camera = new THREE.PerspectiveCamera(60, 1, 0.05, 50);
   camera.rotation.order = "YXZ";
   camera.position.set(0, EYE_HEIGHT, 0);
@@ -109,11 +127,40 @@ export async function startCameraView(model: THREE.Object3D, host: HTMLElement, 
   resize();
   window.addEventListener("resize", resize);
 
+  const ray = new THREE.Vector3();
+  let aiming = false;
   renderer.setAnimationLoop(() => {
     camera.rotation.y += (target.yaw - camera.rotation.y) * 0.2;
     camera.rotation.x += (target.pitch - camera.rotation.x) * 0.2;
+    if (motion) {
+      // where the centre of the screen meets the floor (y = 0)
+      camera.updateMatrixWorld();
+      camera.getWorldDirection(ray);
+      const t = ray.y < -0.08 ? EYE_HEIGHT / -ray.y : Infinity;
+      const found = t < 8;
+      if (found) reticle.position.set(camera.position.x + ray.x * t, 0.003, camera.position.z + ray.z * t);
+      reticle.visible = found;
+      if (found !== aiming) { aiming = found; on.tracking?.(found); }
+    }
     renderer.render(scene, camera);
   });
+
+  // tap (not a drag) on the camera view: put the piece on the ring
+  let down: { x: number; y: number } | null = null;
+  const onDown = (e: PointerEvent) => { down = { x: e.clientX, y: e.clientY }; };
+  const onUp = (e: PointerEvent) => {
+    const d = down;
+    down = null;
+    if (!d || Math.hypot(e.clientX - d.x, e.clientY - d.y) > 12 || !reticle.visible) return;
+    piece.position.set(reticle.position.x, 0, reticle.position.z);
+    // turn the front of the piece toward the customer
+    piece.rotation.y = Math.atan2(camera.position.x - piece.position.x, camera.position.z - piece.position.z);
+    piece.visible = true;
+    if (!placed) { placed = true; on.placed?.(); }
+  };
+  canvas.addEventListener("pointerdown", onDown);
+  canvas.addEventListener("pointerup", onUp);
+  if (placed) queueMicrotask(() => on.placed?.());
 
   const fwd = new THREE.Vector3();
   return {
@@ -134,7 +181,12 @@ export async function startCameraView(model: THREE.Object3D, host: HTMLElement, 
       const vw = video.videoWidth, vh = video.videoHeight;
       const k = Math.max(w / vw, h / vh);
       c.drawImage(video, (w - vw * k) / 2, (h - vh * k) / 2, vw * k, vh * k);
+      // the aim ring is not part of the photo
+      const ring = reticle.visible;
+      reticle.visible = false;
+      renderer.render(scene, camera);
       c.drawImage(canvas, 0, 0);
+      reticle.visible = ring;
       const blob = await new Promise<Blob | null>((r) => out.toBlob(r, "image/jpeg", 0.85));
       if (!blob) throw new Error("photo failed");
       return new File([blob], "room-photo.jpg", { type: "image/jpeg" });
@@ -143,6 +195,10 @@ export async function startCameraView(model: THREE.Object3D, host: HTMLElement, 
       renderer.setAnimationLoop(null);
       window.removeEventListener("deviceorientation", onOrient);
       window.removeEventListener("resize", resize);
+      canvas.removeEventListener("pointerdown", onDown);
+      canvas.removeEventListener("pointerup", onUp);
+      reticle.geometry.dispose();
+      (reticle.material as THREE.Material).dispose();
       stream.getTracks().forEach((t) => t.stop());
       video.srcObject = null;
       shadow.geometry.dispose();
