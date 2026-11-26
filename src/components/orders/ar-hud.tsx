@@ -10,19 +10,22 @@ import { ArJoystick } from "./ar-joystick";
  * Exact size buttons. The root
  * lets taps through (Android: tap the floor to place); only the controls catch them.
  */
-export function ArHud({ step, total, hint, note, controls, faded = false, onDone, onRotate, onMove, action }: {
+export function ArHud({ step, total, hint, note, controls, faded = false, onDone, onRotate, onMove, action, topAction }: {
   step?: number; total?: number; hint: string; note?: ReactNode; controls: boolean;
   /** draw the joystick and turn buttons at 25% opacity so more of the room shows through */
   faded?: boolean;
   onDone: () => void; onRotate: (deg: number) => void; onMove: (right: number, forward: number) => void;
   /** e.g. the Take photo button */
   action?: ReactNode;
+  /** shown left of Done, e.g. Place again */
+  topAction?: ReactNode;
 }) {
   return (
     <div className="pointer-events-none absolute inset-0 flex flex-col justify-between text-white">
       {/* top: Done, then the instruction card */}
       <div className="grid gap-3 px-4 pt-[max(1rem,env(safe-area-inset-top))]">
-        <div className="flex justify-end">
+        <div className="flex items-center justify-end gap-2">
+          {topAction && <div className="pointer-events-auto mr-auto">{topAction}</div>}
           <button type="button" onClick={onDone} data-testid="ar-done"
             className="pointer-events-auto h-12 rounded-full bg-white px-6 text-base font-bold text-black shadow-lg">Done</button>
         </div>
