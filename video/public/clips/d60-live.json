@@ -1,26 +1,26 @@
 {
   "name": "d60-live",
-  "scale": 1,
-  "duration": 41.659,
+  "scale": 2,
+  "duration": 49.315,
   "viewport": {
-    "width": 1920,
-    "height": 1080
+    "width": 390,
+    "height": 844
   },
-  "frames": 502,
+  "frames": 126,
   "events": [
     {
-      "t": 0.811,
+      "t": 0.937,
       "type": "focus",
       "label": "page",
       "box": {
-        "x": 416,
-        "y": -530,
-        "width": 1344,
-        "height": 1785.46875
+        "x": 0,
+        "y": -1030,
+        "width": 390,
+        "height": 2595.765625
       }
     },
     {
-      "t": 20.171,
+      "t": 24.811,
       "type": "chime",
       "label": "in-production-live"
     }

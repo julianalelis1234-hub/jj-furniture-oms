@@ -1,15 +1,15 @@
 {
   "name": "d60-arrive",
   "scale": 1,
-  "duration": 11.087,
+  "duration": 12.201,
   "viewport": {
     "width": 1920,
     "height": 1080
   },
-  "frames": 28,
+  "frames": 24,
   "events": [
     {
-      "t": 0.099,
+      "t": 0.118,
       "type": "focus",
       "label": "kpis",
       "box": {
@@ -20,7 +20,7 @@
       }
     },
     {
-      "t": 1.308,
+      "t": 1.331,
       "type": "chime",
       "label": "arrived"
     }

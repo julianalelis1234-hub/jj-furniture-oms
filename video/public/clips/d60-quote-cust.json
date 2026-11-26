@@ -1,0 +1,16 @@
+{
+  "name": "d60-quote-cust",
+  "scale": 2,
+  "duration": 6.106,
+  "viewport": {
+    "width": 390,
+    "height": 844
+  },
+  "frames": 24,
+  "events": [
+    {
+      "t": 1.301,
+      "type": "scroll"
+    }
+  ]
+}

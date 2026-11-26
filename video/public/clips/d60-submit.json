@@ -1,34 +1,34 @@
 {
   "name": "d60-submit",
   "scale": 1,
-  "duration": 7.492,
+  "duration": 7.276,
   "viewport": {
     "width": 1920,
     "height": 1080
   },
-  "frames": 113,
+  "frames": 103,
   "events": [
     {
-      "t": 1.905,
+      "t": 1.632,
       "type": "move",
       "x": 485.4609375,
       "y": 982.59375,
       "ms": 750
     },
     {
-      "t": 2.843,
+      "t": 2.576,
       "type": "click",
       "x": 485.4609375,
       "y": 982.59375,
       "label": "submit"
     },
     {
-      "t": 3.638,
+      "t": 3.398,
       "type": "chime",
       "label": "sent"
     },
     {
-      "t": 4.19,
+      "t": 3.974,
       "type": "focus",
       "label": "slip",
       "box": {

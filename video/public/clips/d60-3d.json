@@ -1,15 +1,15 @@
 {
   "name": "d60-3d",
   "scale": 1,
-  "duration": 40.3,
+  "duration": 40.291,
   "viewport": {
     "width": 1920,
     "height": 1080
   },
-  "frames": 303,
+  "frames": 295,
   "events": [
     {
-      "t": -0.003,
+      "t": -0.015,
       "type": "slowmo",
       "factor": 4
     }

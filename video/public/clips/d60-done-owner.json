@@ -1,15 +1,15 @@
 {
   "name": "d60-done-owner",
   "scale": 1,
-  "duration": 32.177,
+  "duration": 34.248,
   "viewport": {
     "width": 1920,
     "height": 1080
   },
-  "frames": 22,
+  "frames": 33,
   "events": [
     {
-      "t": 7.847,
+      "t": 10.632,
       "type": "chime",
       "label": "delivered-owner"
     }

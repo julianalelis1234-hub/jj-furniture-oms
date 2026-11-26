@@ -187,3 +187,61 @@ export const Punch: React.FC<{ children: React.ReactNode; dir?: number }> = ({ c
     </AbsoluteFill>
   );
 };
+
+/**
+ * Soft cuts: a recording shown as a few real-speed segments joined by short cross-fades
+ * (instead of fast-forwarding the gaps). Each segment has its own camera shots (segment-local
+ * seconds) and its own cursor. `seg.c0..c1` (clip seconds) plays over `seg.s0..s1` (scene seconds).
+ */
+export type Seg = { c0: number; c1: number; s0: number; s1: number; shots: Shot[] };
+const XF = 0.18; // half of the cross-fade
+export const CutClip: React.FC<{ src: string; segs: Seg[]; viewW: number; viewH: number; clipW?: number; clipH?: number; meta?: Meta }> = ({ src, segs, viewW, viewH, clipW = 1920, clipH = 1080, meta }) => (
+  <AbsoluteFill>
+    {segs.map((g, i) => {
+      const rate = (g.c1 - g.c0) / (g.s1 - g.s0);
+      const pre = i === 0 ? 0 : XF;
+      const post = i === segs.length - 1 ? 0 : XF;
+      const from = Math.round((g.s0 - pre) * FPS);
+      const dur = Math.round((g.s1 + post) * FPS) - from;
+      const a: Anchor[] = [[g.c0 - pre * rate, 0], [g.c1 + post * rate, (dur) / FPS]];
+      return (
+        <Sequence key={i} from={from} durationInFrames={dur} premountFor={FPS} name={`cut ${i + 1} ×${rate.toFixed(2)}`}>
+          <SegFade first={i === 0}>
+            <Cam viewW={viewW} viewH={viewH} clipW={clipW} clipH={clipH} drift={0} shots={g.shots.map((sh) => ({ ...sh, at: sh.at + pre }))}>
+              <WarpVideo src={src} anchors={a} />
+              {meta && <Cursor meta={meta} anchors={a} />}
+            </Cam>
+          </SegFade>
+        </Sequence>
+      );
+    })}
+  </AbsoluteFill>
+);
+const SegFade: React.FC<{ first: boolean; children: React.ReactNode }> = ({ first, children }) => {
+  const t = useCurrentFrame() / FPS;
+  return <AbsoluteFill style={{ opacity: first ? 1 : ease(t / (2 * XF)) }}>{children}</AbsoluteFill>;
+};
+
+/** Gentle scene entrance for the calmer owner section: a fade with a slight settle. */
+export const Soft: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const t = useCurrentFrame() / FPS;
+  const p = ease(t / 0.45);
+  return <AbsoluteFill style={{ opacity: p, scale: String(1.015 - 0.015 * p) }}>{children}</AbsoluteFill>;
+};
+
+/** The customer's phone popping in at the bottom right (picture in picture), then sliding away. */
+export const PhonePop: React.FC<{ at: number; out: number; children: React.ReactNode; height?: number; x?: number; y?: number }> = ({ at, out, children, height = 640, x = 1470, y = 360 }) => {
+  const frame = useCurrentFrame();
+  const t = frame / FPS;
+  if (t < at - 0.02 || t > out + 0.6) return null;
+  const pin = spring({ frame: frame - Math.round(at * FPS), fps: FPS, config: { damping: 20, stiffness: 120, mass: 0.9 } });
+  const pout = ease((t - out) / 0.5);
+  const dx = (1 - pin) * 520 + pout * 520;
+  return (
+    <div style={{ position: "absolute", left: x, top: y, translate: `${dx}px 0px`, opacity: 1 - pout * 0.6 }}>
+      <div style={{ position: "absolute", top: -44, left: 0, padding: "6px 14px", borderRadius: 99, background: "rgba(20,13,10,0.88)", border: `1.5px solid ${C.caramel}`, fontFamily: sans, fontWeight: 800, fontSize: 17, letterSpacing: 1.6, color: C.cream, whiteSpace: "nowrap" }}>CUSTOMER'S PHONE</div>
+      {/* children are timed from the moment the phone pops in */}
+      <PhoneShell height={height}><Sequence from={Math.round(at * FPS)} layout="none">{children}</Sequence></PhoneShell>
+    </div>
+  );
+};

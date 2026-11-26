@@ -7,7 +7,7 @@ import React from "react";
 import { AbsoluteFill, Img, Sequence, spring, staticFile, useCurrentFrame } from "remotion";
 import { C, db, ease, FPS, mix, sans, serif, SPRING, wordmark } from "../theme";
 import { type Anchor, META, toScene } from "./clips60";
-import { Backdrop, Beam, Cam, Caption, Cursor, PhoneShell, Punch, Ring, WarpVideo, Window } from "./kit";
+import { Backdrop, Beam, Cam, Caption, CutClip, Cursor, PhonePop, PhoneShell, Punch, Ring, type Seg, Soft, WarpVideo, Window } from "./kit";
 
 export const D60_SECONDS = 60;
 const BEAT = 60 / 125;
@@ -19,18 +19,13 @@ const clip = (n: string) => `clips/d60-${n}.mp4`;
 // ------------------------------------------------------------------- time warps
 // [clipSeconds, sceneSeconds]; scenes are local (each starts at 0)
 const W = {
-  type: [[2.6, 0], [3.3, 0.45], [12.7, 1.95], [13.1, 2.15], [14.5, 2.75], [16.4, b(8)]] as Anchor[],
-  tune: [[20.9, 0], [22.0, 0.55], [22.8, 0.95], [25.6, 1.35], [26.9, 2.0], [28.4, b(6)]] as Anchor[],
+  tune: [[21.0, 0], [22.1, 0.55], [22.95, 0.95], [25.75, 1.35], [27.05, 2.0], [28.55, b(6)]] as Anchor[],
   spin: [[10, 0], [27.3, b(6)]] as Anchor[],
   arA: [[3.0, 0], [4.5, 1.2]] as Anchor[],
   arB: [[7.45, 0], [9.4, 1.55]] as Anchor[],
   arC: [[9.55, 0], [17.9, b(16) - 2.75]] as Anchor[],
-  submit: [[1.6, 0], [2.95, 0.9], [3.9, 1.5], [6.2, 2.0], [6.7, 2.4], [7.4, b(10)]] as Anchor[],
-  arrive: [[1.6, 0], [2.95, 0.9], [3.9, 1.5], [6.2, 2.0], [6.7, 2.4], [9.0, b(10)]] as Anchor[],
-  quote: [[4.4, 0], [6.9, 1.0], [8.1, 1.4], [11.0, 2.4], [13.3, 2.95], [14.6, b(8)]] as Anchor[],
-  accept: [[3.6, 0], [4.4, 0.35], [7.6, 0.9], [12.8, 1.45], [15.4, 1.95], [16.4, 2.25], [19.0, 2.6], [19.9, 3.0], [21.0, b(8)]] as Anchor[],
-  manage: [[2.0, 0], [3.8, 0.9], [9.6, 1.9], [11.4, 2.3], [16.8, 3.3], [17.7, b(8)]] as Anchor[],
-  release: [[18.8, 0], [19.3, 0.3], [21.3, 1.0], [22.0, 1.3], [22.9, 1.75], [24.2, b(6)]] as Anchor[],
+  submit: [[1.35, 0], [2.7, 0.9], [3.65, 1.5], [6.3, 2.0], [6.8, 2.4], [7.2, b(10)]] as Anchor[],
+  arrive: [[1.35, 0], [2.7, 0.9], [3.65, 1.5], [6.3, 2.0], [6.8, 2.4], [9.1, b(10)]] as Anchor[],
   craft: [[0.6, 0], [2.3, 0.6], [4.7, 1.5], [5.6, b(4)]] as Anchor[],
   inspect: [[0.6, 0], [1.7, 0.5], [3.0, 1.0], [3.6, 1.35], [4.6, b(4)]] as Anchor[],
   trip: [[0.6, 0], [2.65, 1.0], [4.6, b(6)]] as Anchor[],
@@ -38,6 +33,12 @@ const W = {
   doneF: [[5.0, 0], [5.5, 0.3], [7.6, 1.2], [8.2, 1.45], [10.8, 1.9], [11.6, 2.3], [13.5, b(8)]] as Anchor[],
 };
 
+const NEXT = { x: 985, y: 197, width: 911, height: 164 };
+/** describe it: the first words typed, a soft cut to the finished sentence and Apply */
+const DESCRIBE: Seg[] = [
+  { c0: 3.05, c1: 4.6, s0: 0, s1: 1.1, shots: [{ at: 0, dur: 0, scale: 1.75, box: { x: 400, y: 394, width: 744, height: 74 } }] },
+  { c0: 12.55, c1: 15.4, s0: 1.1, s1: b(8), shots: [{ at: 0, dur: 0, scale: 1.75, box: { x: 400, y: 394, width: 744, height: 74 } }, { at: 1.05, dur: 0.9, scale: 2.0, box: { x: 1161, y: 345, width: 358, height: 263 } }] },
+];
 // --------------------------------------------------------------------- timeline
 type SceneDef = { id: string; start: number; len: number; C: React.FC; dir?: number };
 
@@ -86,10 +87,7 @@ const Design: React.FC = () => {
       <Sequence durationInFrames={S(b(8))} name="describe it">
         <Punch>
           <Window {...WIN} label="Customer · design online">
-            <Cam viewW={WIN.w} viewH={WIN.h} shots={[{ at: 0, dur: 0, scale: 1.75, box: { x: 400, y: 394, width: 744, height: 74 } }, { at: 2.05, dur: 0.55, scale: 2.0, box: { x: 1161, y: 345, width: 358, height: 263 } }]}>
-              <WarpVideo src={clip("customize")} anchors={W.type} />
-              <Cursor meta={m} anchors={W.type} />
-            </Cam>
+            <CutClip src={clip("customize")} segs={DESCRIBE} viewW={WIN.w} viewH={WIN.h} meta={m} />
           </Window>
           <Scrim />
           <Caption tag="CUSTOMER" text="Describe it. The 3D model builds itself." out={b(8) - 0.25} />
@@ -229,95 +227,75 @@ const OwnerCard: React.FC = () => {
   );
 };
 
-// 5 · owner: confirm + quote ----------------------------------------------------------------
+// 5 · owner: confirm + quote (soft cuts at real speed; the quotation then shows on the customer's phone) ---
+const QUOTE: Seg[] = [
+  { c0: 5.8, c1: 7.1, s0: 0, s1: 1.05, shots: [{ at: 0, dur: 0, scale: 1.45, box: NEXT }] },
+  { c0: 9.25, c1: 10.85, s0: 1.05, s1: 2.25, shots: [{ at: 0, dur: 0, scale: 1.55, box: { x: 464, y: 760, width: 900, height: 260 } }] },
+  { c0: 12.4, c1: 14.2, s0: 2.25, s1: b(8), shots: [{ at: 0, dur: 0, scale: 1.45, cx: 1250, cy: 900 }, { at: 0.75, dur: 0.8, scale: 1.35, cx: 960, cy: 180 }] },
+];
 const Quote: React.FC = () => (
   <AbsoluteFill>
     <Backdrop />
-    <Punch>
+    <Soft>
       <Window {...WIN} label="Owner · orders & quotations">
-        <Cam viewW={WIN.w} viewH={WIN.h} shots={[
-          { at: 0, dur: 0, scale: 1.55, box: { x: 985, y: 197, width: 911, height: 164 } },
-          { at: 1.15, dur: 0.5, scale: 1.75, box: { x: 464, y: 760, width: 900, height: 260 } },
-          { at: 2.65, dur: 0.4, scale: 1.5, cx: 1250, cy: 960 },
-          { at: 3.05, dur: 0.45, scale: 1.6, cx: 960, cy: 150 },
-        ]}>
-          <WarpVideo src={clip("quote")} anchors={W.quote} />
-          <Cursor meta={META.quote} anchors={W.quote} />
-        </Cam>
+        <CutClip src={clip("quote")} segs={QUOTE} viewW={WIN.w} viewH={WIN.h} meta={META.quote} />
       </Window>
       <Scrim />
-      <Caption tag="OWNER" text="Confirm and quote in one step." out={b(8) - 0.25} />
-    </Punch>
+      <Caption tag="OWNER" text="Confirm and quote in one step." out={b(8) - 0.3} />
+      <PhonePop at={2.75} out={b(8) - 0.2}>
+        <WarpVideo src={clip("quote-cust")} anchors={[[2.2, 0], [4.2, 1.2]]} />
+      </PhonePop>
+    </Soft>
   </AbsoluteFill>
 );
 
-// 6 · live sync: customer accepts installment, cash --------------------------------------------
+// 6 · the customer accepts on the phone; the owner's screen updates live -----------------------------------
+const ACCEPT_OWNER: Seg[] = [
+  { c0: 11.2, c1: 13.6, s0: 0, s1: 3.2, shots: [{ at: 0, dur: 0, scale: 1.45, box: NEXT }] },
+  { c0: 16.5, c1: 18.1, s0: 3.2, s1: b(10), shots: [{ at: 0, dur: 0, scale: 1.45, box: NEXT }] },
+];
 const SyncAccept: React.FC = () => (
   <AbsoluteFill>
     <Backdrop />
-    <Punch>
-      <Window {...L} label="Customer">
-        <Cam viewW={L.w} viewH={L.h} shots={[{ at: 0, dur: 0, scale: 1.35, cx: 1050, cy: 520 }]}>
-          <WarpVideo src={clip("accept")} anchors={W.accept} />
-          <Cursor meta={META.accept} anchors={W.accept} />
+    <Soft>
+      <Window {...WIN} label="Owner · orders & quotations">
+        <CutClip src={clip("accepted")} segs={ACCEPT_OWNER} viewW={WIN.w} viewH={WIN.h} />
+        <Cam viewW={WIN.w} viewH={WIN.h} shots={[{ at: 0, dur: 0, scale: 1.45, box: NEXT }]} drift={0}>
+          <Ring box={NEXT} at={3.75} hold={0.9} />
         </Cam>
       </Window>
-      <Window {...R} label="Owner">
-        <Cam viewW={R.w} viewH={R.h} shots={[{ at: 0, dur: 0, scale: 1.7, box: { x: 985, y: 197, width: 911, height: 164 } }]}>
-          <WarpVideo src={clip("accepted")} anchors={W.accept} />
-          <Ring box={{ x: 985, y: 197, width: 911, height: 164 }} at={2.75} hold={1} />
-        </Cam>
-      </Window>
-      <Beam x1={900} y1={560} x2={1260} y2={420} at={2.2} />
       <Scrim />
-      <Caption tag="LIVE SYNC" text="Customer picks installment, cash. The owner sees it live." size={46} />
-    </Punch>
+      <PhonePop at={0.15} out={4.05}>
+        <Sequence durationInFrames={Math.round(2.0 * FPS)}><WarpVideo src={clip("accept")} anchors={[[8.2, 0], [10.9, 2.0]]} /></Sequence>
+        <Sequence from={Math.round(2.0 * FPS)}><WarpVideo src={clip("accept")} anchors={[[12.9, 0], [15.2, 2.3]]} /></Sequence>
+      </PhonePop>
+      <Beam x1={1560} y1={700} x2={1080} y2={420} at={3.2} />
+      <Caption tag="LIVE SYNC" text="Customer picks installment. The owner sees it live." size={46} />
+    </Soft>
   </AbsoluteFill>
 );
 
-// 7 · owner manages: approve plan, schedule, cash payment ------------------------------------------
+// 7 · approve the plan, record the cash payment, release; the customer's phone follows ---------------------
+const MANAGE: Seg[] = [
+  { c0: 2.7, c1: 4.5, s0: 0, s1: 1.45, shots: [{ at: 0, dur: 0, scale: 1.5, box: NEXT }] },
+  { c0: 15.9, c1: 17.7, s0: 1.45, s1: 2.85, shots: [{ at: 0, dur: 0, scale: 1.5, cx: 1050, cy: 640 }] },
+  { c0: 20.75, c1: 23.6, s0: 2.85, s1: b(12), shots: [{ at: 0, dur: 0, scale: 1.45, cx: 1050, cy: 660 }, { at: 0.95, dur: 0.9, scale: 1.3, cx: 960, cy: 200 }] },
+];
 const Manage: React.FC = () => (
   <AbsoluteFill>
     <Backdrop />
-    <Punch>
+    <Soft>
       <Window {...WIN} label="Owner · payments & gate">
-        <Cam viewW={WIN.w} viewH={WIN.h} shots={[
-          { at: 0, dur: 0, scale: 1.6, box: { x: 985, y: 197, width: 911, height: 164 } },
-          { at: 1.0, dur: 0.5, scale: 1.45, box: { x: 985, y: 780, width: 911, height: 300 } },
-          { at: 1.95, dur: 0.45, scale: 1.3, box: { x: 985, y: 671, width: 911, height: 410 } },
-          { at: 2.55, dur: 0.4, scale: 1.45, cx: 1000, cy: 640 },
-        ]}>
-          <WarpVideo src={clip("manage")} anchors={W.manage} />
-          <Cursor meta={META.manage} anchors={W.manage} />
-        </Cam>
+        <CutClip src={clip("manage")} segs={MANAGE} viewW={WIN.w} viewH={WIN.h} meta={META.manage} />
       </Window>
       <Scrim />
-      <Caption tag="OWNER" text="Approve the plan. Record each cash payment." out={b(8) - 0.25} />
-    </Punch>
-  </AbsoluteFill>
-);
-
-// 8 · live sync: release to workshop -> customer's tracker -------------------------------------------
-const SyncRelease: React.FC = () => (
-  <AbsoluteFill>
-    <Backdrop />
-    <Punch>
-      <Window {...L} label="Owner">
-        <Cam viewW={L.w} viewH={L.h} shots={[{ at: 0, dur: 0, scale: 1.6, cx: 1150, cy: 330 }, { at: 0.45, dur: 0.4, scale: 1.45, cx: 1050, cy: 700 }]}>
-          <WarpVideo src={clip("manage")} anchors={W.release} />
-          <Cursor meta={META.manage} anchors={W.release} />
-        </Cam>
-      </Window>
-      <Window {...R} label="Customer">
-        <Cam viewW={R.w} viewH={R.h} shots={[{ at: 0, dur: 0, scale: 1.25, cx: 1050, cy: 330 }]}>
-          <WarpVideo src={clip("live")} anchors={W.release} />
-          <Ring box={{ x: 780, y: 22, width: 360, height: 76 }} at={1.75} hold={1} />
-        </Cam>
-      </Window>
-      <Beam x1={900} y1={520} x2={1360} y2={260} at={1.2} />
-      <Scrim />
-      <Caption tag="LIVE SYNC" text="Released to the workshop. The customer's tracker moves on its own." size={44} />
-    </Punch>
+      <Caption tag="OWNER" text="Approve the plan. Record payment. Release." out={3.55} />
+      <Caption tag="LIVE SYNC" text="The customer's phone follows on its own." at={3.75} size={46} />
+      <Beam x1={1100} y1={640} x2={1560} y2={560} at={3.45} />
+      <PhonePop at={3.6} out={b(12) - 0.15}>
+        <WarpVideo src={clip("live")} anchors={[[24.1, 0], [26.6, 2.2]]} />
+      </PhonePop>
+    </Soft>
   </AbsoluteFill>
 );
 
@@ -369,29 +347,27 @@ const Montage: React.FC = () => {
 const Delivered: React.FC = () => {
   const frame = useCurrentFrame();
   const p = spring({ frame, fps: FPS, config: SPRING });
-  const TR = { x: 760, y: 70, w: 1100, h: 450 };
-  const BR = { x: 760, y: 545, w: 1100, h: 400 };
+  const OW = { x: 540, y: 170, w: 860, h: 620 };
   return (
     <AbsoluteFill>
       <Backdrop />
-      <div style={{ position: "absolute", left: 150, top: 60, opacity: p, translate: `${(1 - p) * -80}px 0px` }}>
-        <PhoneShell height={960}><WarpVideo src={clip("rider")} anchors={W.riderF} /></PhoneShell>
+      <div style={{ position: "absolute", left: 90, top: 80, opacity: p, translate: `${(1 - p) * -80}px 0px` }}>
+        <div style={{ position: "absolute", top: -6, left: 0, fontFamily: sans, fontWeight: 800, fontSize: 18, letterSpacing: 1.6, color: C.latte }}>RIDER</div>
+        <div style={{ marginTop: 26 }}><PhoneShell height={860}><WarpVideo src={clip("rider")} anchors={W.riderF} /></PhoneShell></div>
       </div>
-      <Window {...TR} label="Customer" style={{ opacity: p }}>
-        <Cam viewW={TR.w} viewH={TR.h} shots={[{ at: 0, dur: 0, scale: 1.7, cx: 860, cy: 190 }]}>
-          <WarpVideo src={clip("done-cust")} anchors={W.doneF} />
-          <Ring box={{ x: 500, y: 140, width: 640, height: 40 }} at={2.0} hold={1.6} />
-        </Cam>
-      </Window>
-      <Window {...BR} label="Owner" style={{ opacity: p }}>
-        <Cam viewW={BR.w} viewH={BR.h} shots={[{ at: 0, dur: 0, scale: 1.5, cx: 1040, cy: 330 }]}>
+      <Window {...OW} label="Owner" style={{ opacity: p }}>
+        <Cam viewW={OW.w} viewH={OW.h} shots={[{ at: 0, dur: 0, scale: 1.25, cx: 1040, cy: 360 }]} drift={0}>
           <WarpVideo src={clip("done-owner")} anchors={W.doneF} />
-          <Ring box={{ x: 1215, y: 352, width: 125, height: 186 }} at={2.25} hold={1.4} />
+          <Ring box={{ x: 1215, y: 352, width: 125, height: 186 }} at={2.45} hold={1.3} />
         </Cam>
       </Window>
-      <Beam x1={620} y1={560} x2={900} y2={300} at={1.4} />
-      <Beam x1={620} y1={600} x2={900} y2={760} at={1.45} />
-      <Caption tag="LIVE SYNC" text="Delivered. Everyone sees it at once." x={790} y={1060} size={44} />
+      <div style={{ position: "absolute", left: 1450, top: 80, opacity: p, translate: `${(1 - p) * 80}px 0px` }}>
+        <div style={{ position: "absolute", top: -6, left: 0, fontFamily: sans, fontWeight: 800, fontSize: 18, letterSpacing: 1.6, color: C.latte }}>CUSTOMER</div>
+        <div style={{ marginTop: 26 }}><PhoneShell height={860}><WarpVideo src={clip("done-cust")} anchors={W.doneF} /></PhoneShell></div>
+      </div>
+      <Beam x1={480} y1={520} x2={760} y2={420} at={1.4} />
+      <Beam x1={480} y1={560} x2={1470} y2={330} at={1.5} />
+      <Caption tag="LIVE SYNC" text="Delivered. Everyone sees it at once." x={540} y={1050} size={46} />
     </AbsoluteFill>
   );
 };
@@ -435,9 +411,8 @@ export const SCENES: SceneDef[] = [
   { id: "sync-order", start: b(46), len: b(10), C: SyncOrder },
   { id: "owner-card", start: b(56), len: b(4), C: OwnerCard },
   { id: "quote", start: b(60), len: b(8), C: Quote },
-  { id: "sync-accept", start: b(68), len: b(8), C: SyncAccept },
-  { id: "manage", start: b(76), len: b(8), C: Manage },
-  { id: "sync-release", start: b(84), len: b(6), C: SyncRelease },
+  { id: "sync-accept", start: b(68), len: b(10), C: SyncAccept },
+  { id: "manage", start: b(78), len: b(12), C: Manage },
   { id: "montage", start: b(90), len: b(14), C: Montage },
   { id: "delivered", start: b(104), len: b(8), C: Delivered },
   { id: "end", start: b(112), len: 60 - b(112), C: EndCard },
@@ -449,13 +424,18 @@ const at = (id: string) => SCENES.find((s) => s.id === id)!.start;
 const clickSfx = (sceneStart: number, meta: keyof typeof META, anchors: Anchor[], from: number, to: number, gain = -12): Sfx[] =>
   META[meta].events.filter((e) => e.type === "click").map((e) => ({ t: sceneStart + toScene(anchors, e.t), kind: "click" as const, gain })).filter((s) => s.t >= sceneStart + from && s.t <= sceneStart + to);
 
+/** scene time of a clip second inside soft-cut segments */
+const segAt = (segs: Seg[], c: number) => { const g = segs.find((x) => c >= x.c0 && c <= x.c1); return g ? g.s0 + (c - g.c0) * ((g.s1 - g.s0) / (g.c1 - g.c0)) : -99; };
+const segSfx = (sceneStart: number, meta: keyof typeof META, segs: Seg[], gain = -12): Sfx[] =>
+  META[meta].events.filter((e) => e.type === "click").map((e) => ({ t: sceneStart + segAt(segs, e.t), kind: "click" as const, gain })).filter((x) => x.t > sceneStart - 1);
+
 const SFX: Sfx[] = [
   { t: 0.05, kind: "swell", gain: -10 },
   { t: 0.2, kind: "pop", gain: -9 },
-  ...SCENES.slice(1).map((s) => ({ t: s.start - 0.12, kind: "whoosh" as const, gain: -13 })),
+  ...SCENES.slice(1).filter((s) => !["sync-accept", "manage"].includes(s.id)).map((s) => ({ t: s.start - 0.12, kind: "whoosh" as const, gain: -13 })),
   // design
-  ...clickSfx(at("design"), "customize", W.type, 0, b(8)),
-  { t: at("design") + toScene(W.type, 14.12), kind: "pop", gain: -8 },
+  ...segSfx(at("design"), "customize", DESCRIBE),
+  { t: at("design") + segAt(DESCRIBE, 14.42), kind: "pop", gain: -8 },
   ...clickSfx(at("design") + b(8), "customize", W.tune, 0, b(6)),
   { t: at("design") + b(8) + toScene(W.tune, 22.45), kind: "pop", gain: -9 },
   { t: at("design") + b(8) + toScene(W.tune, 26.6), kind: "pop", gain: -9 },
@@ -471,17 +451,20 @@ const SFX: Sfx[] = [
   { t: at("sync-order") + 1.55, kind: "whoosh", gain: -16 },
   { t: at("sync-order") + 2.15, kind: "chime", gain: -8 },
   { t: at("owner-card"), kind: "swell", gain: -12 },
-  ...clickSfx(at("quote"), "quote", W.quote, 0, b(8)),
-  { t: at("quote") + toScene(W.quote, 13.95), kind: "chime", gain: -10 },
-  ...clickSfx(at("sync-accept"), "accept", W.accept, 0, b(8)),
-  { t: at("sync-accept") + 2.2, kind: "whoosh", gain: -16 },
-  { t: at("sync-accept") + 2.75, kind: "chime", gain: -8 },
-  ...clickSfx(at("manage"), "manage", W.manage, 0, b(8)),
-  { t: at("manage") + toScene(W.manage, 3.57), kind: "chime", gain: -11 },
-  { t: at("manage") + toScene(W.manage, 17.19), kind: "chime", gain: -11 },
-  ...clickSfx(at("sync-release"), "manage", W.release, 0, b(6)),
-  { t: at("sync-release") + 1.2, kind: "whoosh", gain: -16 },
-  { t: at("sync-release") + 1.75, kind: "chime", gain: -8 },
+  ...segSfx(at("quote"), "quote", QUOTE, -14),
+  { t: at("quote") + segAt(QUOTE, 13.54), kind: "chime", gain: -12 },
+  { t: at("quote") + 2.75, kind: "pop", gain: -13 },
+  { t: at("sync-accept") + 0.15, kind: "pop", gain: -13 },
+  { t: at("sync-accept") + 1.3, kind: "click", gain: -15 },
+  { t: at("sync-accept") + 3.0, kind: "click", gain: -14 },
+  { t: at("sync-accept") + 3.2, kind: "whoosh", gain: -18 },
+  { t: at("sync-accept") + 3.75, kind: "chime", gain: -9 },
+  ...segSfx(at("manage"), "manage", MANAGE, -14),
+  { t: at("manage") + segAt(MANAGE, 4.23), kind: "chime", gain: -13 },
+  { t: at("manage") + segAt(MANAGE, 17.31), kind: "chime", gain: -13 },
+  { t: at("manage") + 3.45, kind: "whoosh", gain: -18 },
+  { t: at("manage") + 3.6, kind: "pop", gain: -13 },
+  { t: at("manage") + 4.4, kind: "chime", gain: -9 },
   ...clickSfx(at("montage"), "craft", W.craft, 0, b(4), -13),
   ...clickSfx(at("montage") + b(4), "inspect", W.inspect, 0, b(4), -13),
   ...clickSfx(at("montage") + b(8), "rider", W.trip, 0, b(6), -13),

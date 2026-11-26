@@ -121,13 +121,7 @@ try {
     await a.wait(1.5);
     results.push(await rec.stop());
 
-    // the same chest, full screen: a crisp turntable shot
-    await page.getByTestId("ar-open").first().click();
-    await page.getByTestId("ar-viewer").waitFor(); await page.waitForTimeout(2500);
-    const vrec = new Recorder(page, "d60-3d"); await vrec.start();
-    await page.waitForTimeout(9000);
-    results.push(await vrec.stop());
-    await page.getByTestId("ar-close").click(); await page.waitForTimeout(600);
+    // the full-screen turntable is recorded separately in slow motion: capture-3d-slowmo.mjs
   }
 
   // --------------------------------- 2. customer submits · owner sees it arrive live

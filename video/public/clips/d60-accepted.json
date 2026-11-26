@@ -1,15 +1,15 @@
 {
   "name": "d60-accepted",
   "scale": 1,
-  "duration": 50.722,
+  "duration": 38.499,
   "viewport": {
     "width": 1920,
     "height": 1080
   },
-  "frames": 190,
+  "frames": 174,
   "events": [
     {
-      "t": 0.177,
+      "t": 0.164,
       "type": "focus",
       "label": "next-step",
       "box": {
@@ -20,12 +20,12 @@
       }
     },
     {
-      "t": 19.232,
+      "t": 16.938,
       "type": "chime",
       "label": "accepted-live"
     },
     {
-      "t": 19.706,
+      "t": 17.221,
       "type": "focus",
       "label": "next-step-after",
       "box": {

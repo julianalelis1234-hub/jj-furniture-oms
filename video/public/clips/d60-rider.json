@@ -1,76 +1,76 @@
 {
   "name": "d60-rider",
   "scale": 2,
-  "duration": 11.25,
+  "duration": 13.955,
   "viewport": {
     "width": 390,
     "height": 844
   },
-  "frames": 131,
+  "frames": 169,
   "events": [
     {
-      "t": 0.204,
+      "t": 0.168,
       "type": "move",
       "x": 195,
       "y": 650.0703125,
       "ms": 750
     },
     {
-      "t": 1.099,
+      "t": 1.061,
       "type": "click",
       "x": 195,
       "y": 650.0703125,
       "label": "open"
     },
     {
-      "t": 1.672,
+      "t": 1.59,
       "type": "move",
       "x": 195,
       "y": 624.921875,
       "ms": 750
     },
     {
-      "t": 2.554,
+      "t": 2.495,
       "type": "click",
       "x": 195,
       "y": 624.921875,
       "label": "start-trip"
     },
     {
-      "t": 4.358,
+      "t": 4.322,
       "type": "chime",
       "label": "out"
     },
     {
-      "t": 4.457,
+      "t": 4.431,
       "type": "move",
       "x": 195,
       "y": 625.921875,
       "ms": 750
     },
     {
-      "t": 5.332,
+      "t": 5.335,
       "type": "click",
       "x": 195,
       "y": 625.921875,
       "label": "delivered"
     },
     {
-      "t": 6.464,
+      "t": 6.462,
       "type": "move",
       "x": 195,
       "y": 580.5,
       "ms": 750
     },
     {
-      "t": 7.373,
+      "t": 7.342,
       "type": "click",
       "x": 195,
       "y": 580.5,
       "label": "save"
     },
     {
-      "t": 7.902,
+      "t": 7.958,
       "type": "chime",
       "label": "delivered"
     }
