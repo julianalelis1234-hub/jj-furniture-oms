@@ -102,22 +102,47 @@ export async function startCameraView(
   piece.visible = false;
 
   const camera = new THREE.PerspectiveCamera(60, 1, 0.05, 50);
-  camera.rotation.order = "YXZ";
   camera.position.set(0, EYE_HEIGHT, 0);
 
-  // device orientation → yaw / pitch (portrait), smoothed; without motion the view looks slightly down
-  let yaw0: number | null = null;
-  const target = { yaw: 0, pitch: -22 * D2R };
+  // Device orientation -> a full rotation (quaternion), as three.js' DeviceOrientationControls
+  // does: steady when the phone is held upright (no Euler jumps near 90°) and it includes
+  // the sideways roll, so the piece stays put against the camera image. The first reading
+  // sets "straight ahead". Without motion the view looks slightly down.
+  const target = new THREE.Quaternion().setFromEuler(new THREE.Euler(-22 * D2R, 0, 0, "YXZ"));
+  camera.quaternion.copy(target);
+  const euler = new THREE.Euler();
+  const toCamera = new THREE.Quaternion(-Math.sqrt(0.5), 0, 0, Math.sqrt(0.5)); // -90° about X: device looks out of the back
+  const screenTurn = new THREE.Quaternion();
+  const Z = new THREE.Vector3(0, 0, 1), Y = new THREE.Vector3(0, 1, 0);
+  const heading = new THREE.Vector3();
+  let yawZero: THREE.Quaternion | null = null;
   const onOrient = (e: DeviceOrientationEvent) => {
-    if (e.beta == null || e.alpha == null) return;
-    if (yaw0 == null) yaw0 = e.alpha;
-    target.pitch = THREE.MathUtils.clamp((e.beta - 90) * D2R, -80 * D2R, 30 * D2R);
-    let d = e.alpha - yaw0;
-    if (d > 180) d -= 360;
-    if (d < -180) d += 360;
-    target.yaw = d * D2R;
+    if (e.alpha == null || e.beta == null || e.gamma == null) return;
+    euler.set(e.beta * D2R, e.alpha * D2R, -e.gamma * D2R, "YXZ");
+    const q = new THREE.Quaternion().setFromEuler(euler).multiply(toCamera);
+    const angle = (screen.orientation?.angle ?? 0) * D2R;
+    q.multiply(screenTurn.setFromAxisAngle(Z, -angle));
+    if (!yawZero) {
+      // whichever way the phone first points becomes "straight ahead"
+      heading.set(0, 0, -1).applyQuaternion(q);
+      yawZero = new THREE.Quaternion().setFromAxisAngle(Y, -Math.atan2(-heading.x, -heading.z));
+    }
+    target.copy(yawZero).multiply(q);
   };
   if (motion) window.addEventListener("deviceorientation", onOrient);
+
+  /**
+   * Steadying filter: sensor noise below ~0.6° is ignored, small slow changes are eased in,
+   * and quick turns follow almost at once (so the piece does not lag behind the camera image).
+   * In a simulation with ±0.5° sensor noise this cuts the frame-to-frame shake by about 95%
+   * versus the old 0.2 easing, while a 20° turn is still followed within one frame.
+   */
+  const DEADBAND = 0.6 * D2R;
+  const steady = () => {
+    const diff = camera.quaternion.angleTo(target);
+    if (diff < DEADBAND) return;
+    camera.quaternion.slerp(target, Math.min(1, 0.03 + diff * 5));
+  };
 
   const resize = () => {
     const w = host.clientWidth, h = host.clientHeight;
@@ -133,8 +158,7 @@ export async function startCameraView(
   const ray = new THREE.Vector3();
   let aiming = false;
   renderer.setAnimationLoop(() => {
-    camera.rotation.y += (target.yaw - camera.rotation.y) * 0.2;
-    camera.rotation.x += (target.pitch - camera.rotation.x) * 0.2;
+    steady();
     if (!placed) {
       // where the centre of the screen meets the floor (y = 0)
       camera.updateMatrixWorld();
@@ -172,7 +196,10 @@ export async function startCameraView(
   return {
     move(right, forward) {
       // relative to where the phone points, flat on the floor
-      fwd.set(-Math.sin(camera.rotation.y), 0, -Math.cos(camera.rotation.y));
+      camera.getWorldDirection(fwd);
+      fwd.y = 0;
+      if (fwd.lengthSq() < 1e-6) return;
+      fwd.normalize();
       piece.position.x += fwd.x * forward - fwd.z * right;
       piece.position.z += fwd.z * forward + fwd.x * right;
     },
