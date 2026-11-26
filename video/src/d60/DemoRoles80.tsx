@@ -92,7 +92,8 @@ const Steps: React.FC<{ items: { at: number; text: string }[]; x?: number }> = (
     </div>
   );
 };
-const Cap: React.FC<{ tag: Tag; text: string; at?: number; out?: number }> = ({ tag, text, at = 0.6, out }) => <Caption tag={tag} text={text} at={at} out={out} x={80} y={1045} size={42} />;
+/** the role tag + description, above the task list on the right (clear of a video player's controls) */
+const Cap: React.FC<{ tag: Tag; text: string; at?: number; out?: number; x?: number; y?: number; maxW?: number }> = ({ tag, text, at = 0.6, out, x = 1000, y = 262, maxW = 820 }) => <Caption tag={tag} text={text} at={at} out={out} x={x} y={y} size={42} maxW={maxW} />;
 
 // 1 · owner or staff: every owner task on one laptop, the list of tasks beside it --------------------------------
 const LAPS = { x: 70, y: 170, w: 1150, h: 647 };
@@ -106,7 +107,7 @@ const OwnerSteps: React.FC<{ items: { at: number; text: string }[] }> = ({ items
   const frame = useCurrentFrame();
   const t = frame / FPS;
   return (
-    <div style={{ position: "absolute", left: 1290, top: 250, display: "grid", gap: 26 }}>
+    <div style={{ position: "absolute", left: 1290, top: 330, display: "grid", gap: 26 }}>
       {items.map((s, i) => {
         const p = spring({ frame: frame - Math.round(s.at * FPS), fps: FPS, config: { damping: 18, stiffness: 120 } });
         const next = items[i + 1]?.at ?? Infinity;
@@ -149,7 +150,7 @@ const OwnerSlot: React.FC<{ L: number }> = ({ L }) => (
       { at: 7.9, text: "Passes the inspection" },
       { at: 9.9, text: "Assigns the rider" },
     ]} />
-    <Cap tag="OWNER · STAFF" text="Owner or staff confirms, quotes, assigns and dispatches." out={L - 1.0} />
+    <Cap tag="OWNER · STAFF" text="Owner or staff confirms, quotes, assigns and dispatches." out={L - 1.0} x={1290} y={292} maxW={600} />
   </AbsoluteFill>
 );
 

@@ -133,7 +133,7 @@ export const Backdrop: React.FC<{ hue?: "warm" | "cool" }> = () => {
 export type Tag = "CUSTOMER" | "OWNER" | "OWNER · STAFF" | "LIVE SYNC" | "CRAFTSMAN" | "RIDER" | "CUSTOMER · AR";
 
 /** Lower-left caption: role tag + headline, words rise in one by one. */
-export const Caption: React.FC<{ tag: Tag; text: string; at?: number; out?: number; x?: number; y?: number; size?: number }> = ({ tag, text, at = 0.1, out, x = 80, y = 930, size = 50 }) => {
+export const Caption: React.FC<{ tag: Tag; text: string; at?: number; out?: number; x?: number; y?: number; size?: number; maxW?: number }> = ({ tag, text, at = 0.1, out, x = 80, y = 930, size = 50, maxW = 1100 }) => {
   const frame = useCurrentFrame();
   const t = frame / FPS;
   const fadeOut = out === undefined ? 1 : 1 - ease((t - out) / 0.25);
@@ -147,7 +147,7 @@ export const Caption: React.FC<{ tag: Tag; text: string; at?: number; out?: numb
         <span style={{ width: 11, height: 11, borderRadius: 9, background: live ? C.espresso : C.caramel, opacity: live ? 0.55 + 0.45 * Math.abs(Math.sin(t * 6)) : 1 }} />
         <span style={{ fontFamily: sans, fontWeight: 900, fontSize: 20, letterSpacing: 2.4, color: live ? C.espresso : C.cream }}>{tag}</span>
       </div>
-      <div style={{ fontFamily: wordmark, fontWeight: 800, fontSize: size, lineHeight: 1.1, color: C.cream, maxWidth: 1100, textShadow: "0 4px 24px rgba(0,0,0,0.85), 0 1px 2px rgba(0,0,0,0.9)" }}>
+      <div style={{ fontFamily: wordmark, fontWeight: 800, fontSize: size, lineHeight: 1.1, color: C.cream, maxWidth: maxW, textShadow: "0 4px 24px rgba(0,0,0,0.85), 0 1px 2px rgba(0,0,0,0.9)" }}>
         {words.map((w, i) => {
           const p = spring({ frame: frame - Math.round((at + 0.12 + i * 0.045) * FPS), fps: FPS, config: { damping: 16, stiffness: 160, mass: 0.7 } });
           return <span key={i} style={{ display: "inline-block", marginRight: "0.26em", opacity: Math.min(1, p * 1.5), translate: `0px ${(1 - p) * 26}px` }}>{w}</span>;
