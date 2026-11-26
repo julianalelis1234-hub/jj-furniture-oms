@@ -132,12 +132,20 @@ export function actor(page, rec) {
   const center = async (loc) => { await loc.scrollIntoViewIfNeeded(); const b = await loc.boundingBox(); return { x: b.x + b.width / 2, y: b.y + b.height / 2, b }; };
   const api = {
     wait: (s) => page.waitForTimeout(s * 1000),
-    async moveTo(loc, ms = 750) { const { x, y } = await center(loc); await page.evaluate(([x, y, ms]) => window.__recCursor?.move(x, y, ms), [x, y, ms]); return { x, y }; },
+    async moveTo(loc, ms = 750) {
+      const { x, y } = await center(loc);
+      // logged so the editor can draw a 60 fps cursor whatever the capture frame rate
+      rec.mark("move", { x, y, ms });
+      await page.evaluate(([x, y, ms]) => window.__recCursor?.move(x, y, ms), [x, y, ms]);
+      return { x, y };
+    },
+    /** move the cursor to a point (and log it) */
+    async moveXY(x, y, ms = 600) { rec.mark("move", { x, y, ms }); await page.evaluate(([x, y, ms]) => window.__recCursor?.move(x, y, ms), [x, y, ms]); },
     async click(loc, opts = {}) {
       const { x, y } = await api.moveTo(loc, opts.ms ?? 750);
       await api.wait(0.12);
       rec.mark("click", { x, y, label: opts.label });
-      await page.evaluate(([x, y]) => window.__recCursor?.ripple(x, y), [x, y]);
+      await page.evaluate(([x, y]) => { if (!window.__recNoRipple) window.__recCursor?.ripple(x, y); }, [x, y]);
       await loc.click({ force: opts.force });
       await api.wait(opts.after ?? 0.35);
     },

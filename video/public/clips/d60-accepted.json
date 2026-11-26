@@ -1,0 +1,39 @@
+{
+  "name": "d60-accepted",
+  "scale": 1,
+  "duration": 50.722,
+  "viewport": {
+    "width": 1920,
+    "height": 1080
+  },
+  "frames": 190,
+  "events": [
+    {
+      "t": 0.177,
+      "type": "focus",
+      "label": "next-step",
+      "box": {
+        "x": 985,
+        "y": 197,
+        "width": 911,
+        "height": 164
+      }
+    },
+    {
+      "t": 19.232,
+      "type": "chime",
+      "label": "accepted-live"
+    },
+    {
+      "t": 19.706,
+      "type": "focus",
+      "label": "next-step-after",
+      "box": {
+        "x": 985,
+        "y": 197,
+        "width": 911,
+        "height": 164
+      }
+    }
+  ]
+}

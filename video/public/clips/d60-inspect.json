@@ -1,0 +1,56 @@
+{
+  "name": "d60-inspect",
+  "scale": 1,
+  "duration": 4.861,
+  "viewport": {
+    "width": 1920,
+    "height": 1080
+  },
+  "frames": 38,
+  "events": [
+    {
+      "t": 0.071,
+      "type": "focus",
+      "label": "inspection",
+      "box": {
+        "x": 469,
+        "y": 646.1875,
+        "width": 1238,
+        "height": 154.796875
+      }
+    },
+    {
+      "t": 0.708,
+      "type": "move",
+      "x": 536.7421875,
+      "y": 764.984375,
+      "ms": 750
+    },
+    {
+      "t": 1.588,
+      "type": "click",
+      "x": 536.7421875,
+      "y": 764.984375,
+      "label": "pass"
+    },
+    {
+      "t": 2.062,
+      "type": "move",
+      "x": 1052.0234375,
+      "y": 627.5,
+      "ms": 750
+    },
+    {
+      "t": 2.937,
+      "type": "click",
+      "x": 1052.0234375,
+      "y": 627.5,
+      "label": "passed"
+    },
+    {
+      "t": 3.356,
+      "type": "chime",
+      "label": "ready"
+    }
+  ]
+}

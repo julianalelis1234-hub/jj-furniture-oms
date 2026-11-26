@@ -30,6 +30,24 @@ bold captions and an original energetic track (`scripts/make-ad-music.py`: drums
 arpeggio, riser + drop, ending hit). If Remotion cannot download its browser, set `REMOTION_BROWSER` to a local
 headless Chromium.
 
+**60-second pitch demo (`Demo60`, `src/d60/`).** Customer and owner focus with live sync, captions + music only
+(no narration). Scenes are cut on the 125 BPM beat of `public/audio/ad-music.mp3`: logo hook → the customer
+describes a chest of drawers and the 3D model builds itself, fine-tunes it, full-screen 3D → AR (the team's own
+phone screen recording, `public/ar/ar-clip.mp4`) → split screens where the owner sees each customer action
+arrive live (order sent, installment + cash accepted, release → the customer's tracker) → owner confirm & quote,
+approve the installment plan, record a cash payment → craftsman / inspection / rider in a few beats → "Delivered"
+on rider, customer and owner at once → end card with QR code.
+
+| Step | Command | Output |
+|---|---|---|
+| Record the scenes (app on :3100, fresh demo) | `node capture/capture-demo60.mjs` | `public/clips/d60-*.mp4` + `.json` |
+| Record the 3D turntable in slow motion | `node capture/capture-3d-slowmo.mjs` | `public/clips/d60-3d.mp4` (page clock at ¼ speed, played back 4–6×) |
+| Render | `npm run render:demo60` | `out/jj-enterprises-demo-60s.mp4` |
+
+Customer and owner screens that show a live update are recorded at the same time from separate browsers, so
+every sync moment is real; the edit only shortens the few-second wait before each update. The cursor and click
+ripples are redrawn at 60 fps from the recording's move/click log.
+
 **Narration.** The script lives in `src/script.ts` (the same text is used for captions). The voice is
 ElevenLabs "Clementine 2.0 – Upbeat, Engaging, Clear" (English, female). `npm run vo` reads
 `ELEVENLABS_API_KEY` from the environment or `video/.env.local` (git-ignored) and never prints it. Without a

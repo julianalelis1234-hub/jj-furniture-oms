@@ -1,0 +1,17 @@
+{
+  "name": "d60-done-cust",
+  "scale": 1,
+  "duration": 18.254,
+  "viewport": {
+    "width": 1920,
+    "height": 1080
+  },
+  "frames": 239,
+  "events": [
+    {
+      "t": 6.476,
+      "type": "chime",
+      "label": "delivered-live"
+    }
+  ]
+}

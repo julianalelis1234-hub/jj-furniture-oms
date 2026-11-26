@@ -1,0 +1,28 @@
+{
+  "name": "d60-live",
+  "scale": 1,
+  "duration": 41.659,
+  "viewport": {
+    "width": 1920,
+    "height": 1080
+  },
+  "frames": 502,
+  "events": [
+    {
+      "t": 0.811,
+      "type": "focus",
+      "label": "page",
+      "box": {
+        "x": 416,
+        "y": -530,
+        "width": 1344,
+        "height": 1785.46875
+      }
+    },
+    {
+      "t": 20.171,
+      "type": "chime",
+      "label": "in-production-live"
+    }
+  ]
+}
