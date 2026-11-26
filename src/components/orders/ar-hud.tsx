@@ -6,8 +6,8 @@ import { ArJoystick } from "./ar-joystick";
 
 /**
  * The controls drawn over a camera view: Done and the instruction card at the top;
- * at the bottom the Take photo / Exact size buttons, then the joystick between two
- * turn buttons. The root
+ * at the bottom the joystick between two turn buttons, then the Take photo /
+ * Exact size buttons. The root
  * lets taps through (Android: tap the floor to place); only the controls catch them.
  */
 export function ArHud({ step, total, hint, note, controls, faded = false, onDone, onRotate, onMove, action }: {
@@ -32,9 +32,8 @@ export function ArHud({ step, total, hint, note, controls, faded = false, onDone
           {note && <p className="mt-1.5 text-sm text-white/80">{note}</p>}
         </div>
       </div>
-      {/* bottom: Take photo / Exact size, then the joystick console */}
+      {/* bottom: the joystick console, then Take photo / Exact size */}
       <div className="grid gap-4 px-4 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
-        {action && <div className="pointer-events-auto flex justify-center">{action}</div>}
         {controls && (
           <div className={`flex items-center justify-center gap-4 ${faded ? "opacity-25" : ""}`} data-testid="ar-console">
             <button type="button" onClick={() => onRotate(-30)} aria-label="Turn left"
@@ -44,6 +43,7 @@ export function ArHud({ step, total, hint, note, controls, faded = false, onDone
               className="pointer-events-auto grid size-12 place-items-center rounded-full bg-black/65 shadow-lg"><RotateCw className="size-5" aria-hidden /></button>
           </div>
         )}
+        {action && <div className="pointer-events-auto flex justify-center">{action}</div>}
       </div>
     </div>
   );
