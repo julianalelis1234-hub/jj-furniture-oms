@@ -36,6 +36,7 @@ export function ArViewer({ spec, onClose }: { spec: Furniture3DSpec; onClose: ()
   const camHost = useRef<HTMLDivElement>(null);
   const camVideo = useRef<HTMLVideoElement>(null);
   const [camState, setCamState] = useState<"off" | "starting" | "on">("off");
+  const [camPlace, setCamPlace] = useState<"searching" | "aim" | "placed">("searching");
   const [shot, setShot] = useState<"idle" | "busy" | "added" | "failed">("idle");
   const [xrPhoto, setXrPhoto] = useState(false); // Android: Chrome granted camera access
 
@@ -112,7 +113,10 @@ export function ArViewer({ spec, onClose }: { spec: Furniture3DSpec; onClose: ()
     const model = furnitureForAr(furniture.current);
     flushSync(() => setCamState("starting")); // the video and canvas host must exist first
     motion
-      .then((ok) => startCameraView(model, camHost.current!, camVideo.current!, ok))
+      .then((ok) => startCameraView(model, camHost.current!, camVideo.current!, ok, {
+        tracking: (found) => setCamPlace((p) => (p === "placed" ? p : found ? "aim" : "searching")),
+        placed: () => setCamPlace("placed"),
+      }))
       .then((h) => { cam.current = h; setCamState("on"); })
       .catch((e) => {
         console.warn("[AR] camera view could not start:", e);
@@ -120,7 +124,7 @@ export function ArViewer({ spec, onClose }: { spec: Furniture3DSpec; onClose: ()
         setError("The camera could not start. Allow camera access for this site in Settings › Safari › Camera, then try again.");
       });
   };
-  const stopCam = () => { cam.current?.end(); cam.current = null; setCamState("off"); setShot("idle"); setUsedAr(true); };
+  const stopCam = () => { cam.current?.end(); cam.current = null; setCamState("off"); setCamPlace("searching"); setShot("idle"); setUsedAr(true); };
   /** iPhone: Apple AR Quick Look at true size (synchronous: Safari needs it inside the tap) */
   const exactSize = () => {
     if (!qlUrl) return;
@@ -243,13 +247,17 @@ export function ArViewer({ spec, onClose }: { spec: Furniture3DSpec; onClose: ()
           <video ref={camVideo} className="absolute inset-0 size-full object-cover" playsInline muted autoPlay aria-hidden />
           <div ref={camHost} className="absolute inset-0" />
           <ArHud
-            controls={camState === "on"} faded
-            hint={camState === "starting" ? "Starting the camera…" : "Drag the joystick to move it. Use the arrows to turn it. Tap Take photo when it looks right."}
-            note={photoNote ?? "The size here is approximate. Tap Exact size for Apple AR at its true size."}
+            controls={camState === "on" && camPlace === "placed"} faded
+            step={camState === "on" ? (camPlace === "placed" ? 3 : camPlace === "aim" ? 2 : 1) : undefined} total={3}
+            hint={camState === "starting" ? "Starting the camera…"
+              : camPlace === "searching" ? "Point your phone at the floor where you want it."
+              : camPlace === "aim" ? "Tap the screen to put the furniture on the ring."
+              : "Drag the joystick to move it. Use the arrows to turn it. Tap Take photo when it looks right."}
+            note={photoNote ?? (camPlace === "placed" ? "Tap the floor to place it somewhere else. The size here is approximate; tap Exact size for Apple AR at its true size." : undefined)}
             onDone={stopCam} onRotate={(d) => cam.current?.rotate(d)} onMove={(r, f) => cam.current?.move(r, f)}
             action={camState === "on" && (
               <div className="flex flex-wrap justify-center gap-2">
-                {photoButton}
+                {camPlace === "placed" && photoButton}
                 <button type="button" onClick={exactSize} disabled={!qlUrl} data-testid="ar-exact-size"
                   className="inline-flex h-12 items-center gap-2 rounded-full bg-black/65 px-5 text-base font-bold text-white shadow-lg disabled:opacity-60">
                   {qlUrl ? <Ruler className="size-5" aria-hidden /> : <Loader2 className="size-5 animate-spin" aria-hidden />} Exact size
