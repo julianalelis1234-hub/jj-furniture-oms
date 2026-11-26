@@ -10,7 +10,9 @@ import { USDZExporter } from "three/examples/jsm/exporters/USDZExporter.js";
  *  - iPhone / iPad: Apple AR Quick Look, fed a USDZ file made in the browser
  *    (it has its own shutter button for photos).
  *  - Android: WebXR "immersive-ar" in Chrome with a floor hit test: aim, tap to
- *    place, rotate. The camera image is never readable by the page.
+ *    place, rotate. With Chrome's "camera-access" feature the page can read the
+ *    camera image during a frame, which is how the Take photo button works; the
+ *    photo stays on the phone unless the customer adds it to the order.
  *
  * Nothing is uploaded: the model is built from the customer's own design on
  * their phone and thrown away when the view closes.
@@ -87,6 +89,12 @@ export function launchQuickLook(url: string, name: string) {
 }
 
 // ----------------------------------------------------------------- Android ----
+/** linear 0–255 -> sRGB 0–255 (the offscreen furniture render is in linear colour) */
+const SRGB = Array.from({ length: 256 }, (_, i) => {
+  const v = i / 255;
+  return Math.round(255 * (v <= 0.0031308 ? 12.92 * v : 1.055 * Math.pow(v, 1 / 2.4) - 0.055));
+});
+
 interface XRSessionLike extends EventTarget {
   end(): Promise<void>;
   requestReferenceSpace(type: string): Promise<unknown>;
@@ -94,6 +102,10 @@ interface XRSessionLike extends EventTarget {
 }
 
 export interface WebXrHandle {
+  /** true when Chrome granted camera access, so photo() can work */
+  canPhoto: boolean;
+  /** camera image + furniture as a JPEG (needs canPhoto) */
+  photo(): Promise<File>;
   rotate(deg: number): void;
   /** slide the placed piece along the floor, relative to where the phone points (metres) */
   move(right: number, forward: number): void;
@@ -111,7 +123,7 @@ export async function startWebXr(model: THREE.Object3D, overlay: HTMLElement, on
   if (!xr) throw new Error("WebXR is not available");
   const session = await xr.requestSession("immersive-ar", {
     requiredFeatures: ["hit-test"],
-    optionalFeatures: ["dom-overlay", "light-estimation"],
+    optionalFeatures: ["dom-overlay", "light-estimation", "camera-access"],
     domOverlay: { root: overlay },
   });
 
@@ -146,6 +158,10 @@ export async function startWebXr(model: THREE.Object3D, overlay: HTMLElement, on
   const viewer = await session.requestReferenceSpace("viewer");
   const hitSource = await session.requestHitTestSource?.({ space: viewer });
 
+  const xrSession = session as unknown as XRSession & { enabledFeatures?: string[] };
+  const canPhoto = !!xrSession.enabledFeatures?.includes("camera-access") && typeof XRWebGLBinding !== "undefined";
+  let photoReq: { resolve: (f: File) => void; reject: (e: unknown) => void } | null = null;
+
   let wasTracking = false;
   const camPos = new THREE.Vector3();
   const fwd = new THREE.Vector3();
@@ -170,7 +186,81 @@ export async function startWebXr(model: THREE.Object3D, overlay: HTMLElement, on
       if (!!pose !== wasTracking) { wasTracking = !!pose; on.tracking(wasTracking); }
     }
     renderer.render(scene, camera);
+    if (photoReq && frame) {
+      const req = photoReq;
+      photoReq = null;
+      try {
+        const shot = grabPhoto(frame);
+        shot.toBlob((b) => (b ? req.resolve(new File([b], "room-photo.jpg", { type: "image/jpeg" })) : req.reject(new Error("photo failed"))), "image/jpeg", 0.85);
+      } catch (e) {
+        req.reject(e);
+      }
+    }
   });
+
+  /**
+   * Inside the XR frame: read the camera image (raw camera access), draw the furniture
+   * from the same viewpoint into an offscreen target, and put the two together.
+   */
+  const photoCam = new THREE.PerspectiveCamera();
+  photoCam.matrixAutoUpdate = false;
+  photoCam.matrixWorldAutoUpdate = false;
+  function grabPhoto(frame: XRFrame): HTMLCanvasElement {
+    const ref = renderer.xr.getReferenceSpace();
+    const view = ref ? (frame.getViewerPose(ref)?.views[0] as (XRView & { camera?: { width: number; height: number } }) | undefined) : undefined;
+    if (!view?.camera) throw new Error("no camera image");
+    const gl = renderer.getContext() as WebGL2RenderingContext;
+    const binding = (renderer.xr as unknown as { getBinding?: () => XRWebGLBinding }).getBinding?.() ?? new XRWebGLBinding(xrSession, gl);
+    const w = view.camera.width, h = view.camera.height;
+
+    // 1. the camera image
+    const camTex = (binding as unknown as { getCameraImage(c: unknown): WebGLTexture }).getCameraImage(view.camera);
+    const fb = gl.createFramebuffer();
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, camTex, 0);
+    const camPx = new Uint8ClampedArray(w * h * 4);
+    gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, camPx);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.deleteFramebuffer(fb);
+    renderer.resetState();
+
+    // 2. the furniture from the same viewpoint (no aim ring)
+    photoCam.projectionMatrix.fromArray(view.projectionMatrix);
+    photoCam.projectionMatrixInverse.copy(photoCam.projectionMatrix).invert();
+    photoCam.matrixWorld.fromArray(view.transform.matrix);
+    photoCam.matrixWorldInverse.copy(photoCam.matrixWorld).invert();
+    const target = new THREE.WebGLRenderTarget(w, h, { samples: 4 });
+    const ringWas = reticle.visible;
+    reticle.visible = false;
+    renderer.xr.enabled = false;
+    renderer.setRenderTarget(target);
+    renderer.setClearColor(0x000000, 0);
+    renderer.clear();
+    renderer.render(scene, photoCam);
+    const virt = new Uint8Array(w * h * 4);
+    renderer.readRenderTargetPixels(target, 0, 0, w, h, virt);
+    renderer.setRenderTarget(null);
+    renderer.xr.enabled = true;
+    reticle.visible = ringWas;
+    target.dispose();
+
+    // 3. combine (both images are bottom-up; the furniture is in linear colour)
+    const out = document.createElement("canvas");
+    out.width = w;
+    out.height = h;
+    const c = out.getContext("2d")!;
+    const px = new Uint8ClampedArray(w * h * 4);
+    for (let y = 0; y < h; y++) {
+      const src = (h - 1 - y) * w * 4, dst = y * w * 4;
+      for (let x = 0; x < w * 4; x += 4) {
+        const a = virt[src + x + 3] / 255;
+        for (let k = 0; k < 3; k++) px[dst + x + k] = SRGB[virt[src + x + k]] * a + camPx[src + x + k] * (1 - a);
+        px[dst + x + 3] = 255;
+      }
+    }
+    c.putImageData(new ImageData(px, w, h), 0, 0);
+    return out;
+  }
 
   let done = false;
   const cleanup = () => {
@@ -187,6 +277,11 @@ export async function startWebXr(model: THREE.Object3D, overlay: HTMLElement, on
   session.addEventListener("end", cleanup);
 
   return {
+    canPhoto,
+    photo() {
+      if (!canPhoto) return Promise.reject(new Error("camera access not granted"));
+      return new Promise<File>((resolve, reject) => { photoReq = { resolve, reject }; });
+    },
     rotate(deg) { model.rotation.y += (deg * Math.PI) / 180; },
     move(right, forward) {
       if (!model.visible) return;

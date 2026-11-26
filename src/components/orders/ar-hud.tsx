@@ -9,8 +9,10 @@ import { ArJoystick } from "./ar-joystick";
  * the joystick between two turn buttons, and the instruction card. The root
  * lets taps through (Android: tap the floor to place); only the controls catch them.
  */
-export function ArHud({ step, total, hint, note, controls, onDone, onRotate, onMove, action }: {
+export function ArHud({ step, total, hint, note, controls, faded = false, onDone, onRotate, onMove, action }: {
   step?: number; total?: number; hint: string; note?: ReactNode; controls: boolean;
+  /** draw the joystick and turn buttons at 50% opacity so more of the room shows through */
+  faded?: boolean;
   onDone: () => void; onRotate: (deg: number) => void; onMove: (right: number, forward: number) => void;
   /** e.g. the Take photo button */
   action?: ReactNode;
@@ -23,12 +25,12 @@ export function ArHud({ step, total, hint, note, controls, onDone, onRotate, onM
       </div>
       <div className="grid gap-4 px-4 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
         {controls && (
-          <div className="flex items-center justify-center gap-5">
+          <div className={`flex items-center justify-center gap-4 ${faded ? "opacity-50" : ""}`} data-testid="ar-console">
             <button type="button" onClick={() => onRotate(-30)} aria-label="Turn left"
-              className="pointer-events-auto grid size-14 place-items-center rounded-full bg-black/65 shadow-lg"><RotateCcw className="size-6" aria-hidden /></button>
+              className="pointer-events-auto grid size-12 place-items-center rounded-full bg-black/65 shadow-lg"><RotateCcw className="size-5" aria-hidden /></button>
             <div className="pointer-events-auto"><ArJoystick onMove={onMove} /></div>
             <button type="button" onClick={() => onRotate(30)} aria-label="Turn right"
-              className="pointer-events-auto grid size-14 place-items-center rounded-full bg-black/65 shadow-lg"><RotateCw className="size-6" aria-hidden /></button>
+              className="pointer-events-auto grid size-12 place-items-center rounded-full bg-black/65 shadow-lg"><RotateCw className="size-5" aria-hidden /></button>
           </div>
         )}
         {action && <div className="pointer-events-auto flex justify-center">{action}</div>}

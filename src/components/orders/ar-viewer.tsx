@@ -1,6 +1,6 @@
 "use client";
 
-import { Camera, Check, Copy, Gamepad2, Loader2, Smartphone, X } from "lucide-react";
+import { Camera, Check, Copy, Loader2, Ruler, Smartphone, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { createPortal, flushSync } from "react-dom";
 import type * as THREE from "three";
@@ -13,7 +13,9 @@ type XrState = "idle" | "starting" | "searching" | "aim" | "placed";
 
 /**
  * Full-screen 3D view with "View in your room". Customer side only.
- * iPhone → AR Quick Look; Android → WebXR in Chrome; otherwise a plain message.
+ * iPhone → one "View in your room" button: the camera view with joystick and Take photo,
+ *   and an "Exact size" button inside it for Apple AR Quick Look;
+ * Android → WebXR in Chrome (joystick, Take photo with camera access); otherwise a plain message.
  */
 export function ArViewer({ spec, onClose }: { spec: Furniture3DSpec; onClose: () => void }) {
   const furniture = useRef<THREE.Group | null>(null);
@@ -34,7 +36,8 @@ export function ArViewer({ spec, onClose }: { spec: Furniture3DSpec; onClose: ()
   const camHost = useRef<HTMLDivElement>(null);
   const camVideo = useRef<HTMLVideoElement>(null);
   const [camState, setCamState] = useState<"off" | "starting" | "on">("off");
-  const [shot, setShot] = useState<"idle" | "busy" | "added">("idle");
+  const [shot, setShot] = useState<"idle" | "busy" | "added" | "failed">("idle");
+  const [xrPhoto, setXrPhoto] = useState(false); // Android: Chrome granted camera access
 
   // iPhone: make the AR file as soon as the 3D model is on screen, so the tap opens it at once
   useEffect(() => {
@@ -76,9 +79,7 @@ export function ArViewer({ spec, onClose }: { spec: Furniture3DSpec; onClose: ()
     if (busy) return;
     setError(null);
     if (mode === "quicklook") {
-      if (!qlUrl) return;
-      launchQuickLook(qlUrl, name); // synchronous: Safari needs it inside the tap
-      setUsedAr(true);
+      startCam(); // the joystick camera view; Exact size inside it opens Apple AR
       return;
     }
     if (mode !== "webxr" || !furniture.current || !overlay.current) return;
@@ -90,8 +91,9 @@ export function ArViewer({ spec, onClose }: { spec: Furniture3DSpec; onClose: ()
       xr.current = await startWebXr(model, overlay.current, {
         tracking: (found) => setXrState((s) => (s === "placed" ? s : found ? "aim" : "searching")),
         placed: () => setXrState("placed"),
-        ended: () => { xr.current = null; setXrState("idle"); setUsedAr(true); },
+        ended: () => { xr.current = null; setXrState("idle"); setShot("idle"); setUsedAr(true); },
       });
+      setXrPhoto(xr.current.canPhoto);
       setXrState((s) => (s === "starting" ? "searching" : s));
     } catch (e) {
       console.warn("[AR] could not start:", e);
@@ -119,24 +121,42 @@ export function ArViewer({ spec, onClose }: { spec: Furniture3DSpec; onClose: ()
       });
   };
   const stopCam = () => { cam.current?.end(); cam.current = null; setCamState("off"); setShot("idle"); setUsedAr(true); };
+  /** iPhone: Apple AR Quick Look at true size (synchronous: Safari needs it inside the tap) */
+  const exactSize = () => {
+    if (!qlUrl) return;
+    if (cam.current) stopCam(); // free the camera for Apple AR
+    launchQuickLook(qlUrl, name);
+    setUsedAr(true);
+  };
   const takePhoto = async () => {
-    if (!cam.current || shot === "busy") return;
+    const source = cam.current ?? (xr.current?.canPhoto ? xr.current : null);
+    if (!source || shot === "busy") return;
     setShot("busy");
     try {
-      const file = await cam.current.photo();
+      const file = await source.photo();
       window.dispatchEvent(new CustomEvent("jj:room-photo", { detail: file }));
       setShot("added");
-    } catch {
-      setShot("idle");
+    } catch (e) {
+      console.warn("[AR] photo failed:", e);
+      setShot("failed");
     }
   };
+  const photoButton = (
+    <button type="button" onClick={takePhoto} disabled={shot === "busy"} data-testid="ar-take-photo"
+      className="inline-flex h-12 items-center gap-2 rounded-full bg-white px-6 text-base font-bold text-black shadow-lg disabled:opacity-70">
+      {shot === "busy" ? <Loader2 className="size-5 animate-spin" aria-hidden /> : <Camera className="size-5" aria-hidden />}
+      {shot === "added" ? "Take another photo" : "Take photo"}
+    </button>
+  );
+  const photoNote = shot === "added" ? <b className="text-[#9fd3a4]">Photo added to your order ✓</b>
+    : shot === "failed" ? "The photo could not be taken here. Take a screenshot instead." : null;
 
   const inXr = xrState !== "idle";
   const hint =
     xrState === "starting" ? "Starting the camera…"
     : xrState === "searching" ? "Point your phone at the floor and move it slowly from side to side."
     : xrState === "aim" ? "Tap the screen to put the furniture on the ring."
-    : "Drag the joystick to move it. Use the arrows to turn it. Tap the floor to place it somewhere else.";
+    : "Drag the joystick to move it. Use the arrows to turn it. Tap Take photo when it looks right.";
   const step = xrState === "placed" ? 3 : xrState === "aim" ? 2 : 1;
 
   return createPortal(
@@ -180,25 +200,25 @@ export function ArViewer({ spec, onClose }: { spec: Furniture3DSpec; onClose: ()
           </p>
         ) : (
           <>
-            <button type="button" onClick={viewInRoom} disabled={busy || (mode === "quicklook" && !qlUrl)} data-testid="ar-start"
+            <button type="button" onClick={viewInRoom} disabled={busy || camState !== "off"} data-testid="ar-start"
               className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-full bg-primary px-5 text-sm font-bold text-primary-foreground hover:bg-primary/90 disabled:opacity-70 focus-visible:ring-3 focus-visible:ring-ring/40 focus-visible:outline-none sm:w-auto sm:justify-self-start">
-              {busy || (mode === "quicklook" && !qlUrl) ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Camera className="size-4" aria-hidden />}
-              {mode === "quicklook" && !qlUrl ? "Preparing AR…" : "View in your room"}
+              {busy || camState === "starting" ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Camera className="size-4" aria-hidden />}
+              View in your room
             </button>
-            {mode === "quicklook" && (
-              <button type="button" onClick={startCam} disabled={camState !== "off"} data-testid="ar-camera-view"
-                className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-full border border-primary/50 bg-background px-5 text-sm font-bold text-primary hover:bg-accent-soft disabled:opacity-70 focus-visible:ring-3 focus-visible:ring-ring/40 focus-visible:outline-none sm:w-auto sm:justify-self-start">
-                <Gamepad2 className="size-4" aria-hidden /> Joystick camera view
-              </button>
-            )}
             <p className="text-xs text-muted-foreground">
-              Shown at its real size. {mode === "quicklook"
-                ? "To take a photo, tap the white camera button in the AR view. The joystick camera view lets you move it with a joystick (size is approximate) and adds the photo to your order."
-                : "To take a photo, take a screenshot while it is in your room."}
+              {mode === "quicklook"
+                ? "Opens your camera with the piece in front of you: move it with the joystick, turn it with the arrows, and tap Take photo to add it to your order. Tap Exact size for Apple AR at its true size."
+                : "Shown at its real size. Move it with the joystick, turn it with the arrows, and tap Take photo to add it to your order."}
             </p>
           </>
         )}
         {error && <p role="alert" className="text-sm font-medium text-destructive">{error}</p>}
+        {error && mode === "quicklook" && qlUrl && camState === "off" && (
+          <button type="button" onClick={exactSize} data-testid="ar-exact-fallback"
+            className="inline-flex h-10 w-fit items-center gap-2 rounded-full border border-primary/50 bg-background px-4 text-sm font-semibold text-primary">
+            <Ruler className="size-4" aria-hidden /> Open Apple AR instead
+          </button>
+        )}
         {usedAr && (
           <p className="rounded-xl bg-accent-soft p-3 text-sm" data-testid="ar-photo-tip">
             Took a photo? Close this view and add it under <b>Photo of your room</b> so the shop can see where it will go.
@@ -210,9 +230,10 @@ export function ArViewer({ spec, onClose }: { spec: Furniture3DSpec; onClose: ()
           through to the floor; only the buttons and the joystick catch them. */}
       <div ref={overlay} className={inXr ? "pointer-events-none fixed inset-0" : "hidden"}>
         {inXr && (
-          <ArHud step={xrState === "starting" ? undefined : step} total={3} hint={hint} controls={xrState === "placed"}
-            note={xrState === "placed" ? "Take a screenshot to save a photo of it in your room." : undefined}
-            onDone={() => xr.current?.end()} onRotate={(d) => xr.current?.rotate(d)} onMove={(r, f) => xr.current?.move(r, f)} />
+          <ArHud step={xrState === "starting" ? undefined : step} total={3} hint={hint} controls={xrState === "placed"} faded
+            note={xrState === "placed" ? (photoNote ?? (xrPhoto ? "Tap the floor to place it somewhere else." : "Take a screenshot to save a photo of it in your room.")) : undefined}
+            onDone={() => xr.current?.end()} onRotate={(d) => xr.current?.rotate(d)} onMove={(r, f) => xr.current?.move(r, f)}
+            action={xrState === "placed" && xrPhoto ? photoButton : undefined} />
         )}
       </div>
 
@@ -224,14 +245,16 @@ export function ArViewer({ spec, onClose }: { spec: Furniture3DSpec; onClose: ()
           <ArHud
             controls={camState === "on"}
             hint={camState === "starting" ? "Starting the camera…" : "Drag the joystick to move it. Use the arrows to turn it. Tap Take photo when it looks right."}
-            note={shot === "added" ? <b className="text-[#9fd3a4]">Photo added to your order ✓</b> : "Point your phone at the spot. The size here is approximate; use View in your room for the exact size."}
+            note={photoNote ?? "The size here is approximate. Tap Exact size for Apple AR at its true size."}
             onDone={stopCam} onRotate={(d) => cam.current?.rotate(d)} onMove={(r, f) => cam.current?.move(r, f)}
             action={camState === "on" && (
-              <button type="button" onClick={takePhoto} disabled={shot === "busy"} data-testid="ar-take-photo"
-                className="inline-flex h-12 items-center gap-2 rounded-full bg-white px-6 text-base font-bold text-black shadow-lg disabled:opacity-70">
-                {shot === "busy" ? <Loader2 className="size-5 animate-spin" aria-hidden /> : <Camera className="size-5" aria-hidden />}
-                {shot === "added" ? "Take another photo" : "Take photo"}
-              </button>
+              <div className="flex flex-wrap justify-center gap-2">
+                {photoButton}
+                <button type="button" onClick={exactSize} disabled={!qlUrl} data-testid="ar-exact-size"
+                  className="inline-flex h-12 items-center gap-2 rounded-full bg-black/65 px-5 text-base font-bold text-white shadow-lg disabled:opacity-60">
+                  {qlUrl ? <Ruler className="size-5" aria-hidden /> : <Loader2 className="size-5 animate-spin" aria-hidden />} Exact size
+                </button>
+              </div>
             )}
           />
         </div>
